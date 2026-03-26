@@ -1,0 +1,17 @@
+from django.contrib import admin
+from django.urls import path
+from pos import views
+
+urlpatterns = [
+    path('admin/', admin.site.urls),
+
+    path('', views.pos_page, name='pos'),
+    path('save-sale/', views.save_sale, name='save_sale'),
+
+    path('invoice/<int:sale_id>/', views.invoice_page, name='invoice_page'),
+    path('reports/daily/', views.daily_report, name='daily_report'),
+    path('reports/monthly/', views.monthly_report, name='monthly_report'),
+
+    path('login/', views.login_view, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+]
