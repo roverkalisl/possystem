@@ -257,3 +257,33 @@ def monthly_report(request):
         'month': month,
         'summary': summary
     })
+    def add_item(request):
+    categories = Category.objects.all()
+
+    if request.method == "POST":
+        item_code = request.POST.get('item_code')
+        name = request.POST.get('name')
+        category_id = request.POST.get('category')
+        cost_price = request.POST.get('cost_price')
+        selling_price = request.POST.get('selling_price')
+        stock = request.POST.get('stock')
+        warranty_days = request.POST.get('warranty_days')
+
+        category = Category.objects.get(id=category_id)
+
+        Item.objects.create(
+            item_code=item_code,
+            name=name,
+            category=category,
+            cost_price=cost_price,
+            selling_price=selling_price,
+            stock=stock,
+            warranty_days=warranty_days or 0
+        )
+
+        return redirect('pos')
+
+    return render(request, 'pos/add_item.html', {
+        'categories': categories
+    })
+    
