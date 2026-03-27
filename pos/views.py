@@ -1,5 +1,6 @@
 import json
 from decimal import Decimal, InvalidOperation
+from datetime import datetime
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -8,7 +9,8 @@ from django.db.models import Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-from .models import Item, Sale, SaleItem, StockTransaction, Category
+
+from .models import Item, Sale, SaleItem, StockTransaction, Category, Supplier
 
 
 # 🔐 Owner check
@@ -197,32 +199,70 @@ def monthly_report(request):
 # ➕ ADD ITEM PAGE (FIXED)
 @login_required
 def add_item(request):
-    categories = Category.objects.all()
+    categories = Category.objects.all().order_by('name')
+    suppliers = Supplier.objects.all().order_by('name')
 
     if request.method == "POST":
-        item_code = request.POST.get('item_code')
-        name = request.POST.get('name')
+        item_code = request.POST.get('item_code', '').strip()
+        name = request.POST.get('name', '').strip()
         category_id = request.POST.get('category')
+        unit = request.POST.get('unit', 'pcs').strip()
         cost_price = request.POST.get('cost_price') or 0
         selling_price = request.POST.get('selling_price') or 0
         stock = request.POST.get('stock') or 0
+        purchase_date = request.POST.get('purchase_date') or None
+        supplier_id = request.POST.get('supplier') or None
+        item_type = request.POST.get('item_type', 'retail')
+        is_service = request.POST.get('is_service') == 'on'
+        reorder_level = request.POST.get('reorder_level') or 0
         warranty_days = request.POST.get('warranty_days') or 0
 
-        # 🔥 SAFE CATEGORY (no crash)
-        category = Category.objects.filter(id=category_id).first()
+        if not item_code or not name:
+            messages.error(request, 'Item code and item name are required.')
+            return render(request, 'pos/add_item.html', {
+                'categories': categories,
+                'suppliers': suppliers
+            })
+
+        category = None
+        if category_id:
+            category = Category.objects.filter(id=category_id).first()
+
+        supplier = None
+        if supplier_id:
+            supplier = Supplier.objects.filter(id=supplier_id).first()
+
+        parsed_purchase_date = None
+        if purchase_date:
+            try:
+                parsed_purchase_date = datetime.strptime(purchase_date, "%Y-%m-%d").date()
+            except ValueError:
+                messages.error(request, 'Invalid purchase date format.')
+                return render(request, 'pos/add_item.html', {
+                    'categories': categories,
+                    'suppliers': suppliers
+                })
 
         Item.objects.create(
             item_code=item_code,
             name=name,
             category=category,
+            unit=unit,
             cost_price=cost_price,
             selling_price=selling_price,
             stock=stock,
-            warranty_days=warranty_days
+            purchase_date=parsed_purchase_date,
+            supplier=supplier,
+            item_type=item_type,
+            is_service=is_service,
+            reorder_level=reorder_level,
+            warranty_days=warranty_days,
         )
 
-        return redirect('pos')
+        messages.success(request, 'Item added successfully.')
+        return redirect('add_item')
 
     return render(request, 'pos/add_item.html', {
-        'categories': categories
+        'categories': categories,
+        'suppliers': suppliers
     })
