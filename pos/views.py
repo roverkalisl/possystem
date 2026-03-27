@@ -261,3 +261,36 @@ def add_item(request):
         'categories': categories,
         'suppliers': suppliers,
     })
+@login_required
+def sales_return(request):
+    sales = Sale.objects.all().order_by('-id')[:50]
+
+    if request.method == "POST":
+        sale_id = request.POST.get('sale')
+        item_id = request.POST.get('item')
+        qty = int(request.POST.get('qty'))
+        return_type = request.POST.get('return_type')
+        reason = request.POST.get('reason')
+
+        sale = Sale.objects.get(id=sale_id)
+        item = Item.objects.get(id=item_id)
+
+        # create return record
+        SalesReturn.objects.create(
+            sale=sale,
+            item=item,
+            qty=qty,
+            return_type=return_type,
+            reason=reason
+        )
+
+        # 🔥 stock back
+        item.stock += qty
+        item.save()
+
+        messages.success(request, "Return processed successfully")
+        return redirect('sales_return')
+
+    return render(request, 'pos/sales_return.html', {
+        'sales': sales
+    })

@@ -168,3 +168,23 @@ class PurchaseItem(models.Model):
 
     def __str__(self):
         return self.item.name
+    
+class SalesReturn(models.Model):
+    RETURN_TYPE = [
+        ('refund', 'Refund'),
+        ('replace', 'Replace'),
+        ('repair', 'Repair'),
+    ]
+
+    sale = models.ForeignKey('Sale', on_delete=models.CASCADE)
+    item = models.ForeignKey('Item', on_delete=models.CASCADE)
+
+    qty = models.IntegerField()
+    return_type = models.CharField(max_length=20, choices=RETURN_TYPE)
+
+    reason = models.TextField(blank=True, null=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Return - {self.item.name}"
