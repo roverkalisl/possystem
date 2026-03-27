@@ -9,8 +9,8 @@ from django.db.models import Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-
-from .models import Item, Sale, SaleItem, StockTransaction, Category, Supplier
+from .models import Item, Sale, SaleItem, StockTransaction, Category, Supplier, SalesReturn
+#from .models import Item, Sale, SaleItem, StockTransaction, Category, Supplier
 
 
 # 🔐 Owner check
@@ -155,17 +155,30 @@ def invoice_page(request, sale_id):
 def daily_report(request):
     today = timezone.localdate()
 
-    sales = Sale.objects.filter(created_at__date=today)
+    sales = Sale.objects.filter(
+        created_at__date=today
+    ).select_related('created_by').prefetch_related('sale_items__item').order_by('-id')
 
-    summary = sales.aggregate(
-        total_sales=Sum('grand_total'),
-        total_discount=Sum('discount')
-    )
+    total_sales = Decimal('0.00')
+    total_discount = Decimal('0.00')
+    total_cost = Decimal('0.00')
+
+    for sale in sales:
+        total_sales += sale.grand_total
+        total_discount += sale.discount
+
+        for row in sale.sale_items.all():
+            total_cost += (row.item.cost_price * row.qty)
+
+    total_profit = total_sales - total_cost
 
     return render(request, 'pos/daily_report.html', {
         'sales': sales,
         'today': today,
-        'summary': summary
+        'total_sales': total_sales,
+        'total_discount': total_discount,
+        'total_cost': total_cost,
+        'total_profit': total_profit,
     })
 
 
@@ -293,4 +306,19 @@ def sales_return(request):
 
     return render(request, 'pos/sales_return.html', {
         'sales': sales
-    })
+    })@login_required
+def get_sale_items(request, sale_id):
+    sale = get_object_or_404(Sale, id=sale_id)
+
+    items = []
+    for row in sale.sale_items.all():
+        items.append({
+            'sale_item_id': row.id,
+            'item_name': row.item.name,
+            'item_code': row.item.item_code,
+            'qty': row.qty,
+            'price': str(row.price),
+        })
+
+    return JsonResponse({'items': items})
+

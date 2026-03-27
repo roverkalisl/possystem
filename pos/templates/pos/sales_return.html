@@ -2,62 +2,100 @@
 <html>
 <head>
     <title>Sales Return</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body class="bg-light">
 
 <div class="container mt-4">
-    <div class="card p-4 shadow">
-
-        <h3>Sales Return</h3>
+    <div class="card p-4 shadow-sm">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3>Sales Return</h3>
+            <a href="{% url 'pos' %}" class="btn btn-secondary">Back to POS</a>
+        </div>
 
         {% if messages %}
             {% for message in messages %}
-                <div class="alert alert-success">{{ message }}</div>
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}success{% endif %}">
+                    {{ message }}
+                </div>
             {% endfor %}
         {% endif %}
 
         <form method="POST">
             {% csrf_token %}
 
-            <div class="mb-2">
-                <label>Invoice</label>
-                <select name="sale" class="form-control">
+            <div class="mb-3">
+                <label class="form-label">Invoice</label>
+                <select name="sale" id="sale" class="form-select" onchange="loadSaleItems()" required>
+                    <option value="">Select Invoice</option>
                     {% for sale in sales %}
-                        <option value="{{ sale.id }}">{{ sale.invoice_no }}</option>
+                        <option value="{{ sale.id }}">{{ sale.invoice_no }} - {{ sale.created_at|date:"Y-m-d H:i" }}</option>
                     {% endfor %}
                 </select>
             </div>
 
-            <div class="mb-2">
-                <label>Item ID</label>
-                <input type="number" name="item" class="form-control">
+            <div class="mb-3">
+                <label class="form-label">Item</label>
+                <select name="sale_item" id="sale_item" class="form-select" required>
+                    <option value="">Select Item</option>
+                </select>
             </div>
 
-            <div class="mb-2">
-                <label>Qty</label>
-                <input type="number" name="qty" class="form-control">
+            <div class="mb-3">
+                <label class="form-label">Return Qty</label>
+                <input type="number" name="qty" class="form-control" min="1" required>
             </div>
 
-            <div class="mb-2">
-                <label>Return Type</label>
-                <select name="return_type" class="form-control">
+            <div class="mb-3">
+                <label class="form-label">Return Type</label>
+                <select name="return_type" class="form-select">
                     <option value="refund">Refund</option>
                     <option value="replace">Replace</option>
                     <option value="repair">Repair</option>
                 </select>
             </div>
 
-            <div class="mb-2">
-                <label>Reason</label>
-                <textarea name="reason" class="form-control"></textarea>
+            <div class="mb-3">
+                <label class="form-label">Reason</label>
+                <textarea name="reason" class="form-control" rows="3"></textarea>
             </div>
 
-            <button class="btn btn-danger mt-3">Process Return</button>
+            <button type="submit" class="btn btn-warning">Process Return</button>
         </form>
-
     </div>
 </div>
+
+<script>
+function loadSaleItems() {
+    const saleId = document.getElementById('sale').value;
+    const saleItemSelect = document.getElementById('sale_item');
+
+    saleItemSelect.innerHTML = '<option value="">Loading...</option>';
+
+    if (!saleId) {
+        saleItemSelect.innerHTML = '<option value="">Select Item</option>';
+        return;
+    }
+
+    fetch(`/sale-items/${saleId}/`)
+        .then(response => response.json())
+        .then(data => {
+            saleItemSelect.innerHTML = '<option value="">Select Item</option>';
+
+            data.items.forEach(item => {
+                const option = document.createElement('option');
+                option.value = item.sale_item_id;
+                option.text = `${item.item_name} (${item.item_code}) | Qty: ${item.qty} | Price: ${item.price}`;
+                saleItemSelect.appendChild(option);
+            });
+        })
+        .catch(error => {
+            saleItemSelect.innerHTML = '<option value="">Error loading items</option>';
+            console.error(error);
+        });
+}
+</script>
 
 </body>
 </html>

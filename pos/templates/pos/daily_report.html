@@ -2,61 +2,128 @@
 <html>
 <head>
     <title>Daily Report</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        body {
+            background: #f4f6f9;
+        }
+
+        .summary-card {
+            border-radius: 12px;
+        }
+
+        .summary-card h6 {
+            margin-bottom: 8px;
+            color: #666;
+        }
+
+        .summary-card h4 {
+            margin: 0;
+            font-weight: 700;
+        }
+    </style>
 </head>
-<body class="p-4 bg-light">
-<div class="container">
-    <div class="d-flex justify-content-between mb-3">
-        <h3>Daily Report - {{ today }}</h3>
-        <div>
+<body class="p-4">
+
+<div class="container-fluid">
+
+    <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap">
+        <h3 class="mb-2 mb-md-0">Daily Report - {{ today }}</h3>
+
+        <div class="d-flex gap-2 flex-wrap">
             <a href="{% url 'pos' %}" class="btn btn-primary btn-sm">POS</a>
+            <a href="{% url 'sales_return' %}" class="btn btn-warning btn-sm">Sales Return</a>
             <a href="{% url 'logout' %}" class="btn btn-danger btn-sm">Logout</a>
         </div>
     </div>
 
-    <div class="row mb-3">
-        <div class="col-md-6">
-            <div class="card p-3 shadow-sm">
-                <h5>Total Sales</h5>
-                <h3>Rs. {{ summary.total_sales|default:"0.00" }}</h3>
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card summary-card shadow-sm p-3">
+                <h6>Total Sales</h6>
+                <h4 class="text-primary">Rs. {{ total_sales|default:"0.00" }}</h4>
             </div>
         </div>
-        <div class="col-md-6">
-            <div class="card p-3 shadow-sm">
-                <h5>Total Discount</h5>
-                <h3>Rs. {{ summary.total_discount|default:"0.00" }}</h3>
+
+        <div class="col-md-3 mb-3">
+            <div class="card summary-card shadow-sm p-3">
+                <h6>Total Cost</h6>
+                <h4 class="text-secondary">Rs. {{ total_cost|default:"0.00" }}</h4>
+            </div>
+        </div>
+
+        <div class="col-md-3 mb-3">
+            <div class="card summary-card shadow-sm p-3">
+                <h6>Total Discount</h6>
+                <h4 class="text-warning">Rs. {{ total_discount|default:"0.00" }}</h4>
+            </div>
+        </div>
+
+        <div class="col-md-3 mb-3">
+            <div class="card summary-card shadow-sm p-3">
+                <h6>Total Profit</h6>
+                <h4 class="text-success">Rs. {{ total_profit|default:"0.00" }}</h4>
             </div>
         </div>
     </div>
 
-    <table class="table table-bordered bg-white">
-        <thead class="table-dark">
-            <tr>
-                <th>Invoice</th>
-                <th>Payment</th>
-                <th>Cashier</th>
-                <th>Total</th>
-                <th>Discount</th>
-                <th>Grand Total</th>
-                <th>View</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for sale in sales %}
-            <tr>
-                <td>{{ sale.invoice_no }}</td>
-                <td>{{ sale.get_payment_method_display }}</td>
-                <td>{{ sale.created_by.username }}</td>
-                <td>{{ sale.total }}</td>
-                <td>{{ sale.discount }}</td>
-                <td>{{ sale.grand_total }}</td>
-                <td><a href="{% url 'invoice_page' sale.id %}" class="btn btn-sm btn-secondary">Invoice</a></td>
-            </tr>
-            {% empty %}
-            <tr><td colspan="7" class="text-center">No sales today</td></tr>
-            {% endfor %}
-        </tbody>
-    </table>
+    <!-- Sales Table -->
+    <div class="card shadow-sm">
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped bg-white align-middle">
+                    <thead class="table-dark">
+                        <tr>
+                            <th>Invoice</th>
+                            <th>Payment</th>
+                            <th>Cashier</th>
+                            <th>Selling</th>
+                            <th>Discount</th>
+                            <th>Net Sale</th>
+                            <th>Cost</th>
+                            <th>Profit</th>
+                            <th>View</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for sale in sales %}
+                        <tr>
+                            <td>{{ sale.invoice_no }}</td>
+                            <td>{{ sale.get_payment_method_display }}</td>
+                            <td>
+                                {% if sale.created_by %}
+                                    {{ sale.created_by.username }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>{{ sale.total }}</td>
+                            <td>{{ sale.discount }}</td>
+                            <td>{{ sale.grand_total }}</td>
+                            <td>{{ sale.sale_cost }}</td>
+                            <td>{{ sale.sale_profit }}</td>
+                            <td>
+                                <a href="{% url 'invoice_page' sale.id %}" class="btn btn-sm btn-secondary">
+                                    Invoice
+                                </a>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="9" class="text-center">No sales today</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
 </div>
+
 </body>
 </html>
