@@ -8,7 +8,6 @@ from django.db.models import Q, Sum
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
-
 from .models import Item, Sale, SaleItem, StockTransaction, Category
 
 
@@ -204,12 +203,13 @@ def add_item(request):
         item_code = request.POST.get('item_code')
         name = request.POST.get('name')
         category_id = request.POST.get('category')
-        cost_price = request.POST.get('cost_price')
-        selling_price = request.POST.get('selling_price')
-        stock = request.POST.get('stock')
-        warranty_days = request.POST.get('warranty_days')
+        cost_price = request.POST.get('cost_price') or 0
+        selling_price = request.POST.get('selling_price') or 0
+        stock = request.POST.get('stock') or 0
+        warranty_days = request.POST.get('warranty_days') or 0
 
-        category = Category.objects.get(id=category_id)
+        # 🔥 SAFE CATEGORY (no crash)
+        category = Category.objects.filter(id=category_id).first()
 
         Item.objects.create(
             item_code=item_code,
@@ -218,7 +218,7 @@ def add_item(request):
             cost_price=cost_price,
             selling_price=selling_price,
             stock=stock,
-            warranty_days=warranty_days or 0
+            warranty_days=warranty_days
         )
 
         return redirect('pos')
