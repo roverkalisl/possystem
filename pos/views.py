@@ -218,29 +218,24 @@ def add_item(request):
         warranty_days = request.POST.get('warranty_days') or 0
 
         if not item_code or not name:
-            messages.error(request, 'Item code and item name are required.')
+            messages.error(request, 'Item code and name are required.')
             return render(request, 'pos/add_item.html', {
                 'categories': categories,
-                'suppliers': suppliers
+                'suppliers': suppliers,
             })
 
-        category = None
-        if category_id:
-            category = Category.objects.filter(id=category_id).first()
-
-        supplier = None
-        if supplier_id:
-            supplier = Supplier.objects.filter(id=supplier_id).first()
+        category = Category.objects.filter(id=category_id).first() if category_id else None
+        supplier = Supplier.objects.filter(id=supplier_id).first() if supplier_id else None
 
         parsed_purchase_date = None
         if purchase_date:
             try:
                 parsed_purchase_date = datetime.strptime(purchase_date, "%Y-%m-%d").date()
             except ValueError:
-                messages.error(request, 'Invalid purchase date format.')
+                messages.error(request, 'Invalid purchase date.')
                 return render(request, 'pos/add_item.html', {
                     'categories': categories,
-                    'suppliers': suppliers
+                    'suppliers': suppliers,
                 })
 
         Item.objects.create(
@@ -264,5 +259,5 @@ def add_item(request):
 
     return render(request, 'pos/add_item.html', {
         'categories': categories,
-        'suppliers': suppliers
+        'suppliers': suppliers,
     })
