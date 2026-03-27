@@ -164,11 +164,16 @@ def daily_report(request):
     total_cost = Decimal('0.00')
 
     for sale in sales:
+        sale_cost = Decimal('0.00')
+        for row in sale.sale_items.all():
+            sale_cost += (row.item.cost_price * row.qty)
+
+        sale.sale_cost = sale_cost
+        sale.sale_profit = sale.grand_total - sale_cost
+
         total_sales += sale.grand_total
         total_discount += sale.discount
-
-        for row in sale.sale_items.all():
-            total_cost += (row.item.cost_price * row.qty)
+        total_cost += sale_cost
 
     total_profit = total_sales - total_cost
 
@@ -276,37 +281,63 @@ def add_item(request):
     })
 @login_required
 def sales_return(request):
-    sales = Sale.objects.all().order_by('-id')[:50]
+    sales = Sale.objects.all().order_by('-id')[:100]
 
     if request.method == "POST":
-        sale_id = request.POST.get('sale')
-        item_id = request.POST.get('item')
-        qty = int(request.POST.get('qty'))
-        return_type = request.POST.get('return_type')
-        reason = request.POST.get('reason')
+        try:
+            sale_id = request.POST.get('sale')
+            sale_item_id = request.POST.get('sale_item')
+            qty = request.POST.get('qty')
+            return_type = request.POST.get('return_type')
+            reason = request.POST.get('reason', '')
 
-        sale = Sale.objects.get(id=sale_id)
-        item = Item.objects.get(id=item_id)
+            # 🔴 validation
+            if not sale_id or not sale_item_id or not qty:
+                messages.error(request, "All fields are required")
+                return redirect('sales_return')
 
-        # create return record
-        SalesReturn.objects.create(
-            sale=sale,
-            item=item,
-            qty=qty,
-            return_type=return_type,
-            reason=reason
-        )
+            qty = int(qty)
 
-        # 🔥 stock back
-        item.stock += qty
-        item.save()
+            sale = Sale.objects.filter(id=sale_id).first()
+            sale_item = SaleItem.objects.filter(id=sale_item_id).first()
 
-        messages.success(request, "Return processed successfully")
-        return redirect('sales_return')
+            if not sale or not sale_item:
+                messages.error(request, "Invalid sale or item")
+                return redirect('sales_return')
+
+            if qty <= 0:
+                messages.error(request, "Qty must be greater than 0")
+                return redirect('sales_return')
+
+            if qty > sale_item.qty:
+                messages.error(request, "Return qty exceeds sold qty")
+                return redirect('sales_return')
+
+            # create return
+            SalesReturn.objects.create(
+                sale=sale,
+                sale_item=sale_item,
+                qty=qty,
+                return_type=return_type,
+                reason=reason,
+                created_by=request.user
+            )
+
+            # stock update
+            if not sale_item.item.is_service:
+                sale_item.item.stock += qty
+                sale_item.item.save()
+
+            messages.success(request, "Return successful")
+            return redirect('sales_return')
+
+        except Exception as e:
+            messages.error(request, f"Error: {str(e)}")
+            return redirect('sales_return')
 
     return render(request, 'pos/sales_return.html', {
         'sales': sales
-    })@login_required
+    })
 def get_sale_items(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
 
