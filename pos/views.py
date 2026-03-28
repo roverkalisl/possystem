@@ -280,64 +280,6 @@ def add_item(request):
         'suppliers': suppliers,
     })
 @login_required
-def sales_return(request):
-    sales = Sale.objects.all().order_by('-id')[:100]
-
-    if request.method == "POST":
-        try:
-            sale_id = request.POST.get('sale')
-            sale_item_id = request.POST.get('sale_item')
-            qty = request.POST.get('qty')
-            return_type = request.POST.get('return_type')
-            reason = request.POST.get('reason', '')
-
-            # 🔴 validation
-            if not sale_id or not sale_item_id or not qty:
-                messages.error(request, "All fields are required")
-                return redirect('sales_return')
-
-            qty = int(qty)
-
-            sale = Sale.objects.filter(id=sale_id).first()
-            sale_item = SaleItem.objects.filter(id=sale_item_id).first()
-
-            if not sale or not sale_item:
-                messages.error(request, "Invalid sale or item")
-                return redirect('sales_return')
-
-            if qty <= 0:
-                messages.error(request, "Qty must be greater than 0")
-                return redirect('sales_return')
-
-            if qty > sale_item.qty:
-                messages.error(request, "Return qty exceeds sold qty")
-                return redirect('sales_return')
-
-            # create return
-            SalesReturn.objects.create(
-                sale=sale,
-                sale_item=sale_item,
-                qty=qty,
-                return_type=return_type,
-                reason=reason,
-                created_by=request.user
-            )
-
-            # stock update
-            if not sale_item.item.is_service:
-                sale_item.item.stock += qty
-                sale_item.item.save()
-
-            messages.success(request, "Return successful")
-            return redirect('sales_return')
-
-        except Exception as e:
-            messages.error(request, f"Error: {str(e)}")
-            return redirect('sales_return')
-
-    return render(request, 'pos/sales_return.html', {
-        'sales': sales
-    })
 def get_sale_items(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
 
@@ -352,4 +294,79 @@ def get_sale_items(request, sale_id):
         })
 
     return JsonResponse({'items': items})
+
+
+@login_required
+def sales_return(request):
+    sales = Sale.objects.all().order_by('-id')[:100]
+
+    if request.method == "POST":
+        try:
+            sale_id = request.POST.get('sale')
+            sale_item_id = request.POST.get('sale_item')
+            qty = request.POST.get('qty')
+            return_type = request.POST.get('return_type')
+            reason = request.POST.get('reason', '').strip()
+
+            if not sale_id or not sale_item_id or not qty:
+                messages.error(request, "All fields are required")
+                return redirect('sales_return')
+
+            qty = int(qty)
+
+            sale = Sale.objects.filter(id=sale_id).first()
+            sale_item = SaleItem.objects.filter(id=sale_item_id, sale_id=sale_id).first()
+
+            if not sale or not sale_item:
+                messages.error(request, "Invalid sale or item")
+                return redirect('sales_return')
+
+            if qty <= 0:
+                messages.error(request, "Qty must be greater than 0")
+                return redirect('sales_return')
+
+            if qty > sale_item.qty:
+                messages.error(request, "Return qty exceeds sold qty")
+                return redirect('sales_return')
+
+            return_no = f"RET{SalesReturn.objects.count() + 1:05d}"
+
+            sales_return_obj = SalesReturn.objects.create(
+                return_no=return_no,
+                sale=sale,
+                sale_item=sale_item,
+                qty=qty,
+                return_type=return_type,
+                reason=reason,
+                created_by=request.user
+            )
+
+            if not sale_item.item.is_service:
+                sale_item.item.stock += qty
+                sale_item.item.save()
+
+                StockTransaction.objects.create(
+                    item=sale_item.item,
+                    transaction_type='adjust_plus',
+                    qty=qty
+                )
+
+            messages.success(request, "Return processed successfully")
+            return redirect('return_receipt', return_id=sales_return_obj.id)
+
+        except Exception as e:
+            messages.error(request, f"Error: {str(e)}")
+            return redirect('sales_return')
+
+    return render(request, 'pos/sales_return.html', {
+        'sales': sales
+    })
+
+
+@login_required
+def return_receipt(request, return_id):
+    sales_return_obj = get_object_or_404(SalesReturn, id=return_id)
+    return render(request, 'pos/return_receipt.html', {
+        'r': sales_return_obj
+    })
 

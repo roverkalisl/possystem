@@ -16,4 +16,6 @@ urlpatterns = [
     path('logout/', views.logout_view, name='logout'),
     path('add-item/', views.add_item, name='add_item'),
     path('sales-return/', views.sales_return, name='sales_return'),
+    path('sale-items/<int:sale_id>/', views.get_sale_items, name='get_sale_items'),
+    path('return-receipt/<int:return_id>/', views.return_receipt, name='return_receipt'),
 ]
