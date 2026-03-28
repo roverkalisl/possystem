@@ -176,9 +176,9 @@ class SalesReturn(models.Model):
         ('repair', 'Repair'),
     ]
 
-    return_no = models.CharField(max_length=50, unique=True)
-    sale = models.ForeignKey(Sale, on_delete=models.CASCADE)
-    sale_item = models.ForeignKey(SaleItem, on_delete=models.CASCADE)
+    return_no = models.CharField(max_length=50, unique=True, null=True, blank=True)
+    sale = models.ForeignKey(Sale, on_delete=models.CASCADE, null=True, blank=True)
+    sale_item = models.ForeignKey(SaleItem, on_delete=models.CASCADE, null=True, blank=True)
     qty = models.IntegerField(default=1)
     return_type = models.CharField(max_length=20, choices=RETURN_TYPE_CHOICES, default='refund')
     reason = models.TextField(blank=True, null=True)
@@ -186,4 +186,4 @@ class SalesReturn(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return self.return_no
+        return self.return_no or "Return"
