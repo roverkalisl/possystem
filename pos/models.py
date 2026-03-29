@@ -68,7 +68,11 @@ class Item(models.Model):
     reorder_level = models.IntegerField(default=0)
 
     warranty_days = models.IntegerField(default=0)
+    
+    retail_gl = models.CharField(max_length=50, null=True, blank=True)
 
+    cost_gl = models.CharField(max_length=50, null=True, blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
