@@ -148,6 +148,7 @@ def add_item(request):
         "categories": categories,
         "suppliers": suppliers
     })
+
 @login_required
 def invoice_page(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
