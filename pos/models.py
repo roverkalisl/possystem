@@ -8,6 +8,9 @@ from django.contrib.auth.models import User
 class Category(models.Model):
     name = models.CharField(max_length=100)
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return self.name
 
@@ -20,8 +23,38 @@ class Supplier(models.Model):
     phone = models.CharField(max_length=20, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
 
+    class Meta:
+        ordering = ["name"]
+
     def __str__(self):
         return self.name
+
+
+# ==============================
+# GL MASTER
+# ==============================
+class GLMaster(models.Model):
+    GL_TYPE_CHOICES = [
+        ('asset', 'Asset'),
+        ('liability', 'Liability'),
+        ('equity', 'Equity'),
+        ('income', 'Income'),
+        ('expense', 'Expense'),
+    ]
+
+    gl_code = models.CharField(max_length=50, unique=True)
+    gl_name = models.CharField(max_length=200)
+    gl_type = models.CharField(max_length=20, choices=GL_TYPE_CHOICES)
+    parent_group = models.CharField(max_length=100, null=True, blank=True)
+    description = models.TextField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["gl_code"]
+
+    def __str__(self):
+        return f"{self.gl_code} - {self.gl_name}"
 
 
 # ==============================
@@ -51,7 +84,6 @@ class Item(models.Model):
     selling_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     stock = models.IntegerField(default=0)
-
     purchase_date = models.DateField(blank=True, null=True)
 
     supplier = models.ForeignKey(
@@ -62,18 +94,35 @@ class Item(models.Model):
     )
 
     item_type = models.CharField(max_length=20, choices=ITEM_TYPE_CHOICES, default='retail')
-
     is_service = models.BooleanField(default=False)
-
     reorder_level = models.IntegerField(default=0)
-
     warranty_days = models.IntegerField(default=0)
-    
-    retail_gl = models.CharField(max_length=50, null=True, blank=True)
 
+    # OLD TEXT GL FIELDS - keep for live compatibility
+    retail_gl = models.CharField(max_length=50, null=True, blank=True)
     cost_gl = models.CharField(max_length=50, null=True, blank=True)
-    
+
+    # NEW FK GL FIELDS
+    retail_gl_account = models.ForeignKey(
+        GLMaster,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="retail_items"
+    )
+
+    cost_gl_account = models.ForeignKey(
+        GLMaster,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cost_items"
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
 
     def __str__(self):
         return self.name
@@ -96,6 +145,9 @@ class StockTransaction(models.Model):
     transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES)
     qty = models.IntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
 
     def __str__(self):
         return f"{self.item.name} - {self.transaction_type}"
@@ -128,6 +180,9 @@ class Sale(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        ordering = ["-created_at"]
+
     def __str__(self):
         return self.invoice_no
 
@@ -155,6 +210,9 @@ class Purchase(models.Model):
     date = models.DateField()
     total_amount = models.DecimalField(max_digits=12, decimal_places=2)
 
+    class Meta:
+        ordering = ["-date", "-id"]
+
     def __str__(self):
         return f"Purchase - {self.id}"
 
@@ -172,7 +230,11 @@ class PurchaseItem(models.Model):
 
     def __str__(self):
         return self.item.name
-    
+
+
+# ==============================
+# SALES RETURN
+# ==============================
 class SalesReturn(models.Model):
     RETURN_TYPE_CHOICES = [
         ('refund', 'Refund'),
@@ -188,6 +250,9 @@ class SalesReturn(models.Model):
     reason = models.TextField(blank=True, null=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
 
     def __str__(self):
         return self.return_no or "Return"

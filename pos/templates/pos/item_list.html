@@ -86,9 +86,21 @@
 
                         <td>{{ item.selling_price }}</td>
 
-                        <td>{{ item.retail_gl|default:"-" }}</td>
+                       <td>
+    {% if item.retail_gl_account %}
+        {{ item.retail_gl_account.gl_code }} - {{ item.retail_gl_account.gl_name }}
+    {% else %}
+        {{ item.retail_gl|default:"-" }}
+    {% endif %}
+</td>
 
-                        <td>{{ item.cost_gl|default:"-" }}</td>
+<td>
+    {% if item.cost_gl_account %}
+        {{ item.cost_gl_account.gl_code }} - {{ item.cost_gl_account.gl_name }}
+    {% else %}
+        {{ item.cost_gl|default:"-" }}
+    {% endif %}
+</td>
 
                         <td>
                             <a href="{% url 'edit_item' item.id %}" class="btn btn-warning btn-sm">

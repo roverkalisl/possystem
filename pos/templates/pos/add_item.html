@@ -13,6 +13,7 @@
             margin-top: 15px;
             margin-bottom: 10px;
             color: #555;
+            width: 100%;
         }
     </style>
 </head>
@@ -31,7 +32,9 @@
 
         {% if messages %}
             {% for message in messages %}
-                <div class="alert alert-success">{{ message }}</div>
+                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}success{% endif %}">
+                    {{ message }}
+                </div>
             {% endfor %}
         {% endif %}
 
@@ -39,6 +42,7 @@
             {% csrf_token %}
 
             <div class="row">
+
                 <div class="section-title">Basic Information</div>
 
                 <div class="col-md-6 mb-3">
@@ -89,9 +93,7 @@
                 <div class="col-md-4 mb-3 d-flex align-items-center">
                     <div class="form-check mt-4">
                         <input type="checkbox" name="is_service" class="form-check-input" id="serviceCheck">
-                        <label class="form-check-label" for="serviceCheck">
-                            Is Service (No stock)
-                        </label>
+                        <label class="form-check-label" for="serviceCheck">Is Service (No stock)</label>
                     </div>
                 </div>
 
@@ -133,13 +135,24 @@
 
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Retail Revenue GL</label>
-                    <input type="text" name="retail_gl" class="form-control" placeholder="e.g. 4000">
+                    <select name="retail_gl_account" class="form-select">
+                        <option value="">Select GL</option>
+                        {% for gl in gl_list %}
+                            <option value="{{ gl.id }}">{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
 
                 <div class="col-md-6 mb-3">
                     <label class="form-label">Costing GL</label>
-                    <input type="text" name="cost_gl" class="form-control" placeholder="e.g. 5000">
+                    <select name="cost_gl_account" class="form-select">
+                        <option value="">Select GL</option>
+                        {% for gl in gl_list %}
+                            <option value="{{ gl.id }}">{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
+
             </div>
 
             <button class="btn btn-success w-100 mt-3">💾 Save Item</button>

@@ -13,17 +13,20 @@ from django.utils import timezone
 from .models import (
     Item, Category, Supplier,
     Sale, SaleItem, StockTransaction,
-    SalesReturn
+    SalesReturn, GLMaster
 )
 
 
 # =========================================
-# AUTH
+# HELPERS
 # =========================================
 def is_owner(user):
     return user.is_superuser or user.groups.filter(name='Owner').exists()
 
 
+# =========================================
+# AUTH
+# =========================================
 def login_view(request):
     if request.user.is_authenticated:
         return redirect("pos")
@@ -56,7 +59,7 @@ def logout_view(request):
 def pos_page(request):
     query = request.GET.get("q", "").strip()
 
-    items = Item.objects.filter(is_service=False, stock__gt=0).select_related("category").order_by("name")
+    items = Item.objects.filter(is_service=False).select_related("category").order_by("name")
 
     if query:
         items = items.filter(
@@ -172,6 +175,7 @@ def invoice_page(request, sale_id):
 def add_item(request):
     categories = Category.objects.all().order_by("name")
     suppliers = Supplier.objects.all().order_by("name")
+    gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
 
     if request.method == "POST":
         purchase_date = request.POST.get("purchase_date") or None
@@ -184,8 +188,15 @@ def add_item(request):
                 messages.error(request, "Invalid purchase date")
                 return render(request, "pos/add_item.html", {
                     "categories": categories,
-                    "suppliers": suppliers
+                    "suppliers": suppliers,
+                    "gl_list": gl_list,
                 })
+
+        retail_gl_account_id = request.POST.get("retail_gl_account") or None
+        cost_gl_account_id = request.POST.get("cost_gl_account") or None
+
+        retail_gl_obj = GLMaster.objects.filter(id=retail_gl_account_id).first() if retail_gl_account_id else None
+        cost_gl_obj = GLMaster.objects.filter(id=cost_gl_account_id).first() if cost_gl_account_id else None
 
         Item.objects.create(
             item_code=request.POST.get("item_code", "").strip(),
@@ -201,8 +212,12 @@ def add_item(request):
             is_service=request.POST.get("is_service") == "on",
             reorder_level=request.POST.get("reorder_level") or 0,
             warranty_days=request.POST.get("warranty_days") or 0,
-            retail_gl=request.POST.get("retail_gl") or None,
-            cost_gl=request.POST.get("cost_gl") or None,
+
+            retail_gl=retail_gl_obj.gl_code if retail_gl_obj else None,
+            cost_gl=cost_gl_obj.gl_code if cost_gl_obj else None,
+
+            retail_gl_account_id=retail_gl_account_id,
+            cost_gl_account_id=cost_gl_account_id,
         )
 
         messages.success(request, "Item added successfully")
@@ -210,7 +225,8 @@ def add_item(request):
 
     return render(request, "pos/add_item.html", {
         "categories": categories,
-        "suppliers": suppliers
+        "suppliers": suppliers,
+        "gl_list": gl_list,
     })
 
 
@@ -218,7 +234,9 @@ def add_item(request):
 def item_list(request):
     query = request.GET.get("q", "").strip()
 
-    items = Item.objects.select_related("category", "supplier").order_by("-id")
+    items = Item.objects.select_related(
+        "category", "supplier", "retail_gl_account", "cost_gl_account"
+    ).order_by("-id")
 
     if query:
         items = items.filter(
@@ -240,6 +258,7 @@ def edit_item(request, item_id):
     item = get_object_or_404(Item, id=item_id)
     categories = Category.objects.all().order_by("name")
     suppliers = Supplier.objects.all().order_by("name")
+    gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
 
     if request.method == "POST":
         item.item_code = request.POST.get("item_code", "").strip()
@@ -254,8 +273,18 @@ def edit_item(request, item_id):
         item.is_service = request.POST.get("is_service") == "on"
         item.reorder_level = request.POST.get("reorder_level") or 0
         item.warranty_days = request.POST.get("warranty_days") or 0
-        item.retail_gl = request.POST.get("retail_gl") or None
-        item.cost_gl = request.POST.get("cost_gl") or None
+
+        retail_gl_account_id = request.POST.get("retail_gl_account") or None
+        cost_gl_account_id = request.POST.get("cost_gl_account") or None
+
+        retail_gl_obj = GLMaster.objects.filter(id=retail_gl_account_id).first() if retail_gl_account_id else None
+        cost_gl_obj = GLMaster.objects.filter(id=cost_gl_account_id).first() if cost_gl_account_id else None
+
+        item.retail_gl_account_id = retail_gl_account_id
+        item.cost_gl_account_id = cost_gl_account_id
+
+        item.retail_gl = retail_gl_obj.gl_code if retail_gl_obj else None
+        item.cost_gl = cost_gl_obj.gl_code if cost_gl_obj else None
 
         purchase_date = request.POST.get("purchase_date") or None
         if purchase_date:
@@ -274,8 +303,10 @@ def edit_item(request, item_id):
     return render(request, "pos/edit_item.html", {
         "item": item,
         "categories": categories,
-        "suppliers": suppliers
+        "suppliers": suppliers,
+        "gl_list": gl_list,
     })
+
 
 @login_required
 def stock_history(request):
@@ -361,6 +392,7 @@ def sales_return(request):
         reason = request.POST.get("reason", "").strip()
 
         sale_item = get_object_or_404(SaleItem, id=sale_item_id)
+
         if qty <= 0:
             messages.error(request, "Invalid return qty")
             return redirect("sales_return")
@@ -401,3 +433,96 @@ def sales_return(request):
 def return_receipt(request, return_id):
     r = get_object_or_404(SalesReturn, id=return_id)
     return render(request, "pos/return_receipt.html", {"r": r})
+
+
+# =========================================
+# GL MASTER
+# =========================================
+@login_required
+def gl_list(request):
+    query = request.GET.get("q", "").strip()
+
+    gl_accounts = GLMaster.objects.all().order_by("gl_code")
+
+    if query:
+        gl_accounts = gl_accounts.filter(
+            Q(gl_code__icontains=query) |
+            Q(gl_name__icontains=query) |
+            Q(gl_type__icontains=query) |
+            Q(parent_group__icontains=query)
+        )
+
+    return render(request, "pos/gl_list.html", {
+        "gl_accounts": gl_accounts,
+        "query": query
+    })
+
+
+@login_required
+def add_gl(request):
+    if request.method == "POST":
+        gl_code = request.POST.get("gl_code", "").strip()
+        gl_name = request.POST.get("gl_name", "").strip()
+        gl_type = request.POST.get("gl_type", "").strip()
+        parent_group = request.POST.get("parent_group", "").strip()
+        description = request.POST.get("description", "").strip()
+        is_active = request.POST.get("is_active") == "on"
+
+        if not gl_code or not gl_name or not gl_type:
+            messages.error(request, "GL Code, Name and Type are required.")
+            return redirect("add_gl")
+
+        if GLMaster.objects.filter(gl_code=gl_code).exists():
+            messages.error(request, "GL Code already exists.")
+            return redirect("add_gl")
+
+        GLMaster.objects.create(
+            gl_code=gl_code,
+            gl_name=gl_name,
+            gl_type=gl_type,
+            parent_group=parent_group,
+            description=description,
+            is_active=is_active
+        )
+
+        messages.success(request, "GL account added successfully.")
+        return redirect("gl_list")
+
+    return render(request, "pos/add_gl.html")
+
+
+@login_required
+def edit_gl(request, gl_id):
+    gl = get_object_or_404(GLMaster, id=gl_id)
+
+    if request.method == "POST":
+        gl_code = request.POST.get("gl_code", "").strip()
+        gl_name = request.POST.get("gl_name", "").strip()
+        gl_type = request.POST.get("gl_type", "").strip()
+        parent_group = request.POST.get("parent_group", "").strip()
+        description = request.POST.get("description", "").strip()
+        is_active = request.POST.get("is_active") == "on"
+
+        if not gl_code or not gl_name or not gl_type:
+            messages.error(request, "GL Code, Name and Type are required.")
+            return redirect("edit_gl", gl_id=gl.id)
+
+        duplicate = GLMaster.objects.filter(gl_code=gl_code).exclude(id=gl.id).exists()
+        if duplicate:
+            messages.error(request, "Another GL account already uses this code.")
+            return redirect("edit_gl", gl_id=gl.id)
+
+        gl.gl_code = gl_code
+        gl.gl_name = gl_name
+        gl.gl_type = gl_type
+        gl.parent_group = parent_group
+        gl.description = description
+        gl.is_active = is_active
+        gl.save()
+
+        messages.success(request, "GL account updated successfully.")
+        return redirect("gl_list")
+
+    return render(request, "pos/edit_gl.html", {
+        "gl": gl
+    })
