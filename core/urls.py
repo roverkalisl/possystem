@@ -23,4 +23,8 @@ urlpatterns = [
     path('sales-return/', views.sales_return, name='sales_return'),
     path('sale-items/<int:sale_id>/', views.get_sale_items, name='get_sale_items'),
     path('return-receipt/<int:return_id>/', views.return_receipt, name='return_receipt'),
+    path('projects/', views.project_list, name='project_list'),
+    path('projects/create/', views.create_project, name='create_project'),
+    path('projects/', views.project_list, name='project_list'),
+    path('projects/create/', views.create_project, name='create_project'),
 ]
