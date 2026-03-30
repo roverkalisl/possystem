@@ -277,7 +277,6 @@ def edit_item(request, item_id):
         "suppliers": suppliers
     })
 
-
 @login_required
 def stock_history(request):
     rows = StockTransaction.objects.select_related("item").order_by("-created_at")
