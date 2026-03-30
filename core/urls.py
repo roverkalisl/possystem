@@ -25,6 +25,5 @@ urlpatterns = [
     path('return-receipt/<int:return_id>/', views.return_receipt, name='return_receipt'),
     path('projects/', views.project_list, name='project_list'),
     path('projects/create/', views.create_project, name='create_project'),
-    path('projects/', views.project_list, name='project_list'),
-    path('projects/create/', views.create_project, name='create_project'),
+    path('dashboard/', views.dashboard, name='dashboard'),   
 ]
