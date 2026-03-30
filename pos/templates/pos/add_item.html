@@ -2,176 +2,52 @@
 <html>
 <head>
     <title>Add Item</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-
-    <style>
-        body {
-            background: #f4f6f9;
-        }
-
-        .card {
-            border-radius: 12px;
-        }
-
-        .section-title {
-            font-weight: bold;
-            margin-top: 15px;
-            margin-bottom: 10px;
-            color: #555;
-        }
-    </style>
 </head>
-<body>
+
+<body class="bg-light">
 
 <div class="container mt-4">
+<div class="card p-4">
 
-    <div class="card shadow-sm p-4">
+<h3>Add Item</h3>
 
-        <!-- HEADER -->
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3>➕ Add New Item</h3>
-            <div>
-                <a href="{% url 'item_list' %}" class="btn btn-info btn-sm">Items</a>
-                <a href="{% url 'pos' %}" class="btn btn-secondary btn-sm">POS</a>
-            </div>
-        </div>
+{% for message in messages %}
+<div class="alert alert-success">{{ message }}</div>
+{% endfor %}
 
-        <!-- MESSAGES -->
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-success">{{ message }}</div>
-            {% endfor %}
-        {% endif %}
+<form method="POST">
+{% csrf_token %}
 
-        <form method="POST">
-            {% csrf_token %}
+<input name="item_code" class="form-control mb-2" placeholder="Code" required>
+<input name="name" class="form-control mb-2" placeholder="Name" required>
 
-            <div class="row">
+<select name="category" class="form-control mb-2">
+<option value="">Category</option>
+{% for c in categories %}
+<option value="{{ c.id }}">{{ c.name }}</option>
+{% endfor %}
+</select>
 
-                <!-- BASIC INFO -->
-                <div class="section-title">Basic Information</div>
+<select name="supplier" class="form-control mb-2">
+<option value="">Supplier</option>
+{% for s in suppliers %}
+<option value="{{ s.id }}">{{ s.name }}</option>
+{% endfor %}
+</select>
 
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Item Code *</label>
-                    <input type="text" name="item_code" class="form-control" required>
-                </div>
+<input name="cost_price" type="number" class="form-control mb-2" placeholder="Cost">
+<input name="selling_price" type="number" class="form-control mb-2" placeholder="Selling">
+<input name="stock" type="number" class="form-control mb-2" placeholder="Stock">
 
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Item Name *</label>
-                    <input type="text" name="name" class="form-control" required>
-                </div>
+<input name="retail_gl" class="form-control mb-2" placeholder="Retail GL">
+<input name="cost_gl" class="form-control mb-2" placeholder="Cost GL">
 
-                <!-- CATEGORY + SUPPLIER -->
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Category</label>
-                    <select name="category" class="form-select">
-                        <option value="">---------</option>
-                        {% for cat in categories %}
-                            <option value="{{ cat.id }}">{{ cat.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+<button class="btn btn-success w-100">Save</button>
 
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Supplier</label>
-                    <select name="supplier" class="form-select">
-                        <option value="">---------</option>
-                        {% for sup in suppliers %}
-                            <option value="{{ sup.id }}">{{ sup.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+</form>
 
-                <!-- UNIT -->
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">Unit</label>
-                    <input type="text" name="unit" value="pcs" class="form-control">
-                </div>
-
-                <!-- ITEM TYPE -->
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">Item Type</label>
-                    <select name="item_type" class="form-select">
-                        <option value="retail">Retail</option>
-                        <option value="project">Project</option>
-                        <option value="both">Both</option>
-                        <option value="expense">Expense</option>
-                    </select>
-                </div>
-
-                <!-- SERVICE -->
-                <div class="col-md-4 mb-3 d-flex align-items-center">
-                    <div class="form-check mt-4">
-                        <input type="checkbox" name="is_service" class="form-check-input" id="serviceCheck">
-                        <label class="form-check-label" for="serviceCheck">
-                            Is Service (No stock)
-                        </label>
-                    </div>
-                </div>
-
-                <!-- PRICING -->
-                <div class="section-title">Pricing</div>
-
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">Cost Price</label>
-                    <input type="number" step="0.01" name="cost_price" value="0" class="form-control">
-                </div>
-
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">Selling Price</label>
-                    <input type="number" step="0.01" name="selling_price" value="0" class="form-control">
-                </div>
-
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">Opening Stock</label>
-                    <input type="number" name="stock" value="0" class="form-control">
-                </div>
-
-                <!-- PURCHASE -->
-                <div class="section-title">Purchase Details</div>
-
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Purchase Date</label>
-                    <input type="date" name="purchase_date" class="form-control">
-                </div>
-
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Reorder Level</label>
-                    <input type="number" name="reorder_level" value="0" class="form-control">
-                </div>
-
-                <!-- WARRANTY -->
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Warranty (Days)</label>
-                    <input type="number" name="warranty_days" value="0" class="form-control">
-                </div>
-
-                <!-- GL SECTION -->
-                <div class="section-title">Accounting (GL)</div>
-
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Retail Revenue GL</label>
-                    <input type="text" name="retail_gl" class="form-control" placeholder="e.g. 4000">
-                </div>
-
-                <div class="col-md-6 mb-3">
-                    <label class="form-label">Costing GL</label>
-                    <input type="text" name="cost_gl" class="form-control" placeholder="e.g. 5000">
-                </div>
-
-            </div>
-
-            <!-- BUTTON -->
-            <button class="btn btn-success w-100 mt-3">
-                💾 Save Item
-            </button>
-
-        </form>
-
-    </div>
-
+</div>
 </div>
 
 </body>

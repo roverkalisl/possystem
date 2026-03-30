@@ -1,350 +1,77 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>POS System</title>
+    <title>POS</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <a href="{% url 'add_item' %}" class="btn btn-success mb-2">+ Add Item</a>
-    <a href="{% url 'sales_return' %}" class="btn btn-warning btn-sm">Sales Return</a>
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-
-    <style>
-        body {
-            background: #f4f6f9;
-        }
-
-        .item-card {
-            cursor: pointer;
-            transition: 0.2s;
-            border-radius: 12px;
-        }
-
-        .item-card:hover {
-            transform: scale(1.02);
-            background: #e9f2ff;
-        }
-
-        .cart-box {
-            background: #ffffff;
-            border-radius: 12px;
-            padding: 15px;
-        }
-
-        .top-bar {
-            background: #ffffff;
-            border-radius: 12px;
-            padding: 12px 16px;
-            margin-bottom: 15px;
-        }
-
-        .summary-box {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 10px;
-        }
-    </style>
 </head>
-<body>
 
-<div class="container-fluid mt-3">
+<body class="bg-light">
 
-    <div class="top-bar shadow-sm d-flex justify-content-between align-items-center flex-wrap">
-        <h3 class="mb-2 mb-md-0">🛒 POS Billing System</h3>
+<div class="container mt-3">
 
-        <div class="d-flex align-items-center gap-2 flex-wrap">
-            <a href="{% url 'daily_report' %}" class="btn btn-dark btn-sm">Daily Report</a>
+    <div class="d-flex justify-content-between mb-3">
+        <h3>POS</h3>
 
-            {% if can_view_monthly %}
-            <a href="{% url 'monthly_report' %}" class="btn btn-secondary btn-sm">Monthly Report</a>
-            {% endif %}
-
-            <span class="ms-2">Hi, {{ request.user.username }}</span>
+        <div>
+            <a href="{% url 'add_item' %}" class="btn btn-success btn-sm">+ Add Item</a>
             <a href="{% url 'logout' %}" class="btn btn-danger btn-sm">Logout</a>
         </div>
     </div>
 
+    <!-- SEARCH -->
+    <form method="GET" class="mb-3">
+        <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Search...">
+    </form>
+
     <div class="row">
-        <!-- LEFT SIDE -->
-        <div class="col-lg-7 mb-3">
-            <div class="card shadow-sm p-3">
-                <form method="GET" class="mb-3">
-                    <div class="input-group">
-                        <input
-                            type="text"
-                            name="q"
-                            value="{{ query }}"
-                            class="form-control"
-                            placeholder="Search by item name / code / category">
-                        <button class="btn btn-primary" type="submit">Search</button>
-                    </div>
-                </form>
-
-                <div class="row">
-                    {% for item in items %}
-                    <div class="col-md-4 mb-3">
-                        <div class="card item-card p-3 shadow-sm"
-                             onclick="addToCart({{ item.id }}, '{{ item.name|escapejs }}', {{ item.selling_price }}, {{ item.stock }})">
-                            <h6 class="mb-1">{{ item.name }}</h6>
-                            <small class="text-muted d-block">{{ item.item_code }} | {{ item.category.name }}</small>
-                            <small class="text-muted d-block">Stock: {{ item.stock }}</small>
-                            <strong class="text-success mt-2 d-block">Rs. {{ item.selling_price }}</strong>
-                        </div>
-                    </div>
-                    {% empty %}
-                    <div class="col-12">
-                        <div class="alert alert-warning mb-0">No items found.</div>
-                    </div>
-                    {% endfor %}
-                </div>
+        {% for item in items %}
+        <div class="col-md-3 mb-3">
+            <div class="card p-2" onclick="addToCart({{ item.id }}, '{{ item.name }}', {{ item.selling_price }}, {{ item.stock }})">
+                <h6>{{ item.name }}</h6>
+                <small>Stock: {{ item.stock }}</small><br>
+                <strong>Rs {{ item.selling_price }}</strong>
             </div>
         </div>
-
-        <!-- RIGHT SIDE -->
-        <div class="col-lg-5 mb-3">
-            <div class="cart-box shadow-sm">
-                <h5 class="mb-3">🧾 Cart</h5>
-
-                <div class="table-responsive">
-                    <table class="table table-bordered align-middle">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>Item</th>
-                                <th style="width:120px;">Qty</th>
-                                <th>Total</th>
-                                <th style="width:60px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="cart-body"></tbody>
-                    </table>
-                </div>
-
-                <div class="mb-2">
-                    <label class="form-label">Discount</label>
-                    <input type="number" id="discount" class="form-control" value="0" min="0" oninput="renderCart()">
-                </div>
-
-                <div class="summary-box mb-3">
-                    <h6>Total: <span id="total">0.00</span></h6>
-                    <h4 class="text-success mb-0">Grand Total: <span id="grand_total">0.00</span></h4>
-                </div>
-
-                <div class="mb-2">
-                    <label class="form-label">Payment Method</label>
-                    <select id="payment_method" class="form-select" onchange="handlePayment()">
-                        <option value="cash">Cash</option>
-                        <option value="card">Card</option>
-                        <option value="credit">Credit</option>
-                    </select>
-                </div>
-
-                <!-- CASH -->
-                <div id="cash_section">
-                    <div class="mb-2">
-                        <label class="form-label">Received Amount</label>
-                        <input type="number" id="received" class="form-control" min="0" oninput="calculateBalance()">
-                    </div>
-
-                    <div class="mb-2">
-                        <label class="form-label">Balance</label>
-                        <input type="text" id="balance" class="form-control" readonly>
-                    </div>
-                </div>
-
-                <!-- CARD -->
-                <div id="card_section" style="display:none;">
-                    <div class="mb-2">
-                        <label class="form-label">Card Last 4 Digits</label>
-                        <input type="text" id="card_last4" maxlength="4" class="form-control">
-                    </div>
-                </div>
-
-                <!-- CREDIT -->
-                <div id="credit_section" style="display:none;">
-                    <div class="mb-2">
-                        <label class="form-label">Cheque Number</label>
-                        <input type="text" id="cheque_number" class="form-control">
-                    </div>
-                </div>
-
-                <button class="btn btn-success w-100 mt-3" onclick="saveSale()">💰 Complete Sale</button>
-            </div>
-        </div>
+        {% endfor %}
     </div>
+
+    <hr>
+
+    <h5>Cart</h5>
+    <table class="table">
+        <tbody id="cart-body"></tbody>
+    </table>
+
+    <button class="btn btn-primary" onclick="saveSale()">Save Sale</button>
+
 </div>
 
 <script>
 let cart = [];
 
 function addToCart(id, name, price, stock) {
-    let found = cart.find(i => i.id === id);
-
-    if (found) {
-        if (found.qty < stock) {
-            found.qty += 1;
-        } else {
-            alert("Not enough stock");
-        }
-    } else {
-        cart.push({
-            id: id,
-            name: name,
-            price: parseFloat(price),
-            qty: 1,
-            stock: parseInt(stock)
-        });
-    }
-
-    renderCart();
+    cart.push({id, name, price, qty:1, stock});
+    render();
 }
 
-function changeQty(id, change) {
-    let item = cart.find(i => i.id === id);
-
-    if (item) {
-        let newQty = item.qty + change;
-
-        if (newQty <= 0) {
-            cart = cart.filter(i => i.id !== id);
-        } else if (newQty > item.stock) {
-            alert("Not enough stock");
-        } else {
-            item.qty = newQty;
-        }
-    }
-
-    renderCart();
-}
-
-function removeItem(id) {
-    cart = cart.filter(i => i.id !== id);
-    renderCart();
-}
-
-function renderCart() {
-    let body = document.getElementById("cart-body");
-    body.innerHTML = "";
-
-    let total = 0;
-
-    cart.forEach(item => {
-        let lineTotal = item.qty * item.price;
-        total += lineTotal;
-
-        let row = `
-            <tr>
-                <td>
-                    <strong>${item.name}</strong><br>
-                    <small class="text-muted">Stock: ${item.stock}</small>
-                </td>
-                <td>
-                    <div class="d-flex justify-content-center align-items-center gap-1">
-                        <button class="btn btn-sm btn-danger" onclick="changeQty(${item.id}, -1)">-</button>
-                        <span>${item.qty}</span>
-                        <button class="btn btn-sm btn-success" onclick="changeQty(${item.id}, 1)">+</button>
-                    </div>
-                </td>
-                <td>${lineTotal.toFixed(2)}</td>
-                <td>
-                    <button class="btn btn-sm btn-dark" onclick="removeItem(${item.id})">X</button>
-                </td>
-            </tr>
-        `;
-        body.innerHTML += row;
+function render() {
+    let html = "";
+    cart.forEach(i => {
+        html += `<tr><td>${i.name}</td><td>${i.qty}</td></tr>`;
     });
-
-    let discount = parseFloat(document.getElementById("discount").value) || 0;
-    let grandTotal = total - discount;
-
-    if (grandTotal < 0) {
-        grandTotal = 0;
-    }
-
-    document.getElementById("total").innerText = total.toFixed(2);
-    document.getElementById("grand_total").innerText = grandTotal.toFixed(2);
-
-    if (document.getElementById("payment_method").value === "cash") {
-        calculateBalance();
-    }
-}
-
-function handlePayment() {
-    let method = document.getElementById("payment_method").value;
-
-    document.getElementById("cash_section").style.display = "none";
-    document.getElementById("card_section").style.display = "none";
-    document.getElementById("credit_section").style.display = "none";
-
-    if (method === "cash") {
-        document.getElementById("cash_section").style.display = "block";
-    } else if (method === "card") {
-        document.getElementById("card_section").style.display = "block";
-    } else if (method === "credit") {
-        document.getElementById("credit_section").style.display = "block";
-    }
-}
-
-function calculateBalance() {
-    let received = parseFloat(document.getElementById("received").value) || 0;
-    let grand = parseFloat(document.getElementById("grand_total").innerText) || 0;
-    let balance = received - grand;
-    document.getElementById("balance").value = balance.toFixed(2);
+    document.getElementById("cart-body").innerHTML = html;
 }
 
 function saveSale() {
-    if (cart.length === 0) {
-        alert("Cart is empty");
-        return;
-    }
-
-    const paymentMethod = document.getElementById("payment_method").value;
-    const grandTotal = parseFloat(document.getElementById("grand_total").innerText) || 0;
-    const received = parseFloat(document.getElementById("received").value) || 0;
-    const cardLast4 = document.getElementById("card_last4").value.trim();
-    const chequeNumber = document.getElementById("cheque_number").value.trim();
-
-    if (paymentMethod === "cash" && received < grandTotal) {
-        alert("Received amount is less than grand total");
-        return;
-    }
-
-    if (paymentMethod === "card" && cardLast4.length !== 4) {
-        alert("Enter card last 4 digits");
-        return;
-    }
-
-    if (paymentMethod === "credit" && chequeNumber === "") {
-        alert("Enter cheque number");
-        return;
-    }
-
     fetch('/save-sale/', {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'X-CSRFToken': '{{ csrf_token }}'
-        },
-        body: JSON.stringify({
-            items: cart,
-            total: document.getElementById("total").innerText,
-            discount: document.getElementById("discount").value,
-            grand_total: document.getElementById("grand_total").innerText,
-            payment_method: paymentMethod,
-            received: document.getElementById("received").value,
-            balance: document.getElementById("balance").value,
-            card_last4: cardLast4,
-            cheque_number: chequeNumber
-        })
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'success') {
-            window.location.href = `/invoice/${data.sale_id}/`;
-        } else {
-            alert(data.message || "Error saving sale");
-        }
-    })
-    .catch(error => {
-        alert("Something went wrong");
-        console.error(error);
+        headers: {'Content-Type':'application/json','X-CSRFToken':'{{ csrf_token }}'},
+        body: JSON.stringify({items:cart})
+    }).then(r=>r.json()).then(d=>{
+        alert("Saved");
+        location.reload();
     });
 }
 </script>
