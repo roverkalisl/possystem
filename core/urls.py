@@ -14,7 +14,12 @@ urlpatterns = [
 
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
+
     path('add-item/', views.add_item, name='add_item'),
+    path('items/', views.item_list, name='item_list'),
+    path('edit-item/<int:item_id>/', views.edit_item, name='edit_item'),
+    path('stock-history/', views.stock_history, name='stock_history'),
+
     path('sales-return/', views.sales_return, name='sales_return'),
     path('sale-items/<int:sale_id>/', views.get_sale_items, name='get_sale_items'),
     path('return-receipt/<int:return_id>/', views.return_receipt, name='return_receipt'),
