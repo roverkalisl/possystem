@@ -508,3 +508,17 @@ def add_project_expense(request):
         "expense_gls": expense_gls,
         "items": items,
     })
+@login_required
+def add_gl(request):
+
+    if request.method == "POST":
+        GLMaster.objects.create(
+            gl_code=request.POST.get("gl_code"),
+            gl_name=request.POST.get("gl_name"),
+            gl_type=request.POST.get("gl_type"),
+            parent_group=request.POST.get("parent_group"),
+        )
+
+        return redirect("gl_list")
+
+    return render(request, "pos/add_gl.html")

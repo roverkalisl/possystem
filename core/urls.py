@@ -28,4 +28,6 @@ urlpatterns = [
     path('dashboard/', views.dashboard, name='dashboard'),
     path('project-expenses/', views.project_expense_list, name='project_expense_list'),
     path('project-expenses/add/', views.add_project_expense, name='add_project_expense'),
+    path('gl/', views.gl_list, name='gl_list'),
+    path('gl/add/', views.add_gl, name='add_gl'),
 ]
