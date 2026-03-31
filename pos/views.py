@@ -11,10 +11,9 @@ from datetime import datetime
 import json
 
 from .models import (
-    Item, Category, Supplier, GLMaster,
-    Sale, SaleItem, StockTransaction, SalesReturn,
-    Project
-)
+    Item, Category, Supplier,
+    Sale, SaleItem, StockTransaction,
+    SalesReturn, GLMaster, Project, ProjectExpense)
 
 
 # =========================
@@ -446,3 +445,66 @@ def create_project(request):
 def project_list(request):
     projects = Project.objects.all().order_by("-id")
     return render(request, "pos/project_list.html", {"projects": projects})
+@login_required
+def project_expense_list(request):
+    expenses = ProjectExpense.objects.select_related(
+        "project", "gl_account", "item", "created_by"
+    ).order_by("-expense_date", "-id")
+
+    project_id = request.GET.get("project")
+    if project_id:
+        expenses = expenses.filter(project_id=project_id)
+
+    projects = Project.objects.all().order_by("-id")
+
+    return render(request, "pos/project_expense_list.html", {
+        "expenses": expenses,
+        "projects": projects,
+        "selected_project": project_id,
+    })
+
+
+@login_required
+def add_project_expense(request):
+    projects = Project.objects.all().order_by("-id")
+    expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
+    items = Item.objects.all().order_by("name")
+
+    if request.method == "POST":
+        project_id = request.POST.get("project")
+        expense_date = request.POST.get("expense_date")
+        description = request.POST.get("description", "").strip()
+        amount = request.POST.get("amount") or 0
+        gl_account_id = request.POST.get("gl_account") or None
+        item_id = request.POST.get("item") or None
+        qty = request.POST.get("qty") or 0
+        unit_price = request.POST.get("unit_price") or 0
+
+        if not project_id or not description:
+            messages.error(request, "Project and description are required.")
+            return render(request, "pos/add_project_expense.html", {
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "items": items,
+            })
+
+        ProjectExpense.objects.create(
+            project_id=project_id,
+            expense_date=expense_date or timezone.now().date(),
+            description=description,
+            amount=amount,
+            gl_account_id=gl_account_id,
+            item_id=item_id,
+            qty=qty,
+            unit_price=unit_price,
+            created_by=request.user
+        )
+
+        messages.success(request, "Project expense added successfully.")
+        return redirect("project_expense_list")
+
+    return render(request, "pos/add_project_expense.html", {
+        "projects": projects,
+        "expense_gls": expense_gls,
+        "items": items,
+    })

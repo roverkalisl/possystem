@@ -207,3 +207,34 @@ class Project(models.Model):
 
     def __str__(self):
         return self.project_id
+class ProjectExpense(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="expenses")
+    expense_date = models.DateField(default=timezone.now)
+    description = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=12, decimal_places=2)
+
+    gl_account = models.ForeignKey(
+        GLMaster,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    item = models.ForeignKey(
+        Item,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-expense_date", "-id"]
+
+    def __str__(self):
+        return f"{self.project.project_id} - {self.description}"
