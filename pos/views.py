@@ -13,7 +13,7 @@ import json
 from .models import (
     Item, Category, Supplier,
     Sale, SaleItem, StockTransaction,
-    SalesReturn, GLMaster, Project,
+    SalesReturn, GLMaster, Project,ProjectExpense,
     ProjectPettyCash, ProjectPettyCashExpense
 )
 
