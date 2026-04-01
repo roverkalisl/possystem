@@ -270,35 +270,51 @@ def add_item(request):
                     "categories": categories,
                     "suppliers": suppliers,
                     "gl_list": gl_list,
+                    "next_item_code": generate_next_item_code(),
                 })
 
-        Item.objects.create(
-            item_code=request.POST.get("item_code"),
-            name=request.POST.get("name"),
-            category_id=request.POST.get("category") or None,
-            supplier_id=request.POST.get("supplier") or None,
-            unit=request.POST.get("unit") or "pcs",
-            cost_price=request.POST.get("cost_price") or 0,
-            selling_price=request.POST.get("selling_price") or 0,
-            stock=request.POST.get("stock") or 0,
-            purchase_date=parsed_purchase_date,
-            item_type=request.POST.get("item_type") or "retail",
-            is_service=request.POST.get("is_service") == "on",
-            reorder_level=request.POST.get("reorder_level") or 0,
-            warranty_days=request.POST.get("warranty_days") or 0,
-            retail_gl_account_id=request.POST.get("retail_gl_account") or None,
-            cost_gl_account_id=request.POST.get("cost_gl_account") or None,
-        )
+        try:
+            Item.objects.create(
+                item_code=request.POST.get("item_code"),
+                name=request.POST.get("name"),
+                category_id=request.POST.get("category") or None,
+                supplier_id=request.POST.get("supplier") or None,
+                unit=request.POST.get("unit") or "pcs",
+                cost_price=request.POST.get("cost_price") or 0,
+                selling_price=request.POST.get("selling_price") or 0,
+                stock=request.POST.get("stock") or 0,
+                purchase_date=parsed_purchase_date,
+                item_type=request.POST.get("item_type") or "retail",
+                is_service=request.POST.get("is_service") == "on",
+                reorder_level=request.POST.get("reorder_level") or 0,
+                warranty_days=request.POST.get("warranty_days") or 0,
+                retail_gl_account_id=request.POST.get("retail_gl_account") or None,
+                cost_gl_account_id=request.POST.get("cost_gl_account") or None,
+            )
 
-        messages.success(request, "Item added successfully")
-        return redirect("item_list")
+            messages.success(request, "Item added successfully")
+            return redirect("add_item")
+
+        except Exception as e:
+            messages.error(request, f"Error saving item: {str(e)}")
 
     return render(request, "pos/add_item.html", {
         "categories": categories,
         "suppliers": suppliers,
         "gl_list": gl_list,
+        "next_item_code": generate_next_item_code(),
     })
+def generate_next_item_code():
+    last_item = Item.objects.order_by('-id').first()
 
+    if not last_item or not last_item.item_code:
+        return "1000000000"
+
+    try:
+        last_number = int(str(last_item.item_code).strip())
+        return str(last_number + 1)
+    except:
+        return "1000000000"
 
 @login_required
 def item_list(request):
