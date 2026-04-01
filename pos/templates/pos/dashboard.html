@@ -58,8 +58,17 @@
         <h3>💵 Petty Cash</h3>
         <p>Project petty cash control</p>
     </div>
-</div>s
-        <!-- GL -->
+</div>
+
+{% if show_project %}
+<div class="col-md-4 mb-3">
+    <div class="card dashboard-card p-4 text-center shadow"
+         onclick="window.location.href='{% url 'project_income_list' %}'">
+        <h3>💰 Project Income</h3>
+        <p class="mb-0">Income Entries</p>
+    </div>
+</div>
+{% endif %}
         <div class="col-md-4 mb-3">
             <div class="card p-4 text-center shadow"
                  onclick="window.location.href='/gl/'">
