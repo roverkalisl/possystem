@@ -242,3 +242,27 @@ class ProjectExpense(models.Model):
 
     def __str__(self):
         return f"{self.project.project_id} - {self.description}"
+    class ProjectPettyCash(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="petty_cash_headers")
+    petty_cash_no = models.CharField(max_length=50, unique=True)
+    issue_date = models.DateField(default=timezone.now)
+    issued_to = models.CharField(max_length=200)
+    amount_issued = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    note = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-issue_date", "-id"]
+
+    def __str__(self):
+        return self.petty_cash_no
+
+    @property
+    def total_spent(self):
+        total = self.expenses.aggregate(total=models.Sum("amount"))["total"] or 0
+        return total
+
+    @property
+    def balance(self):
+        return self.amount_issued - self.total_spent

@@ -30,4 +30,8 @@ urlpatterns = [
     path('project-expenses/add/', views.add_project_expense, name='add_project_expense'),
     path('gl/', views.gl_list, name='gl_list'),
     path('gl/add/', views.add_gl, name='add_gl'),
+    path('petty-cash/', views.petty_cash_list, name='petty_cash_list'),
+    path('petty-cash/add/', views.add_petty_cash, name='add_petty_cash'),
+    path('petty-cash/<int:petty_cash_id>/', views.petty_cash_detail, name='petty_cash_detail'),
+    path('petty-cash/<int:petty_cash_id>/add-expense/', views.add_petty_cash_expense, name='add_petty_cash_expense'),
 ]
