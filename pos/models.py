@@ -109,7 +109,7 @@ class StockTransaction(models.Model):
 
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
     transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPES)
-    qty = models.IntegerField()
+    qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -152,7 +152,7 @@ class SaleItem(models.Model):
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="sale_items")
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
 
-    qty = models.IntegerField()
+    qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     price = models.DecimalField(max_digits=10, decimal_places=2)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
@@ -170,7 +170,7 @@ class SalesReturn(models.Model):
     return_no = models.CharField(max_length=50, unique=True, null=True, blank=True)
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE, null=True, blank=True)
     sale_item = models.ForeignKey(SaleItem, on_delete=models.CASCADE, null=True, blank=True)
-    qty = models.IntegerField(default=1)
+    qty = models.DecimalField(max_digits=12, decimal_places=2, default=1)
     return_type = models.CharField(max_length=20, choices=RETURN_TYPE_CHOICES, default='refund')
     reason = models.TextField(blank=True, null=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
@@ -207,32 +207,27 @@ class Project(models.Model):
 
     def __str__(self):
         return self.project_id
-class ProjectExpense(models.Model):
 
+
+class ProjectExpense(models.Model):
     EXPENSE_TYPE_CHOICES = [
         ('inventory', 'Inventory Item'),
         ('direct', 'Direct Item'),
         ('service', 'Service'),
     ]
 
-    project = models.ForeignKey(Project, on_delete=models.CASCADE)
-    expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES)
-
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="expenses")
+    expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES, default='direct')
     expense_date = models.DateField(default=timezone.now)
 
-    # inventory item (optional)
     item = models.ForeignKey(Item, on_delete=models.SET_NULL, null=True, blank=True)
-
-    # direct/service description
     description = models.CharField(max_length=255)
 
     qty = models.DecimalField(max_digits=12, decimal_places=2, default=1)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
-    amount = models.DecimalField(max_digits=12, decimal_places=2)
-
-    # GL MUST
-    gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True)
+    gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True)
 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -242,7 +237,8 @@ class ProjectExpense(models.Model):
 
     def __str__(self):
         return f"{self.project.project_id} - {self.description}"
-    
+
+
 class ProjectPettyCash(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="petty_cash_headers")
     petty_cash_no = models.CharField(max_length=50, unique=True)
@@ -267,3 +263,32 @@ class ProjectPettyCash(models.Model):
     @property
     def balance(self):
         return self.amount_issued - self.total_spent
+
+
+class ProjectPettyCashExpense(models.Model):
+    petty_cash = models.ForeignKey(
+        ProjectPettyCash,
+        on_delete=models.CASCADE,
+        related_name="expenses"
+    )
+    expense_date = models.DateField(default=timezone.now)
+    description = models.CharField(max_length=255)
+
+    gl_account = models.ForeignKey(
+        GLMaster,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    note = models.TextField(blank=True, null=True)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-expense_date", "-id"]
+
+    def __str__(self):
+        return f"{self.petty_cash.petty_cash_no} - {self.description}"
