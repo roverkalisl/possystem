@@ -48,13 +48,33 @@
             </div>
 
             <div class="mb-3">
+                <label class="form-label">Expense Type</label>
+                <select name="expense_type" id="expense_type" class="form-select" onchange="toggleExpenseType()" required>
+                    <option value="inventory">Inventory Item</option>
+                    <option value="direct">Direct Item</option>
+                    <option value="service">Service</option>
+                </select>
+            </div>
+
+            <div class="mb-3" id="itemField">
+                <label class="form-label">Inventory Item</label>
+                <select name="item" class="form-select">
+                    <option value="">Select Item</option>
+                    {% for i in items %}
+                        <option value="{{ i.id }}">{{ i.item_code }} - {{ i.name }}</option>
+                    {% endfor %}
+                </select>
+                <small class="text-muted">Use this for stock issue items.</small>
+            </div>
+
+            <div class="mb-3">
                 <label class="form-label">Description</label>
                 <input type="text" name="description" class="form-control" required>
             </div>
 
             <div class="mb-3">
                 <label class="form-label">GL Account</label>
-                <select name="gl_account" class="form-select">
+                <select name="gl_account" class="form-select" required>
                     <option value="">Select GL</option>
                     {% for gl in expense_gls %}
                         <option value="{{ gl.id }}">{{ gl.gl_code }} - {{ gl.gl_name }}</option>
@@ -62,30 +82,20 @@
                 </select>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label">Linked Item (optional)</label>
-                <select name="item" class="form-select">
-                    <option value="">Select Item</option>
-                    {% for item in items %}
-                        <option value="{{ item.id }}">{{ item.item_code }} - {{ item.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
             <div class="row">
                 <div class="col-md-4 mb-3">
                     <label class="form-label">Qty</label>
-                    <input type="number" step="0.01" name="qty" value="0" class="form-control">
+                    <input type="number" step="0.01" name="qty" id="qty" value="1" class="form-control" oninput="calculateAmount()">
                 </div>
 
                 <div class="col-md-4 mb-3">
                     <label class="form-label">Unit Price</label>
-                    <input type="number" step="0.01" name="unit_price" value="0" class="form-control">
+                    <input type="number" step="0.01" name="unit_price" id="unit_price" value="0" class="form-control" oninput="calculateAmount()">
                 </div>
 
                 <div class="col-md-4 mb-3">
                     <label class="form-label">Amount</label>
-                    <input type="number" step="0.01" name="amount" value="0" class="form-control" required>
+                    <input type="number" step="0.01" name="amount" id="amount" value="0" class="form-control" required>
                 </div>
             </div>
 
@@ -93,6 +103,30 @@
         </form>
     </div>
 </div>
+
+<script>
+function toggleExpenseType() {
+    const type = document.getElementById("expense_type").value;
+    const itemField = document.getElementById("itemField");
+
+    if (type === "inventory") {
+        itemField.style.display = "block";
+    } else {
+        itemField.style.display = "none";
+    }
+}
+
+function calculateAmount() {
+    const qty = parseFloat(document.getElementById("qty").value) || 0;
+    const unitPrice = parseFloat(document.getElementById("unit_price").value) || 0;
+    document.getElementById("amount").value = (qty * unitPrice).toFixed(2);
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+    toggleExpenseType();
+    calculateAmount();
+});
+</script>
 
 </body>
 </html>

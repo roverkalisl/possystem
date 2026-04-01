@@ -208,27 +208,31 @@ class Project(models.Model):
     def __str__(self):
         return self.project_id
 class ProjectExpense(models.Model):
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="expenses")
+
+    EXPENSE_TYPE_CHOICES = [
+        ('inventory', 'Inventory Item'),
+        ('direct', 'Direct Item'),
+        ('service', 'Service'),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE)
+    expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES)
+
     expense_date = models.DateField(default=timezone.now)
+
+    # inventory item (optional)
+    item = models.ForeignKey(Item, on_delete=models.SET_NULL, null=True, blank=True)
+
+    # direct/service description
     description = models.CharField(max_length=255)
+
+    qty = models.DecimalField(max_digits=12, decimal_places=2, default=1)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
     amount = models.DecimalField(max_digits=12, decimal_places=2)
 
-    gl_account = models.ForeignKey(
-        GLMaster,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True
-    )
-
-    item = models.ForeignKey(
-        Item,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True
-    )
-
-    qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    # GL MUST
+    gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True)
 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)

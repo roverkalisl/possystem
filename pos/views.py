@@ -466,41 +466,59 @@ def project_expense_list(request):
 
 @login_required
 def add_project_expense(request):
-    projects = Project.objects.all().order_by("-id")
-    expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
-    items = Item.objects.all().order_by("name")
+    projects = Project.objects.all()
+    expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True)
+    items = Item.objects.all()
 
     if request.method == "POST":
+        expense_type = request.POST.get("expense_type")
         project_id = request.POST.get("project")
-        expense_date = request.POST.get("expense_date")
-        description = request.POST.get("description", "").strip()
-        amount = request.POST.get("amount") or 0
-        gl_account_id = request.POST.get("gl_account") or None
         item_id = request.POST.get("item") or None
-        qty = request.POST.get("qty") or 0
-        unit_price = request.POST.get("unit_price") or 0
+        description = request.POST.get("description")
+        qty = float(request.POST.get("qty") or 1)
+        unit_price = float(request.POST.get("unit_price") or 0)
+        amount = float(request.POST.get("amount") or 0)
+        gl_account_id = request.POST.get("gl_account")
 
-        if not project_id or not description:
-            messages.error(request, "Project and description are required.")
-            return render(request, "pos/add_project_expense.html", {
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "items": items,
-            })
+        # VALIDATIONS
+        if not gl_account_id:
+            messages.error(request, "GL is required")
+            return redirect("add_project_expense")
 
-        ProjectExpense.objects.create(
+        if amount <= 0:
+            messages.error(request, "Amount must be greater than 0")
+            return redirect("add_project_expense")
+
+        # AUTO CALC
+        if amount == 0:
+            amount = qty * unit_price
+
+        # CREATE
+        expense = ProjectExpense.objects.create(
             project_id=project_id,
-            expense_date=expense_date or timezone.now().date(),
-            description=description,
-            amount=amount,
-            gl_account_id=gl_account_id,
+            expense_type=expense_type,
             item_id=item_id,
+            description=description,
             qty=qty,
             unit_price=unit_price,
+            amount=amount,
+            gl_account_id=gl_account_id,
             created_by=request.user
         )
 
-        messages.success(request, "Project expense added successfully.")
+        # 🔥 STOCK REDUCE (only inventory)
+        if expense_type == "inventory" and item_id:
+            item = Item.objects.get(id=item_id)
+            item.stock -= int(qty)
+            item.save()
+
+            StockTransaction.objects.create(
+                item=item,
+                transaction_type="project_issue",
+                qty=qty
+            )
+
+        messages.success(request, "Expense added")
         return redirect("project_expense_list")
 
     return render(request, "pos/add_project_expense.html", {
@@ -510,7 +528,6 @@ def add_project_expense(request):
     })
 @login_required
 def add_gl(request):
-
     if request.method == "POST":
         GLMaster.objects.create(
             gl_code=request.POST.get("gl_code"),
