@@ -4,6 +4,7 @@ from datetime import datetime
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
+from django.contrib.auth.models import User, Group
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.db.models import Q, Sum, F
 from django.http import JsonResponse
@@ -16,6 +17,7 @@ from .models import (
     Project, ProjectExpense, ProjectPettyCash,
     ProjectPettyCashExpense, ProjectIncome
 )
+
 
 
 # =========================
@@ -740,4 +742,108 @@ def project_profit_dashboard(request):
     projects = Project.objects.all().order_by("-created_at")
     return render(request, "pos/project_profit_dashboard.html", {
         "projects": projects,
+    })
+def is_owner(user):
+    return user.is_superuser or user.groups.filter(name='Owner').exists()
+
+
+@login_required
+@user_passes_test(is_owner)
+def user_list(request):
+    users = User.objects.all().order_by("username")
+    return render(request, "pos/user_list.html", {"users": users})
+
+
+@login_required
+@user_passes_test(is_owner)
+def create_user(request):
+    roles = Group.objects.all().order_by("name")
+
+    if request.method == "POST":
+        username = request.POST.get("username", "").strip()
+        password = request.POST.get("password", "").strip()
+        first_name = request.POST.get("first_name", "").strip()
+        last_name = request.POST.get("last_name", "").strip()
+        role = request.POST.get("role", "").strip()
+        is_active = request.POST.get("is_active") == "on"
+
+        if not username or not password or not role:
+            messages.error(request, "Username, password and role are required.")
+            return render(request, "pos/create_user.html", {"roles": roles})
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, "Username already exists.")
+            return render(request, "pos/create_user.html", {"roles": roles})
+
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+            is_active=is_active
+        )
+
+        group = Group.objects.filter(name=role).first()
+        if group:
+            user.groups.add(group)
+
+        messages.success(request, "User created successfully.")
+        return redirect("user_list")
+
+    return render(request, "pos/create_user.html", {"roles": roles})
+
+
+@login_required
+@user_passes_test(is_owner)
+def edit_user(request, user_id):
+    user_obj = get_object_or_404(User, id=user_id)
+    roles = Group.objects.all().order_by("name")
+    current_role = user_obj.groups.first()
+
+    if request.method == "POST":
+        username = request.POST.get("username", "").strip()
+        password = request.POST.get("password", "").strip()
+        first_name = request.POST.get("first_name", "").strip()
+        last_name = request.POST.get("last_name", "").strip()
+        role = request.POST.get("role", "").strip()
+        is_active = request.POST.get("is_active") == "on"
+
+        if not username or not role:
+            messages.error(request, "Username and role are required.")
+            return render(request, "pos/edit_user.html", {
+                "user_obj": user_obj,
+                "roles": roles,
+                "current_role": current_role,
+            })
+
+        if User.objects.filter(username=username).exclude(id=user_obj.id).exists():
+            messages.error(request, "Username already exists.")
+            return render(request, "pos/edit_user.html", {
+                "user_obj": user_obj,
+                "roles": roles,
+                "current_role": current_role,
+            })
+
+        user_obj.username = username
+        user_obj.first_name = first_name
+        user_obj.last_name = last_name
+        user_obj.is_active = is_active
+
+        if password:
+            user_obj.set_password(password)
+
+        user_obj.save()
+
+        user_obj.groups.clear()
+        group = Group.objects.filter(name=role).first()
+        if group:
+            user_obj.groups.add(group)
+
+        messages.success(request, "User updated successfully.")
+        return redirect("user_list")
+
+    return render(request, "pos/edit_user.html", {
+        "user_obj": user_obj,
+        "roles": roles,
+        "current_role": current_role,
     })
