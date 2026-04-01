@@ -88,4 +88,5 @@ urlpatterns = [
     path('users/', views.user_list, name='user_list'),
     path('users/create/', views.create_user, name='create_user'),
     path('users/edit/<int:user_id>/', views.edit_user, name='edit_user'),
+    path('project-profit/', views.project_profit_dashboard, name='project_profit_dashboard'),
 ]

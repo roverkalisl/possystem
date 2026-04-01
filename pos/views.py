@@ -792,7 +792,6 @@ def create_user(request):
 
     return render(request, "pos/create_user.html", {"roles": roles})
 
-
 @login_required
 @user_passes_test(is_owner)
 def edit_user(request, user_id):
@@ -846,4 +845,43 @@ def edit_user(request, user_id):
         "user_obj": user_obj,
         "roles": roles,
         "current_role": current_role,
+    })
+@user_passes_test(can_use_project)
+def project_profit_dashboard(request):
+    projects = Project.objects.all().order_by("-created_at")
+
+    project_rows = []
+
+    for project in projects:
+        direct_expense = project.expenses.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        petty_cash_expense = ProjectPettyCashExpense.objects.filter(
+            petty_cash__project=project
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        total_income = project.incomes.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+        total_expense = Decimal(str(direct_expense)) + Decimal(str(petty_cash_expense))
+        profit = Decimal(str(total_income)) - total_expense
+
+        project_rows.append({
+            "project": project,
+            "total_income": total_income,
+            "direct_expense": direct_expense,
+            "petty_cash_expense": petty_cash_expense,
+            "total_expense": total_expense,
+            "profit": profit,
+        })
+
+    grand_income = sum([row["total_income"] for row in project_rows], Decimal("0"))
+    grand_direct_expense = sum([row["direct_expense"] for row in project_rows], Decimal("0"))
+    grand_petty_cash = sum([row["petty_cash_expense"] for row in project_rows], Decimal("0"))
+    grand_total_expense = sum([row["total_expense"] for row in project_rows], Decimal("0"))
+    grand_profit = sum([row["profit"] for row in project_rows], Decimal("0"))
+
+    return render(request, "pos/project_profit_dashboard.html", {
+        "project_rows": project_rows,
+        "grand_income": grand_income,
+        "grand_direct_expense": grand_direct_expense,
+        "grand_petty_cash": grand_petty_cash,
+        "grand_total_expense": grand_total_expense,
+        "grand_profit": grand_profit,
     })

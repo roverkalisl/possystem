@@ -76,6 +76,17 @@
                 <p>Accounts & Costing</p>
             </div>
         </div>
+
+{% if show_project %}
+<div class="col-md-4 mb-3">
+    <div class="card dashboard-card p-4 text-center shadow"
+         onclick="window.location.href='{% url 'project_profit_dashboard' %}'">
+        <h4>Profit Dashboard</h4>
+        <p class="mb-0">Income vs Expense</p>
+    </div>
+</div>
+{% endif %}
+
 <a href="{% url 'user_list' %}" class="btn btn-dark btn-sm">Users</a>
 
     </div>
