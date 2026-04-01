@@ -1,3 +1,4 @@
+from decimal import Decimal
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -27,11 +28,11 @@ class Supplier(models.Model):
 
 class GLMaster(models.Model):
     GL_TYPE_CHOICES = [
-        ('asset', 'Asset'),
-        ('liability', 'Liability'),
-        ('equity', 'Equity'),
-        ('income', 'Income'),
-        ('expense', 'Expense'),
+        ("asset", "Asset"),
+        ("liability", "Liability"),
+        ("equity", "Equity"),
+        ("income", "Income"),
+        ("expense", "Expense"),
     ]
 
     gl_code = models.CharField(max_length=50, unique=True)
@@ -50,10 +51,10 @@ class GLMaster(models.Model):
 
 class Item(models.Model):
     ITEM_TYPE_CHOICES = [
-        ('retail', 'Retail'),
-        ('project', 'Project'),
-        ('both', 'Both'),
-        ('expense', 'Expense'),
+        ("retail", "Retail"),
+        ("project", "Project"),
+        ("both", "Both"),
+        ("expense", "Expense"),
     ]
 
     item_code = models.CharField(max_length=50)
@@ -65,12 +66,12 @@ class Item(models.Model):
     unit = models.CharField(max_length=20, default="pcs")
     cost_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     selling_price = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    stock = models.IntegerField(default=0)
+    stock = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     purchase_date = models.DateField(blank=True, null=True)
-    item_type = models.CharField(max_length=20, choices=ITEM_TYPE_CHOICES, default='retail')
+    item_type = models.CharField(max_length=20, choices=ITEM_TYPE_CHOICES, default="retail")
     is_service = models.BooleanField(default=False)
-    reorder_level = models.IntegerField(default=0)
+    reorder_level = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     warranty_days = models.IntegerField(default=0)
 
     retail_gl_account = models.ForeignKey(
@@ -78,14 +79,14 @@ class Item(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="retail_items"
+        related_name="retail_items",
     )
     cost_gl_account = models.ForeignKey(
         GLMaster,
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="cost_items"
+        related_name="cost_items",
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -99,12 +100,13 @@ class Item(models.Model):
 
 class StockTransaction(models.Model):
     TRANSACTION_TYPES = [
-        ('opening', 'Opening Stock'),
-        ('purchase', 'Purchase'),
-        ('sale', 'Sale'),
-        ('adjust_plus', 'Adjustment +'),
-        ('adjust_minus', 'Adjustment -'),
-        ('project_issue', 'Project Issue'),
+        ("opening", "Opening Stock"),
+        ("purchase", "Purchase"),
+        ("sale", "Sale"),
+        ("adjust_plus", "Adjustment +"),
+        ("adjust_minus", "Adjustment -"),
+        ("project_issue", "Project Issue"),
+        ("return_in", "Return In"),
     ]
 
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
@@ -121,9 +123,9 @@ class StockTransaction(models.Model):
 
 class Sale(models.Model):
     PAYMENT_METHODS = [
-        ('cash', 'Cash'),
-        ('card', 'Card'),
-        ('credit', 'Credit'),
+        ("cash", "Cash"),
+        ("card", "Card"),
+        ("credit", "Credit"),
     ]
 
     invoice_no = models.CharField(max_length=50, unique=True)
@@ -131,8 +133,7 @@ class Sale(models.Model):
     discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     grand_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
-    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default='cash')
-
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default="cash")
     received_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     balance = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     card_last4 = models.CharField(max_length=4, blank=True, null=True)
@@ -162,16 +163,16 @@ class SaleItem(models.Model):
 
 class SalesReturn(models.Model):
     RETURN_TYPE_CHOICES = [
-        ('refund', 'Refund'),
-        ('replace', 'Replace'),
-        ('repair', 'Repair'),
+        ("refund", "Refund"),
+        ("replace", "Replace"),
+        ("repair", "Repair"),
     ]
 
     return_no = models.CharField(max_length=50, unique=True, null=True, blank=True)
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE, null=True, blank=True)
     sale_item = models.ForeignKey(SaleItem, on_delete=models.CASCADE, null=True, blank=True)
     qty = models.DecimalField(max_digits=12, decimal_places=2, default=1)
-    return_type = models.CharField(max_length=20, choices=RETURN_TYPE_CHOICES, default='refund')
+    return_type = models.CharField(max_length=20, choices=RETURN_TYPE_CHOICES, default="refund")
     reason = models.TextField(blank=True, null=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -185,8 +186,8 @@ class SalesReturn(models.Model):
 
 class Project(models.Model):
     PROJECT_TYPE_CHOICES = [
-        ('BL', 'Building'),
-        ('SW', 'Swimming Pool'),
+        ("BL", "Building"),
+        ("SW", "Swimming Pool"),
     ]
 
     project_id = models.CharField(max_length=50, unique=True)
@@ -208,16 +209,33 @@ class Project(models.Model):
     def __str__(self):
         return self.project_id
 
+    @property
+    def total_expense(self):
+        total = self.expenses.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+        petty = ProjectPettyCashExpense.objects.filter(
+            petty_cash__project=self
+        ).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+        return Decimal(total) + Decimal(petty)
+
+    @property
+    def total_income(self):
+        total = self.incomes.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+        return Decimal(total)
+
+    @property
+    def profit(self):
+        return self.total_income - self.total_expense
+
 
 class ProjectExpense(models.Model):
     EXPENSE_TYPE_CHOICES = [
-        ('inventory', 'Inventory Item'),
-        ('direct', 'Direct Item'),
-        ('service', 'Service'),
+        ("inventory", "Inventory Item"),
+        ("direct", "Direct Item"),
+        ("service", "Service"),
     ]
 
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="expenses")
-    expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES, default='direct')
+    expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES, default="direct")
     expense_date = models.DateField(default=timezone.now)
 
     item = models.ForeignKey(Item, on_delete=models.SET_NULL, null=True, blank=True)
@@ -257,12 +275,12 @@ class ProjectPettyCash(models.Model):
 
     @property
     def total_spent(self):
-        total = self.expenses.aggregate(total=models.Sum("amount"))["total"] or 0
-        return total
+        total = self.expenses.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+        return Decimal(total)
 
     @property
     def balance(self):
-        return self.amount_issued - self.total_spent
+        return Decimal(self.amount_issued) - Decimal(self.total_spent)
 
 
 class ProjectPettyCashExpense(models.Model):
@@ -292,3 +310,26 @@ class ProjectPettyCashExpense(models.Model):
 
     def __str__(self):
         return f"{self.petty_cash.petty_cash_no} - {self.description}"
+
+
+class ProjectIncome(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="incomes")
+    income_date = models.DateField(default=timezone.now)
+    description = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    gl_account = models.ForeignKey(
+        GLMaster,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-income_date", "-id"]
+
+    def __str__(self):
+        return f"{self.project.project_id} - {self.amount}"

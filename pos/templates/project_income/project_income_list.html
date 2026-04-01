@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% block content %}
+
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Project Income List</h2>
+        <a href="{% url 'project_income_create' %}" class="btn btn-primary">+ Add Project Income</a>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }}">{{ message }}</div>
+        {% endfor %}
+    {% endif %}
+
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-4">
+            <input type="text" name="search" value="{{ search }}" class="form-control" placeholder="Search description / ref / customer / project">
+        </div>
+        <div class="col-md-4">
+            <select name="project" class="form-select">
+                <option value="">All Projects</option>
+                {% for project in projects %}
+                    <option value="{{ project.id }}" {% if selected_project == project.id|stringformat:"s" %}selected{% endif %}>
+                        {{ project.project_id }} - {{ project.name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4 d-flex gap-2">
+            <button type="submit" class="btn btn-success">Filter</button>
+            <a href="{% url 'project_income_list' %}" class="btn btn-secondary">Reset</a>
+        </div>
+    </form>
+
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5>Total Income: Rs. {{ total_income }}</h5>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Date</th>
+                    <th>Project</th>
+                    <th>Description</th>
+                    <th>Received From</th>
+                    <th>Payment Method</th>
+                    <th>Reference No</th>
+                    <th>Amount</th>
+                    <th>Created By</th>
+                    <th width="180">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for income in page_obj %}
+                <tr>
+                    <td>{{ income.income_date }}</td>
+                    <td>{{ income.project.project_id }} - {{ income.project.name }}</td>
+                    <td>{{ income.description }}</td>
+                    <td>{{ income.received_from|default:"-" }}</td>
+                    <td>{{ income.get_payment_method_display }}</td>
+                    <td>{{ income.reference_no|default:"-" }}</td>
+                    <td>Rs. {{ income.amount }}</td>
+                    <td>{{ income.created_by.username|default:"-" }}</td>
+                    <td>
+                        <a href="{% url 'project_income_update' income.id %}" class="btn btn-sm btn-warning">Edit</a>
+                        <a href="{% url 'project_income_delete' income.id %}" class="btn btn-sm btn-danger">Delete</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center">No project income records found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <nav>
+        <ul class="pagination">
+            {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}&search={{ search }}&project={{ selected_project }}">Previous</a>
+                </li>
+            {% endif %}
+
+            <li class="page-item active">
+                <span class="page-link">{{ page_obj.number }}</span>
+            </li>
+
+            {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}&search={{ search }}&project={{ selected_project }}">Next</a>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+</div>
+
+{% endblock %}
