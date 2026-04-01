@@ -242,7 +242,8 @@ class ProjectExpense(models.Model):
 
     def __str__(self):
         return f"{self.project.project_id} - {self.description}"
-    class ProjectPettyCash(models.Model):
+    
+class ProjectPettyCash(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="petty_cash_headers")
     petty_cash_no = models.CharField(max_length=50, unique=True)
     issue_date = models.DateField(default=timezone.now)
