@@ -8,6 +8,7 @@
     <style>
         body {
             background: #f4f6f9;
+            font-size: 14px;
         }
 
         .item-card {
@@ -24,7 +25,7 @@
         .cart-box {
             background: #fff;
             border-radius: 12px;
-            padding: 15px;
+            padding: 12px;
             box-shadow: 0 0 10px rgba(0,0,0,0.05);
             position: sticky;
             top: 10px;
@@ -46,6 +47,61 @@
 
         .table td, .table th {
             vertical-align: middle;
+            font-size: 13px;
+            padding: 6px;
+        }
+
+        .compact-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .compact-row label {
+            min-width: 120px;
+            margin-bottom: 0;
+            font-weight: 500;
+            font-size: 13px;
+        }
+
+        .compact-row input,
+        .compact-row select {
+            height: 34px;
+            font-size: 13px;
+        }
+
+        .compact-row .form-control,
+        .compact-row .form-select {
+            flex: 1;
+        }
+
+        .totals-box {
+            margin-top: 10px;
+        }
+
+        .totals-box .compact-row label {
+            min-width: 120px;
+        }
+
+        .btn-compact {
+            height: 40px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .cart-table-wrap {
+            max-height: 260px;
+            overflow-y: auto;
+            margin-bottom: 10px;
+        }
+
+        .cart-heading {
+            margin-bottom: 10px;
+        }
+
+        .customer-section {
+            margin-bottom: 10px;
         }
     </style>
 </head>
@@ -58,12 +114,14 @@
         <div>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
             <a href="{% url 'item_list' %}" class="btn btn-info btn-sm">Items</a>
+            <a href="{% url 'sales_return' %}" class="btn btn-warning btn-sm">Sales Return</a>
             <a href="{% url 'logout' %}" class="btn btn-danger btn-sm">Logout</a>
         </div>
     </div>
 
     <div class="row">
 
+        <!-- LEFT SIDE -->
         <div class="col-lg-8">
             <div class="card shadow-sm p-3 mb-3">
                 <form method="GET" class="row g-2">
@@ -99,22 +157,25 @@
             </div>
         </div>
 
+        <!-- RIGHT SIDE -->
         <div class="col-lg-4">
             <div class="cart-box">
-                <h4 class="mb-3">Cart</h4>
+                <h4 class="cart-heading">Cart</h4>
 
-                <div class="mb-2">
-                    <label class="form-label">Customer Name</label>
-                    <input type="text" id="customer_name" class="form-control" placeholder="Customer Name">
+                <div class="customer-section">
+                    <div class="compact-row">
+                        <label for="customer_name">Customer</label>
+                        <input type="text" id="customer_name" class="form-control" placeholder="Customer Name">
+                    </div>
+
+                    <div class="compact-row">
+                        <label for="customer_phone">Phone</label>
+                        <input type="text" id="customer_phone" class="form-control" placeholder="Phone Number">
+                    </div>
                 </div>
 
-                <div class="mb-3">
-                    <label class="form-label">Phone Number</label>
-                    <input type="text" id="customer_phone" class="form-control" placeholder="Phone Number">
-                </div>
-
-                <div class="table-responsive mb-3">
-                    <table class="table table-bordered table-sm bg-white">
+                <div class="cart-table-wrap">
+                    <table class="table table-bordered table-sm bg-white mb-0">
                         <thead class="table-light">
                             <tr>
                                 <th>Item</th>
@@ -132,57 +193,59 @@
                     </table>
                 </div>
 
-                <div class="mb-2">
-                    <label class="form-label">Discount</label>
-                    <input type="number" step="0.01" id="discount" class="form-control" value="0" oninput="updateCartTotals()">
-                </div>
-
-                <div class="mb-2">
-                    <label class="form-label">Total</label>
-                    <input type="text" id="total" class="form-control" value="0.00" readonly>
-                </div>
-
-                <div class="mb-2">
-                    <label class="form-label">Grand Total</label>
-                    <input type="text" id="grand_total" class="form-control fw-bold" value="0.00" readonly>
-                </div>
-
-                <div class="mb-2">
-                    <label class="form-label">Payment Method</label>
-                    <select id="payment_method" class="form-select" onchange="togglePaymentFields()">
-                        <option value="cash">Cash</option>
-                        <option value="card">Card</option>
-                        <option value="credit">Credit</option>
-                    </select>
-                </div>
-
-                <div id="cashFields">
-                    <div class="mb-2">
-                        <label class="form-label">Received Amount</label>
-                        <input type="number" step="0.01" id="received_amount" class="form-control" value="0" oninput="updateBalance()">
+                <div class="totals-box">
+                    <div class="compact-row">
+                        <label for="discount">Discount</label>
+                        <input type="number" step="0.01" id="discount" class="form-control" value="0" oninput="updateCartTotals()">
                     </div>
 
-                    <div class="mb-2">
-                        <label class="form-label">Balance</label>
-                        <input type="text" id="balance" class="form-control" value="0.00" readonly>
+                    <div class="compact-row">
+                        <label for="total">Total</label>
+                        <input type="text" id="total" class="form-control" value="0.00" readonly>
                     </div>
-                </div>
 
-                <div id="cardFields" style="display:none;">
-                    <div class="mb-2">
-                        <label class="form-label">Card Last 4 Digits</label>
-                        <input type="text" id="card_last4" maxlength="4" class="form-control">
+                    <div class="compact-row">
+                        <label for="grand_total"><strong>Grand Total</strong></label>
+                        <input type="text" id="grand_total" class="form-control fw-bold" value="0.00" readonly>
                     </div>
-                </div>
 
-                <div id="creditFields" style="display:none;">
-                    <div class="mb-2">
-                        <label class="form-label">Cheque Number</label>
-                        <input type="text" id="cheque_number" class="form-control">
+                    <div class="compact-row">
+                        <label for="payment_method">Payment</label>
+                        <select id="payment_method" class="form-select" onchange="togglePaymentFields()">
+                            <option value="cash">Cash</option>
+                            <option value="card">Card</option>
+                            <option value="credit">Credit</option>
+                        </select>
                     </div>
-                </div>
 
-                <button class="btn btn-success w-100 mt-3" onclick="saveSale()">Complete Sale</button>
+                    <div id="cashFields">
+                        <div class="compact-row">
+                            <label for="received_amount">Received</label>
+                            <input type="number" step="0.01" id="received_amount" class="form-control" value="0" oninput="updateBalance()">
+                        </div>
+
+                        <div class="compact-row">
+                            <label for="balance">Balance</label>
+                            <input type="text" id="balance" class="form-control" value="0.00" readonly>
+                        </div>
+                    </div>
+
+                    <div id="cardFields" style="display:none;">
+                        <div class="compact-row">
+                            <label for="card_last4">Card Last 4</label>
+                            <input type="text" id="card_last4" maxlength="4" class="form-control">
+                        </div>
+                    </div>
+
+                    <div id="creditFields" style="display:none;">
+                        <div class="compact-row">
+                            <label for="cheque_number">Cheque No</label>
+                            <input type="text" id="cheque_number" class="form-control">
+                        </div>
+                    </div>
+
+                    <button class="btn btn-success w-100 btn-compact mt-2" onclick="saveSale()">Complete Sale</button>
+                </div>
             </div>
         </div>
 
