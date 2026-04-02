@@ -4,8 +4,8 @@ from datetime import datetime
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.models import User, Group
 from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib.auth.models import User, Group
 from django.db.models import Q, Sum, F
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -17,7 +17,6 @@ from .models import (
     Project, ProjectExpense, ProjectPettyCash,
     ProjectPettyCashExpense, ProjectIncome
 )
-
 
 
 # =========================
@@ -52,14 +51,17 @@ def can_use_gl(user):
 
 
 # =========================
-# DASHBOARD / AUTH
+# AUTH / DASHBOARD
 # =========================
 @login_required
 def dashboard(request):
+    owner_access = is_owner(request.user)
+
     return render(request, "pos/dashboard.html", {
         "show_pos": can_use_pos(request.user),
         "show_project": can_use_project(request.user),
         "show_gl": can_use_gl(request.user),
+        "show_users": owner_access,
     })
 
 
@@ -85,6 +87,111 @@ def login_view(request):
 def logout_view(request):
     logout(request)
     return redirect("login")
+
+
+# =========================
+# USER MANAGEMENT
+# =========================
+@login_required
+@user_passes_test(is_owner)
+def user_list(request):
+    users = User.objects.all().order_by("username")
+    return render(request, "pos/user_list.html", {"users": users})
+
+
+@login_required
+@user_passes_test(is_owner)
+def create_user(request):
+    roles = Group.objects.all().order_by("name")
+
+    if request.method == "POST":
+        username = request.POST.get("username", "").strip()
+        password = request.POST.get("password", "").strip()
+        first_name = request.POST.get("first_name", "").strip()
+        last_name = request.POST.get("last_name", "").strip()
+        role = request.POST.get("role", "").strip()
+        is_active = request.POST.get("is_active") == "on"
+
+        if not username or not password or not role:
+            messages.error(request, "Username, password and role are required.")
+            return render(request, "pos/create_user.html", {"roles": roles})
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, "Username already exists.")
+            return render(request, "pos/create_user.html", {"roles": roles})
+
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            first_name=first_name,
+            last_name=last_name,
+            is_active=is_active,
+        )
+
+        group = Group.objects.filter(name=role).first()
+        if group:
+            user.groups.add(group)
+
+        messages.success(request, "User created successfully.")
+        return redirect("user_list")
+
+    return render(request, "pos/create_user.html", {"roles": roles})
+
+
+@login_required
+@user_passes_test(is_owner)
+def edit_user(request, user_id):
+    user_obj = get_object_or_404(User, id=user_id)
+    roles = Group.objects.all().order_by("name")
+    current_role = user_obj.groups.first()
+
+    if request.method == "POST":
+        username = request.POST.get("username", "").strip()
+        password = request.POST.get("password", "").strip()
+        first_name = request.POST.get("first_name", "").strip()
+        last_name = request.POST.get("last_name", "").strip()
+        role = request.POST.get("role", "").strip()
+        is_active = request.POST.get("is_active") == "on"
+
+        if not username or not role:
+            messages.error(request, "Username and role are required.")
+            return render(request, "pos/edit_user.html", {
+                "user_obj": user_obj,
+                "roles": roles,
+                "current_role": current_role,
+            })
+
+        if User.objects.filter(username=username).exclude(id=user_obj.id).exists():
+            messages.error(request, "Username already exists.")
+            return render(request, "pos/edit_user.html", {
+                "user_obj": user_obj,
+                "roles": roles,
+                "current_role": current_role,
+            })
+
+        user_obj.username = username
+        user_obj.first_name = first_name
+        user_obj.last_name = last_name
+        user_obj.is_active = is_active
+
+        if password:
+            user_obj.set_password(password)
+
+        user_obj.save()
+
+        user_obj.groups.clear()
+        group = Group.objects.filter(name=role).first()
+        if group:
+            user_obj.groups.add(group)
+
+        messages.success(request, "User updated successfully.")
+        return redirect("user_list")
+
+    return render(request, "pos/edit_user.html", {
+        "user_obj": user_obj,
+        "roles": roles,
+        "current_role": current_role,
+    })
 
 
 # =========================
@@ -170,6 +277,7 @@ def save_sale(request):
                 )
 
         return JsonResponse({"status": "success", "sale_id": sale.id})
+
     except Exception as e:
         return JsonResponse({"status": "error", "message": str(e)}, status=500)
 
@@ -233,12 +341,15 @@ def sales_return(request):
 def get_sale_items(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
     data = []
+
     for row in sale.sale_items.all():
         data.append({
             "sale_item_id": row.id,
             "item_name": row.item.name,
             "qty": str(row.qty),
+            "price": str(row.price),
         })
+
     return JsonResponse({"items": data})
 
 
@@ -251,6 +362,19 @@ def return_receipt(request, return_id):
 # =========================
 # ITEM MANAGEMENT
 # =========================
+def generate_next_item_code():
+    last_item = Item.objects.order_by("-id").first()
+
+    if not last_item or not last_item.item_code:
+        return "1000000000"
+
+    try:
+        last_number = int(str(last_item.item_code).strip())
+        return str(last_number + 1)
+    except Exception:
+        return "1000000000"
+
+
 @login_required
 def add_item(request):
     categories = Category.objects.all().order_by("name")
@@ -291,10 +415,8 @@ def add_item(request):
                 retail_gl_account_id=request.POST.get("retail_gl_account") or None,
                 cost_gl_account_id=request.POST.get("cost_gl_account") or None,
             )
-
             messages.success(request, "Item added successfully")
             return redirect("add_item")
-
         except Exception as e:
             messages.error(request, f"Error saving item: {str(e)}")
 
@@ -304,17 +426,7 @@ def add_item(request):
         "gl_list": gl_list,
         "next_item_code": generate_next_item_code(),
     })
-def generate_next_item_code():
-    last_item = Item.objects.order_by('-id').first()
 
-    if not last_item or not last_item.item_code:
-        return "1000000000"
-
-    try:
-        last_number = int(str(last_item.item_code).strip())
-        return str(last_number + 1)
-    except:
-        return "1000000000"
 
 @login_required
 def item_list(request):
@@ -406,6 +518,7 @@ def daily_report(request):
         sale_cost = Decimal("0")
         for row in sale.sale_items.all():
             sale_cost += Decimal(str(row.item.cost_price)) * Decimal(str(row.qty))
+
         sale.sale_cost = sale_cost
         sale.sale_profit = Decimal(str(sale.grand_total)) - sale_cost
 
@@ -483,6 +596,7 @@ def create_project(request):
 
     if request.method == "POST":
         project_type = request.POST.get("project_type")
+
         Project.objects.create(
             project_id=generate_project_id(project_type),
             project_name=request.POST.get("project_name"),
@@ -492,6 +606,7 @@ def create_project(request):
             estimated_value=request.POST.get("estimated_value") or 0,
             created_by=request.user,
         )
+
         messages.success(request, "Project created successfully")
         return redirect("project_list")
 
@@ -545,7 +660,7 @@ def add_project_expense(request):
             messages.error(request, "Amount must be greater than 0")
             return redirect("add_project_expense")
 
-        expense = ProjectExpense.objects.create(
+        ProjectExpense.objects.create(
             project_id=project_id,
             expense_type=expense_type,
             expense_date=expense_date,
@@ -580,46 +695,39 @@ def add_project_expense(request):
 
 
 # =========================
-# PROJECT PETTY CASH
+# PETTY CASH
 # =========================
 @user_passes_test(can_use_project)
 def petty_cash_list(request):
-    petty_cashes = ProjectPettyCash.objects.select_related("project", "created_by").order_by("-issue_date", "-id")
-    projects = Project.objects.all().order_by("-id")
-
-    project_id = request.GET.get("project")
-    if project_id:
-        petty_cashes = petty_cashes.filter(project_id=project_id)
+    petty_cashes = ProjectPettyCash.objects.select_related("user", "created_by").order_by("-issue_date", "-id")
 
     return render(request, "pos/petty_cash_list.html", {
         "petty_cashes": petty_cashes,
-        "projects": projects,
-        "selected_project": project_id,
     })
 
 
 @user_passes_test(can_use_project)
 def add_petty_cash(request):
-    projects = Project.objects.all().order_by("-id")
+    users = User.objects.filter(is_active=True).order_by("username")
 
     if request.method == "POST":
-        project_id = request.POST.get("project")
+        user_id = request.POST.get("user")
         issue_date = request.POST.get("issue_date") or timezone.now().date()
-        issued_to = request.POST.get("issued_to", "").strip()
         amount_issued = request.POST.get("amount_issued") or 0
         note = request.POST.get("note", "").strip()
 
-        if not project_id or not issued_to:
-            messages.error(request, "Project and issued to are required.")
-            return render(request, "pos/add_petty_cash.html", {"projects": projects})
+        if not user_id:
+            messages.error(request, "User is required.")
+            return render(request, "pos/add_petty_cash.html", {
+                "users": users,
+            })
 
         petty_cash_no = f"PC{ProjectPettyCash.objects.count() + 1:05d}"
 
         ProjectPettyCash.objects.create(
-            project_id=project_id,
+            user_id=user_id,
             petty_cash_no=petty_cash_no,
             issue_date=issue_date,
-            issued_to=issued_to,
             amount_issued=amount_issued,
             note=note,
             created_by=request.user,
@@ -628,16 +736,20 @@ def add_petty_cash(request):
         messages.success(request, f"Petty cash created: {petty_cash_no}")
         return redirect("petty_cash_list")
 
-    return render(request, "pos/add_petty_cash.html", {"projects": projects})
+    return render(request, "pos/add_petty_cash.html", {
+        "users": users,
+    })
 
 
 @user_passes_test(can_use_project)
 def petty_cash_detail(request, petty_cash_id):
     petty_cash = get_object_or_404(
-        ProjectPettyCash.objects.select_related("project", "created_by"),
+        ProjectPettyCash.objects.select_related("user", "created_by"),
         id=petty_cash_id
     )
-    expenses = petty_cash.expenses.select_related("gl_account", "created_by").order_by("-expense_date", "-id")
+    expenses = petty_cash.expenses.select_related(
+        "project", "gl_account", "created_by"
+    ).order_by("-expense_date", "-id")
 
     return render(request, "pos/petty_cash_detail.html", {
         "petty_cash": petty_cash,
@@ -648,19 +760,32 @@ def petty_cash_detail(request, petty_cash_id):
 @user_passes_test(can_use_project)
 def add_petty_cash_expense(request, petty_cash_id):
     petty_cash = get_object_or_404(ProjectPettyCash, id=petty_cash_id)
+    projects = Project.objects.all().order_by("-id")
     expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
 
     if request.method == "POST":
+        project_id = request.POST.get("project")
         expense_date = request.POST.get("expense_date") or timezone.now().date()
         description = request.POST.get("description", "").strip()
         gl_account_id = request.POST.get("gl_account") or None
+        bill_no = request.POST.get("bill_no", "").strip()
+        bill_date = request.POST.get("bill_date") or None
         amount = Decimal(str(request.POST.get("amount") or 0))
         note = request.POST.get("note", "").strip()
+
+        if not project_id:
+            messages.error(request, "Project is required.")
+            return render(request, "pos/add_petty_cash_expense.html", {
+                "petty_cash": petty_cash,
+                "projects": projects,
+                "expense_gls": expense_gls,
+            })
 
         if not description:
             messages.error(request, "Description is required.")
             return render(request, "pos/add_petty_cash_expense.html", {
                 "petty_cash": petty_cash,
+                "projects": projects,
                 "expense_gls": expense_gls,
             })
 
@@ -668,6 +793,7 @@ def add_petty_cash_expense(request, petty_cash_id):
             messages.error(request, "Amount must be greater than 0.")
             return render(request, "pos/add_petty_cash_expense.html", {
                 "petty_cash": petty_cash,
+                "projects": projects,
                 "expense_gls": expense_gls,
             })
 
@@ -675,14 +801,18 @@ def add_petty_cash_expense(request, petty_cash_id):
             messages.error(request, "Expense exceeds petty cash balance.")
             return render(request, "pos/add_petty_cash_expense.html", {
                 "petty_cash": petty_cash,
+                "projects": projects,
                 "expense_gls": expense_gls,
             })
 
         ProjectPettyCashExpense.objects.create(
             petty_cash=petty_cash,
+            project_id=project_id,
             expense_date=expense_date,
             description=description,
             gl_account_id=gl_account_id,
+            bill_no=bill_no,
+            bill_date=bill_date or None,
             amount=amount,
             note=note,
             created_by=request.user,
@@ -693,6 +823,7 @@ def add_petty_cash_expense(request, petty_cash_id):
 
     return render(request, "pos/add_petty_cash_expense.html", {
         "petty_cash": petty_cash,
+        "projects": projects,
         "expense_gls": expense_gls,
     })
 
@@ -729,7 +860,7 @@ def add_project_income(request):
         gl_account_id = request.POST.get("gl_account") or None
 
         if not project_id or not amount:
-            messages.error(request, "Project සහ Amount අවශ්‍යයි")
+            messages.error(request, "Project and Amount are required.")
             return redirect("add_project_income")
 
         ProjectIncome.objects.create(
@@ -741,7 +872,7 @@ def add_project_income(request):
             created_by=request.user,
         )
 
-        messages.success(request, "Income එක සාර්ථකව එකතු කරන ලදී")
+        messages.success(request, "Income added successfully.")
         return redirect("project_income_list")
 
     return render(request, "pos/add_project_income.html", {
@@ -751,127 +882,17 @@ def add_project_income(request):
 
 
 # =========================
-# PROJECT PROFIT DASHBOARD
+# PROFIT DASHBOARD
 # =========================
 @user_passes_test(can_use_project)
 def project_profit_dashboard(request):
     projects = Project.objects.all().order_by("-created_at")
-    return render(request, "pos/project_profit_dashboard.html", {
-        "projects": projects,
-    })
-def is_owner(user):
-    return user.is_superuser or user.groups.filter(name='Owner').exists()
-
-
-@login_required
-@user_passes_test(is_owner)
-def user_list(request):
-    users = User.objects.all().order_by("username")
-    return render(request, "pos/user_list.html", {"users": users})
-
-
-@login_required
-@user_passes_test(is_owner)
-def create_user(request):
-    roles = Group.objects.all().order_by("name")
-
-    if request.method == "POST":
-        username = request.POST.get("username", "").strip()
-        password = request.POST.get("password", "").strip()
-        first_name = request.POST.get("first_name", "").strip()
-        last_name = request.POST.get("last_name", "").strip()
-        role = request.POST.get("role", "").strip()
-        is_active = request.POST.get("is_active") == "on"
-
-        if not username or not password or not role:
-            messages.error(request, "Username, password and role are required.")
-            return render(request, "pos/create_user.html", {"roles": roles})
-
-        if User.objects.filter(username=username).exists():
-            messages.error(request, "Username already exists.")
-            return render(request, "pos/create_user.html", {"roles": roles})
-
-        user = User.objects.create_user(
-            username=username,
-            password=password,
-            first_name=first_name,
-            last_name=last_name,
-            is_active=is_active
-        )
-
-        group = Group.objects.filter(name=role).first()
-        if group:
-            user.groups.add(group)
-
-        messages.success(request, "User created successfully.")
-        return redirect("user_list")
-
-    return render(request, "pos/create_user.html", {"roles": roles})
-
-@login_required
-@user_passes_test(is_owner)
-def edit_user(request, user_id):
-    user_obj = get_object_or_404(User, id=user_id)
-    roles = Group.objects.all().order_by("name")
-    current_role = user_obj.groups.first()
-
-    if request.method == "POST":
-        username = request.POST.get("username", "").strip()
-        password = request.POST.get("password", "").strip()
-        first_name = request.POST.get("first_name", "").strip()
-        last_name = request.POST.get("last_name", "").strip()
-        role = request.POST.get("role", "").strip()
-        is_active = request.POST.get("is_active") == "on"
-
-        if not username or not role:
-            messages.error(request, "Username and role are required.")
-            return render(request, "pos/edit_user.html", {
-                "user_obj": user_obj,
-                "roles": roles,
-                "current_role": current_role,
-            })
-
-        if User.objects.filter(username=username).exclude(id=user_obj.id).exists():
-            messages.error(request, "Username already exists.")
-            return render(request, "pos/edit_user.html", {
-                "user_obj": user_obj,
-                "roles": roles,
-                "current_role": current_role,
-            })
-
-        user_obj.username = username
-        user_obj.first_name = first_name
-        user_obj.last_name = last_name
-        user_obj.is_active = is_active
-
-        if password:
-            user_obj.set_password(password)
-
-        user_obj.save()
-
-        user_obj.groups.clear()
-        group = Group.objects.filter(name=role).first()
-        if group:
-            user_obj.groups.add(group)
-
-        messages.success(request, "User updated successfully.")
-        return redirect("user_list")
-
-    return render(request, "pos/edit_user.html", {
-        "user_obj": user_obj,
-        "roles": roles,
-        "current_role": current_role,
-    })
-@user_passes_test(can_use_project)
-def project_profit_dashboard(request):
-    projects = Project.objects.all().order_by("-created_at")
-
     project_rows = []
 
     for project in projects:
         direct_expense = project.expenses.aggregate(total=Sum("amount"))["total"] or Decimal("0")
         petty_cash_expense = ProjectPettyCashExpense.objects.filter(
-            petty_cash__project=project
+            project=project
         ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
         total_income = project.incomes.aggregate(total=Sum("amount"))["total"] or Decimal("0")
 

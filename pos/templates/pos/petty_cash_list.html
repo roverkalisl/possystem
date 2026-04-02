@@ -14,31 +14,11 @@
 <div class="container-fluid">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>💵 Project Petty Cash</h3>
+        <h3>Project Petty Cash</h3>
         <div>
             <a href="{% url 'add_petty_cash' %}" class="btn btn-success btn-sm">+ Add Petty Cash</a>
-            <a href="{% url 'project_list' %}" class="btn btn-secondary btn-sm">Projects</a>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
         </div>
-    </div>
-
-    <div class="card shadow-sm p-3 mb-3">
-        <form method="GET">
-            <div class="row">
-                <div class="col-md-10 mb-2">
-                    <select name="project" class="form-select">
-                        <option value="">All Projects</option>
-                        {% for p in projects %}
-                            <option value="{{ p.id }}" {% if selected_project == p.id|stringformat:"s" %}selected{% endif %}>
-                                {{ p.project_id }} - {{ p.project_name }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2">
-                    <button class="btn btn-primary w-100">Filter</button>
-                </div>
-            </div>
-        </form>
     </div>
 
     <div class="card shadow-sm p-3">
@@ -47,11 +27,9 @@
                 <thead class="table-dark">
                     <tr>
                         <th>No</th>
-                        <th>Project</th>
-                        <th>Issue Date</th>
-                        <th>Issued To</th>
-                        <th>Issued Amount</th>
-                        <th>Spent</th>
+                        <th>User Name</th>
+                        <th>Date</th>
+                        <th>Amount Issued</th>
                         <th>Balance</th>
                         <th>Action</th>
                     </tr>
@@ -60,11 +38,15 @@
                     {% for pc in petty_cashes %}
                     <tr>
                         <td>{{ pc.petty_cash_no }}</td>
-                        <td>{{ pc.project.project_id }}</td>
+                        <td>
+                            {% if pc.user.get_full_name %}
+                                {{ pc.user.get_full_name }}
+                            {% else %}
+                                {{ pc.user.username }}
+                            {% endif %}
+                        </td>
                         <td>{{ pc.issue_date }}</td>
-                        <td>{{ pc.issued_to }}</td>
                         <td>{{ pc.amount_issued }}</td>
-                        <td>{{ pc.total_spent }}</td>
                         <td>{{ pc.balance }}</td>
                         <td>
                             <a href="{% url 'petty_cash_detail' pc.id %}" class="btn btn-primary btn-sm">View</a>
@@ -72,7 +54,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="text-center">No petty cash records found</td>
+                        <td colspan="6" class="text-center">No petty cash records found</td>
                     </tr>
                     {% endfor %}
                 </tbody>

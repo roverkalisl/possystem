@@ -211,11 +211,11 @@ class Project(models.Model):
 
     @property
     def total_expense(self):
-        total = self.expenses.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+        direct = self.expenses.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
         petty = ProjectPettyCashExpense.objects.filter(
-            petty_cash__project=self
+            project=self
         ).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
-        return Decimal(total) + Decimal(petty)
+        return Decimal(direct) + Decimal(petty)
 
     @property
     def total_income(self):
@@ -258,13 +258,12 @@ class ProjectExpense(models.Model):
 
 
 class ProjectPettyCash(models.Model):
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="petty_cash_headers")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="petty_cash_received")
     petty_cash_no = models.CharField(max_length=50, unique=True)
     issue_date = models.DateField(default=timezone.now)
-    issued_to = models.CharField(max_length=200)
     amount_issued = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     note = models.TextField(blank=True, null=True)
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="petty_cash_created")
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -289,6 +288,7 @@ class ProjectPettyCashExpense(models.Model):
         on_delete=models.CASCADE,
         related_name="expenses"
     )
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="petty_cash_expenses")
     expense_date = models.DateField(default=timezone.now)
     description = models.CharField(max_length=255)
 
@@ -298,6 +298,9 @@ class ProjectPettyCashExpense(models.Model):
         null=True,
         blank=True
     )
+
+    bill_no = models.CharField(max_length=100, blank=True, null=True)
+    bill_date = models.DateField(blank=True, null=True)
 
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     note = models.TextField(blank=True, null=True)

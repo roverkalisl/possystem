@@ -1,283 +1,176 @@
+{% load static %}
+
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Invoice {{ sale.invoice_no }}</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-<script>
-    window.onload = function () {
-        window.print();
-    };
-</script>
+    <title>Invoice</title>
 
     <style>
         body {
-            font-family: Arial, sans-serif;
-            background: #f5f5f5;
-            margin: 0;
-            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            width: 280px;
+            margin: auto;
         }
 
-        .receipt {
-            width: 80mm;
-            margin: 0 auto;
-            background: #ffffff;
-            color: #000000;
-            padding: 8px;
-            box-sizing: border-box;
-            border: 1px solid #dddddd;
-        }
-
-        .center {
-            text-align: center;
-        }
+        .center { text-align: center; }
+        .right { text-align: right; }
 
         .logo {
-            max-width: 130px;
-            max-height: 70px;
-            margin: 0 auto 6px auto;
-            display: block;
+            height: 60px;
+            margin-bottom: 5px;
         }
 
-        .shop-name {
-            font-size: 18px;
-            font-weight: bold;
-        }
-
-        .small {
-            font-size: 11px;
-        }
-
-        .line {
-            border-top: 1px dashed #000000;
+        hr {
+            border-top: 1px dashed black;
             margin: 6px 0;
         }
 
-        .info-table,
-        .item-table,
-        .total-table {
+        table {
             width: 100%;
             border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 2px 0;
             font-size: 12px;
         }
 
-        .info-table td,
-        .item-table th,
-        .item-table td,
-        .total-table td {
-            padding: 3px 0;
-            vertical-align: top;
-        }
-
-        .item-table th {
-            text-align: left;
-            border-bottom: 1px dashed #000000;
-        }
-
-        .qty,
-        .price,
-        .amount {
-            text-align: right;
-            white-space: nowrap;
-        }
-
-        .label {
-            text-align: left;
-        }
-
-        .value {
-            text-align: right;
+        .item-name {
+            max-width: 140px;
+            word-wrap: break-word;
         }
 
         .bold {
             font-weight: bold;
         }
 
-        .footer {
-            text-align: center;
-            font-size: 11px;
-            margin-top: 8px;
-        }
-
-        .print-actions {
-            text-align: center;
-            margin-top: 15px;
-        }
-
-        .btn {
-            padding: 8px 14px;
-            border: none;
-            cursor: pointer;
-            margin: 4px;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-
-        .btn-print {
-            background: #198754;
-            color: white;
-        }
-
-        .btn-back {
-            background: #0d6efd;
-            color: white;
-            text-decoration: none;
-            display: inline-block;
-        }
-
         @media print {
             body {
-                background: #ffffff;
-                margin: 0;
-                padding: 0;
+                width: 100%;
             }
 
-            .receipt {
-                width: 80mm;
-                border: none;
-                margin: 0;
-                padding: 5px;
-            }
-
-            .print-actions {
+            .no-print {
                 display: none;
-            }
-
-            @page {
-                size: 80mm auto;
-                margin: 0;
             }
         }
     </style>
 </head>
-<body>
 
-<div class="receipt">
+<body onload="window.print()">
 
-    <div class="center">
-        {% load static %}
-        <img src="{% static 'logo.png' %}" alt="Logo" class="logo">
+<div class="center">
 
-        <div class="shop-name">P&amp;I Constructions</div>
-        <div class="small">Retail &amp; Project Materials</div>
-        <div class="small">Matara Road, Galle</div>
-        <div class="small">Tel: 07X XXX XXXX</div>
-    </div>
+    <img src="{% static 'logo.png' %}" class="logo">
 
-    <div class="line"></div>
+    <div class="bold">P&I Constructions</div>
+    <div>Retail & Project Materials</div>
+    <div>Matara Road, Galle</div>
+    <div>0773613005 / 0912224090</div>
 
-    <table class="info-table">
-        <tr>
-            <td><strong>Invoice No</strong></td>
-            <td class="value">{{ sale.invoice_no }}</td>
-        </tr>
-        <tr>
-            <td><strong>Date</strong></td>
-            <td class="value">{{ sale.created_at|date:"Y-m-d H:i" }}</td>
-        </tr>
-        <tr>
-            <td><strong>Cashier</strong></td>
-            <td class="value">
-                {% if sale.created_by %}
-                    {{ sale.created_by.username }}
-                {% else %}
-                    -
-                {% endif %}
-            </td>
-        </tr>
-        <tr>
-            <td><strong>Payment</strong></td>
-            <td class="value">{{ sale.get_payment_method_display }}</td>
-        </tr>
-    </table>
-
-    {% if sale.card_last4 %}
-    <table class="info-table">
-        <tr>
-            <td><strong>Card Last 4</strong></td>
-            <td class="value">{{ sale.card_last4 }}</td>
-        </tr>
-    </table>
-    {% endif %}
-
-    {% if sale.cheque_number %}
-    <table class="info-table">
-        <tr>
-            <td><strong>Cheque No</strong></td>
-            <td class="value">{{ sale.cheque_number }}</td>
-        </tr>
-    </table>
-    {% endif %}
-
-    <div class="line"></div>
-
-    <table class="item-table">
-        <thead>
-            <tr>
-                <th>Item</th>
-                <th class="qty">Qty</th>
-                <th class="price">Price</th>
-                <th class="amount">Amt</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in sale.sale_items.all %}
-            <tr>
-                <td>
-                    {{ row.item.name }}<br>
-                    <span class="small">{{ row.item.item_code }}</span>
-                </td>
-                <td class="qty">{{ row.qty }}</td>
-                <td class="price">{{ row.price }}</td>
-                <td class="amount">{{ row.amount }}</td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td colspan="4" class="center">No items found</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <div class="line"></div>
-
-    <table class="total-table">
-        <tr>
-            <td class="label">Total</td>
-            <td class="value">{{ sale.total }}</td>
-        </tr>
-        <tr>
-            <td class="label">Discount</td>
-            <td class="value">{{ sale.discount }}</td>
-        </tr>
-        <tr>
-            <td class="label bold">Grand Total</td>
-            <td class="value bold">{{ sale.grand_total }}</td>
-        </tr>
-
-        {% if sale.payment_method == 'cash' %}
-        <tr>
-            <td class="label">Received</td>
-            <td class="value">{{ sale.received_amount }}</td>
-        </tr>
-        <tr>
-            <td class="label">Balance</td>
-            <td class="value">{{ sale.balance }}</td>
-        </tr>
-        {% endif %}
-    </table>
-
-    <div class="line"></div>
-
-    <div class="footer">
-        <div>Thank You! Come Again!</div>
-        <div>Goods once sold will be handled as per store policy.</div>
-        <div>Keep this bill for warranty claims.</div>
-    </div>
 </div>
 
-<div class="print-actions">
-    <button class="btn btn-print" onclick="window.print()">Print Bill</button>
-    <a href="{% url 'pos' %}" class="btn btn-back">Back to POS</a>
+<hr>
+
+<table>
+<tr>
+    <td>Inv</td>
+    <td class="right">{{ sale.invoice_no }}</td>
+</tr>
+<tr>
+    <td>Date</td>
+    <td class="right">{{ sale.created_at|date:"Y-m-d H:i" }}</td>
+</tr>
+<tr>
+    <td>Cashier</td>
+    <td class="right">
+        {% if sale.created_by %}
+            {{ sale.created_by.username }}
+        {% else %}
+            -
+        {% endif %}
+    </td>
+</tr>
+<tr>
+    <td>Pay</td>
+    <td class="right">{{ sale.get_payment_method_display }}</td>
+</tr>
+
+{% if sale.card_last4 %}
+<tr>
+    <td>Card</td>
+    <td class="right">{{ sale.card_last4 }}</td>
+</tr>
+{% endif %}
+
+{% if sale.cheque_number %}
+<tr>
+    <td>Cheque</td>
+    <td class="right">{{ sale.cheque_number }}</td>
+</tr>
+{% endif %}
+</table>
+
+<hr>
+
+<table>
+<tr class="bold">
+    <td>Item</td>
+    <td class="right">Q</td>
+    <td class="right">P</td>
+    <td class="right">A</td>
+</tr>
+
+{% for row in sale.sale_items.all %}
+<tr>
+    <td class="item-name">
+        {{ row.item.name }}<br>
+        <small>{{ row.item.item_code }}</small>
+    </td>
+    <td class="right">{{ row.qty }}</td>
+    <td class="right">{{ row.price }}</td>
+    <td class="right">{{ row.amount }}</td>
+</tr>
+{% empty %}
+<tr>
+    <td colspan="4" class="center">No items</td>
+</tr>
+{% endfor %}
+</table>
+
+<hr>
+
+<table>
+<tr>
+    <td>Total</td>
+    <td class="right">{{ sale.total }}</td>
+</tr>
+<tr>
+    <td>Disc</td>
+    <td class="right">{{ sale.discount }}</td>
+</tr>
+<tr class="bold">
+    <td>Grand</td>
+    <td class="right">{{ sale.grand_total }}</td>
+</tr>
+
+{% if sale.payment_method == 'cash' %}
+<tr>
+    <td>Recv</td>
+    <td class="right">{{ sale.received_amount }}</td>
+</tr>
+<tr>
+    <td>Bal</td>
+    <td class="right">{{ sale.balance }}</td>
+</tr>
+{% endif %}
+</table>
+
+<hr>
+
+<div class="center">
+    Thank You!<br>
+    <small>Keep bill for warranty</small>
 </div>
 
 </body>
