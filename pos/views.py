@@ -20,22 +20,31 @@ from .models import (
 
 
 # =========================
-# ROLE HELPERS
+# HELPERS
 # =========================
+def to_decimal(val):
+    try:
+        if val is None:
+            return Decimal("0")
+        return Decimal(str(val).replace(",", "").strip())
+    except (InvalidOperation, TypeError, ValueError):
+        return Decimal("0")
+
+
 def is_owner(user):
-    return user.is_superuser or user.groups.filter(name="Owner").exists()
+    return user.is_superuser or user.groups.filter(name__iexact="Owner").exists()
 
 
 def is_manager(user):
-    return user.groups.filter(name="Manager").exists()
+    return user.groups.filter(name__iexact="Manager").exists()
 
 
 def is_clerk(user):
-    return user.groups.filter(name="Clerk").exists()
+    return user.groups.filter(name__iexact="Clerk").exists()
 
 
 def is_cashier(user):
-    return user.groups.filter(name="Cashier").exists()
+    return user.groups.filter(name__iexact="Cashier").exists()
 
 
 def can_use_pos(user):
@@ -48,6 +57,26 @@ def can_use_project(user):
 
 def can_use_gl(user):
     return is_owner(user)
+
+
+def generate_project_id(project_type):
+    year = timezone.now().year
+    last = Project.objects.filter(project_type=project_type).order_by("-id").first()
+    num = int(last.project_id[-3:]) + 1 if last else 1
+    return f"PRO{year}{project_type}{num:03d}"
+
+
+def generate_next_item_code():
+    last_item = Item.objects.order_by("-id").first()
+
+    if not last_item or not last_item.item_code:
+        return "1000000000"
+
+    try:
+        last_number = int(str(last_item.item_code).strip())
+        return str(last_number + 1)
+    except Exception:
+        return "1000000000"
 
 
 # =========================
@@ -227,15 +256,16 @@ def save_sale(request):
         if not items:
             return JsonResponse({"status": "error", "message": "Cart empty"}, status=400)
 
-        total = Decimal(str(data.get("total", 0)))
-        discount = Decimal(str(data.get("discount", 0)))
-        grand_total = Decimal(str(data.get("grand_total", 0)))
-
+        total = to_decimal(data.get("total"))
+        discount = to_decimal(data.get("discount"))
+        grand_total = to_decimal(data.get("grand_total"))
         payment_method = data.get("payment_method", "cash")
-        received_amount = Decimal(str(data.get("received") or 0))
-        balance = Decimal(str(data.get("balance") or 0))
+        received_amount = to_decimal(data.get("received"))
+        balance = to_decimal(data.get("balance"))
         card_last4 = data.get("card_last4") or None
         cheque_number = data.get("cheque_number") or None
+        customer_name = (data.get("customer_name") or "").strip() or None
+        customer_phone = (data.get("customer_phone") or "").strip() or None
 
         invoice_no = f"INV{Sale.objects.count() + 1:05d}"
 
@@ -249,13 +279,15 @@ def save_sale(request):
             balance=balance if payment_method == "cash" else None,
             card_last4=card_last4 if payment_method == "card" else None,
             cheque_number=cheque_number if payment_method == "credit" else None,
+            customer_name=customer_name,
+            customer_phone=customer_phone,
             created_by=request.user,
         )
 
         for i in items:
             item = Item.objects.get(id=i["id"])
-            qty = Decimal(str(i["qty"]))
-            price = Decimal(str(i["price"]))
+            qty = to_decimal(i.get("qty"))
+            price = to_decimal(i.get("price"))
             amount = qty * price
 
             SaleItem.objects.create(
@@ -288,6 +320,9 @@ def invoice_page(request, sale_id):
     return render(request, "pos/invoice.html", {"sale": sale})
 
 
+# =========================
+# SALES RETURN
+# =========================
 @user_passes_test(can_use_pos)
 def sales_return(request):
     sales = Sale.objects.all().order_by("-id")
@@ -295,7 +330,7 @@ def sales_return(request):
     if request.method == "POST":
         sale_id = request.POST.get("sale")
         sale_item_id = request.POST.get("sale_item")
-        qty = Decimal(str(request.POST.get("qty") or 0))
+        qty = to_decimal(request.POST.get("qty"))
         return_type = request.POST.get("return_type") or "refund"
         reason = request.POST.get("reason") or ""
 
@@ -362,19 +397,6 @@ def return_receipt(request, return_id):
 # =========================
 # ITEM MANAGEMENT
 # =========================
-def generate_next_item_code():
-    last_item = Item.objects.order_by("-id").first()
-
-    if not last_item or not last_item.item_code:
-        return "1000000000"
-
-    try:
-        last_number = int(str(last_item.item_code).strip())
-        return str(last_number + 1)
-    except Exception:
-        return "1000000000"
-
-
 @login_required
 def add_item(request):
     categories = Category.objects.all().order_by("name")
@@ -575,13 +597,6 @@ def add_gl(request):
 # =========================
 # PROJECT
 # =========================
-def generate_project_id(project_type):
-    year = timezone.now().year
-    last = Project.objects.filter(project_type=project_type).order_by("-id").first()
-    num = int(last.project_id[-3:]) + 1 if last else 1
-    return f"PRO{year}{project_type}{num:03d}"
-
-
 @user_passes_test(can_use_project)
 def project_list(request):
     projects = Project.objects.all().order_by("-id")
@@ -647,9 +662,9 @@ def add_project_expense(request):
         expense_date = request.POST.get("expense_date") or timezone.now().date()
         item_id = request.POST.get("item") or None
         description = request.POST.get("description", "").strip()
-        qty = Decimal(str(request.POST.get("qty") or 1))
-        unit_price = Decimal(str(request.POST.get("unit_price") or 0))
-        amount = Decimal(str(request.POST.get("amount") or 0))
+        qty = to_decimal(request.POST.get("qty") or 1)
+        unit_price = to_decimal(request.POST.get("unit_price") or 0)
+        amount = to_decimal(request.POST.get("amount") or 0)
         gl_account_id = request.POST.get("gl_account")
 
         if not gl_account_id:
@@ -700,7 +715,6 @@ def add_project_expense(request):
 @user_passes_test(can_use_project)
 def petty_cash_list(request):
     petty_cashes = ProjectPettyCash.objects.select_related("user", "created_by").order_by("-issue_date", "-id")
-
     return render(request, "pos/petty_cash_list.html", {
         "petty_cashes": petty_cashes,
     })
@@ -713,7 +727,7 @@ def add_petty_cash(request):
     if request.method == "POST":
         user_id = request.POST.get("user")
         issue_date = request.POST.get("issue_date") or timezone.now().date()
-        amount_issued = request.POST.get("amount_issued") or 0
+        amount_issued = to_decimal(request.POST.get("amount_issued"))
         note = request.POST.get("note", "").strip()
 
         if not user_id:
@@ -770,7 +784,7 @@ def add_petty_cash_expense(request, petty_cash_id):
         gl_account_id = request.POST.get("gl_account") or None
         bill_no = request.POST.get("bill_no", "").strip()
         bill_date = request.POST.get("bill_date") or None
-        amount = Decimal(str(request.POST.get("amount") or 0))
+        amount = to_decimal(request.POST.get("amount"))
         note = request.POST.get("note", "").strip()
 
         if not project_id:
@@ -856,11 +870,11 @@ def add_project_income(request):
         project_id = request.POST.get("project")
         income_date = request.POST.get("income_date") or timezone.now().date()
         description = request.POST.get("description", "").strip()
-        amount = request.POST.get("amount")
+        amount = to_decimal(request.POST.get("amount"))
         gl_account_id = request.POST.get("gl_account") or None
 
-        if not project_id or not amount:
-            messages.error(request, "Project and Amount are required.")
+        if not project_id or amount <= 0:
+            messages.error(request, "Project and valid Amount are required.")
             return redirect("add_project_income")
 
         ProjectIncome.objects.create(
@@ -882,7 +896,7 @@ def add_project_income(request):
 
 
 # =========================
-# PROFIT DASHBOARD
+# PROJECT PROFIT
 # =========================
 @user_passes_test(can_use_project)
 def project_profit_dashboard(request):

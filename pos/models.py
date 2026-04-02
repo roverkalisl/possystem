@@ -139,6 +139,9 @@ class Sale(models.Model):
     card_last4 = models.CharField(max_length=4, blank=True, null=True)
     cheque_number = models.CharField(max_length=50, blank=True, null=True)
 
+    customer_name = models.CharField(max_length=150, blank=True, null=True)
+    customer_phone = models.CharField(max_length=20, blank=True, null=True)
+
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

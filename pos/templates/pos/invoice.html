@@ -71,11 +71,11 @@
         }
 
         .meta td:first-child {
-            width: 35%;
+            width: 38%;
         }
 
         .meta td:last-child {
-            width: 65%;
+            width: 62%;
             text-align: right;
         }
 
@@ -146,6 +146,21 @@
             <td class="bold">Date</td>
             <td>{{ sale.created_at|date:"Y-m-d H:i" }}</td>
         </tr>
+
+        {% if sale.customer_name %}
+        <tr>
+            <td class="bold">Customer</td>
+            <td>{{ sale.customer_name }}</td>
+        </tr>
+        {% endif %}
+
+        {% if sale.customer_phone %}
+        <tr>
+            <td class="bold">Phone</td>
+            <td>{{ sale.customer_phone }}</td>
+        </tr>
+        {% endif %}
+
         <tr>
             <td class="bold">Cashier</td>
             <td>
