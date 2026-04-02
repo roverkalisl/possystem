@@ -215,9 +215,7 @@ class Project(models.Model):
     @property
     def total_expense(self):
         direct = self.expenses.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
-        petty = ProjectPettyCashExpense.objects.filter(
-            project=self
-        ).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+        petty = ProjectPettyCashExpense.objects.filter(project=self).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
         return Decimal(direct) + Decimal(petty)
 
     @property
@@ -286,21 +284,12 @@ class ProjectPettyCash(models.Model):
 
 
 class ProjectPettyCashExpense(models.Model):
-    petty_cash = models.ForeignKey(
-        ProjectPettyCash,
-        on_delete=models.CASCADE,
-        related_name="expenses"
-    )
+    petty_cash = models.ForeignKey(ProjectPettyCash, on_delete=models.CASCADE, related_name="expenses")
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="petty_cash_expenses")
     expense_date = models.DateField(default=timezone.now)
     description = models.CharField(max_length=255)
 
-    gl_account = models.ForeignKey(
-        GLMaster,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True
-    )
+    gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True)
 
     bill_no = models.CharField(max_length=100, blank=True, null=True)
     bill_date = models.DateField(blank=True, null=True)
@@ -324,12 +313,7 @@ class ProjectIncome(models.Model):
     description = models.CharField(max_length=255)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
-    gl_account = models.ForeignKey(
-        GLMaster,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True
-    )
+    gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True)
 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)

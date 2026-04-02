@@ -1,390 +1,266 @@
+{% load static %}
+
 <!DOCTYPE html>
 <html>
 <head>
-    <title>POS</title>
+    <title>Invoice Receipt</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
 
     <style>
         body {
-            background: #f4f6f9;
-        }
-
-        .item-card {
-            border-radius: 12px;
-            cursor: pointer;
-            transition: 0.2s;
-            height: 100%;
-        }
-
-        .item-card:hover {
-            transform: scale(1.02);
-        }
-
-        .cart-box {
-            background: #fff;
-            border-radius: 12px;
-            padding: 15px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.05);
-            position: sticky;
-            top: 10px;
-        }
-
-        .small-text {
+            font-family: monospace;
             font-size: 12px;
-            color: #666;
+            width: 280px;
+            margin: 0 auto;
+            padding: 8px;
+            color: #000;
         }
 
-        .item-title {
-            font-weight: 600;
+        .center {
+            text-align: center;
         }
 
-        .price-text {
+        .right {
+            text-align: right;
+        }
+
+        .bold {
             font-weight: bold;
-            font-size: 22px;
         }
 
-        .table td, .table th {
-            vertical-align: middle;
+        .logo {
+            max-height: 60px;
+            margin-bottom: 6px;
+        }
+
+        hr {
+            border: none;
+            border-top: 1px dashed #000;
+            margin: 6px 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        td, th {
+            font-size: 12px;
+            padding: 2px 0;
+            vertical-align: top;
+        }
+
+        .item-col {
+            width: 52%;
+            word-break: break-word;
+        }
+
+        .qty-col {
+            width: 12%;
+            text-align: right;
+        }
+
+        .price-col {
+            width: 18%;
+            text-align: right;
+        }
+
+        .amt-col {
+            width: 18%;
+            text-align: right;
+        }
+
+        .meta td:first-child {
+            width: 38%;
+        }
+
+        .meta td:last-child {
+            width: 62%;
+            text-align: right;
+        }
+
+        .totals td:first-child {
+            width: 55%;
+        }
+
+        .totals td:last-child {
+            width: 45%;
+            text-align: right;
+        }
+
+        .print-actions {
+            text-align: center;
+            margin-top: 12px;
+        }
+
+        .print-actions button,
+        .print-actions a {
+            display: inline-block;
+            padding: 6px 10px;
+            margin: 2px;
+            font-size: 12px;
+            text-decoration: none;
+            border: 1px solid #444;
+            background: #f5f5f5;
+            color: #000;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        @media print {
+            body {
+                width: auto;
+                margin: 0;
+                padding: 4px;
+            }
+
+            .print-actions {
+                display: none;
+            }
+
+            @page {
+                size: 80mm auto;
+                margin: 3mm;
+            }
         }
     </style>
 </head>
 <body>
 
-<div class="container-fluid p-3">
-
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3 class="mb-0">POS System</h3>
-        <div>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
-            <a href="{% url 'item_list' %}" class="btn btn-info btn-sm">Items</a>
-            <a href="{% url 'logout' %}" class="btn btn-danger btn-sm">Logout</a>
-        </div>
+    <div class="center">
+        <img src="{% static 'logo.png' %}" alt="Logo" class="logo">
+        <div class="bold">P&I Constructions</div>
+        <div>Retail &amp; Project Materials</div>
+        <div>Matara Road, Magalla, Galle</div>
+        <div>0773613005 / 0912224090</div>
     </div>
 
-    <div class="row">
+    <hr>
 
-        <!-- LEFT SIDE -->
-        <div class="col-lg-8">
+    <table class="meta">
+        <tr>
+            <td class="bold">Invoice No</td>
+            <td>{{ sale.invoice_no }}</td>
+        </tr>
+        <tr>
+            <td class="bold">Date</td>
+            <td>{{ sale.created_at|date:"Y-m-d H:i" }}</td>
+        </tr>
 
-            <div class="card shadow-sm p-3 mb-3">
-                <form method="GET" class="row g-2">
-                    <div class="col-md-10">
-                        <input type="text" name="q" value="{{ query }}" class="form-control"
-                               placeholder="Search by item name / code / category">
-                    </div>
-                    <div class="col-md-2">
-                        <button class="btn btn-primary w-100">Search</button>
-                    </div>
-                </form>
-            </div>
+        {% if sale.customer_name %}
+        <tr>
+            <td class="bold">Customer</td>
+            <td>{{ sale.customer_name }}</td>
+        </tr>
+        {% endif %}
 
-            <div class="row">
-                {% for item in items %}
-                <div class="col-md-4 mb-3">
-                    <div class="card item-card shadow-sm p-3"
-                         onclick="addToCart('{{ item.id }}', '{{ item.name|escapejs }}', '{{ item.selling_price }}', '{{ item.stock }}', '{{ item.item_code|default:''|escapejs }}')">
-                        <div class="item-title">{{ item.name }}</div>
-                        <div class="small-text">
-                            {{ item.item_code }}
-                            {% if item.category %}| {{ item.category.name }}{% endif %}
-                        </div>
-                        <div class="small-text">Stock: {{ item.stock }}</div>
-                        <div class="mt-2 price-text">Rs. {{ item.selling_price }}</div>
-                    </div>
-                </div>
-                {% empty %}
-                <div class="col-12">
-                    <div class="alert alert-warning mb-0">No items found.</div>
-                </div>
-                {% endfor %}
-            </div>
+        {% if sale.customer_phone %}
+        <tr>
+            <td class="bold">Phone</td>
+            <td>{{ sale.customer_phone }}</td>
+        </tr>
+        {% endif %}
 
-        </div>
+        <tr>
+            <td class="bold">Cashier</td>
+            <td>
+                {% if sale.created_by %}
+                    {{ sale.created_by.username }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <td class="bold">Payment</td>
+            <td>{{ sale.get_payment_method_display }}</td>
+        </tr>
 
-        <!-- RIGHT SIDE -->
-        <div class="col-lg-4">
-            <div class="cart-box">
+        {% if sale.card_last4 %}
+        <tr>
+            <td class="bold">Card Last 4</td>
+            <td>{{ sale.card_last4 }}</td>
+        </tr>
+        {% endif %}
 
-                <h4 class="mb-3">Cart</h4>
+        {% if sale.cheque_number %}
+        <tr>
+            <td class="bold">Cheque No</td>
+            <td>{{ sale.cheque_number }}</td>
+        </tr>
+        {% endif %}
+    </table>
 
-                <div class="mb-2">
-                    <label class="form-label">Customer Name</label>
-                    <input type="text" id="customer_name" class="form-control" placeholder="Customer Name">
-                </div>
+    <hr>
 
-                <div class="mb-3">
-                    <label class="form-label">Phone Number</label>
-                    <input type="text" id="customer_phone" class="form-control" placeholder="Phone Number">
-                </div>
+    <table>
+        <thead>
+            <tr class="bold">
+                <th class="item-col">Item</th>
+                <th class="qty-col">Q</th>
+                <th class="price-col">P</th>
+                <th class="amt-col">A</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in sale.sale_items.all %}
+            <tr>
+                <td class="item-col">
+                    {{ row.item.name }}<br>
+                    <small>{{ row.item.item_code }}</small>
+                </td>
+                <td class="qty-col">{{ row.qty }}</td>
+                <td class="price-col">{{ row.price }}</td>
+                <td class="amt-col">{{ row.amount }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="center">No items found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
-                <div class="table-responsive mb-3">
-                    <table class="table table-bordered table-sm bg-white">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Item</th>
-                                <th width="70">Qty</th>
-                                <th width="90">Price</th>
-                                <th width="90">Amount</th>
-                                <th width="40">X</th>
-                            </tr>
-                        </thead>
-                        <tbody id="cartBody">
-                            <tr id="emptyCartRow">
-                                <td colspan="5" class="text-center">Cart is empty</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
+    <hr>
 
-                <div class="mb-2">
-                    <label class="form-label">Discount</label>
-                    <input type="number" step="0.01" id="discount" class="form-control" value="0" oninput="updateCartTotals()">
-                </div>
+    <table class="totals">
+        <tr>
+            <td>Total</td>
+            <td>{{ sale.total }}</td>
+        </tr>
+        <tr>
+            <td>Discount</td>
+            <td>{{ sale.discount }}</td>
+        </tr>
+        <tr class="bold">
+            <td>Grand Total</td>
+            <td>{{ sale.grand_total }}</td>
+        </tr>
 
-                <div class="mb-2">
-                    <label class="form-label">Total</label>
-                    <input type="text" id="total" class="form-control" value="0.00" readonly>
-                </div>
+        {% if sale.payment_method == 'cash' %}
+        <tr>
+            <td>Received</td>
+            <td>{{ sale.received_amount }}</td>
+        </tr>
+        <tr>
+            <td>Balance</td>
+            <td>{{ sale.balance }}</td>
+        </tr>
+        {% endif %}
+    </table>
 
-                <div class="mb-2">
-                    <label class="form-label">Grand Total</label>
-                    <input type="text" id="grand_total" class="form-control fw-bold" value="0.00" readonly>
-                </div>
+    <hr>
 
-                <div class="mb-2">
-                    <label class="form-label">Payment Method</label>
-                    <select id="payment_method" class="form-select" onchange="togglePaymentFields()">
-                        <option value="cash">Cash</option>
-                        <option value="card">Card</option>
-                        <option value="credit">Credit</option>
-                    </select>
-                </div>
-
-                <div id="cashFields">
-                    <div class="mb-2">
-                        <label class="form-label">Received Amount</label>
-                        <input type="number" step="0.01" id="received_amount" class="form-control" value="0" oninput="updateBalance()">
-                    </div>
-
-                    <div class="mb-2">
-                        <label class="form-label">Balance</label>
-                        <input type="text" id="balance" class="form-control" value="0.00" readonly>
-                    </div>
-                </div>
-
-                <div id="cardFields" style="display:none;">
-                    <div class="mb-2">
-                        <label class="form-label">Card Last 4 Digits</label>
-                        <input type="text" id="card_last4" maxlength="4" class="form-control">
-                    </div>
-                </div>
-
-                <div id="creditFields" style="display:none;">
-                    <div class="mb-2">
-                        <label class="form-label">Cheque Number</label>
-                        <input type="text" id="cheque_number" class="form-control">
-                    </div>
-                </div>
-
-                <button class="btn btn-success w-100 mt-3" onclick="saveSale()">Complete Sale</button>
-
-            </div>
-        </div>
-
+    <div class="center">
+        <div>Thank You! Come Again!</div>
+        <small>Goods once sold will be handled as per store policy.</small><br>
+        <small>Keep this bill for warranty claims.</small>
     </div>
-</div>
 
-<script>
-    let cart = [];
-
-    function cleanNumber(val) {
-        if (val === null || val === undefined) return "0";
-        return String(val).replace(/,/g, '').trim() || "0";
-    }
-
-    function formatMoney(val) {
-        const num = parseFloat(val || 0);
-        return num.toFixed(2);
-    }
-
-    function addToCart(id, name, price, stock, itemCode) {
-        const existing = cart.find(item => item.id == id);
-
-        if (existing) {
-            existing.qty += 1;
-            existing.amount = existing.qty * existing.price;
-        } else {
-            cart.push({
-                id: id,
-                name: name,
-                item_code: itemCode,
-                price: parseFloat(price),
-                qty: 1,
-                stock: parseFloat(stock),
-                amount: parseFloat(price)
-            });
-        }
-
-        renderCart();
-    }
-
-    function renderCart() {
-        const cartBody = document.getElementById("cartBody");
-        cartBody.innerHTML = "";
-
-        if (cart.length === 0) {
-            cartBody.innerHTML = `
-                <tr id="emptyCartRow">
-                    <td colspan="5" class="text-center">Cart is empty</td>
-                </tr>
-            `;
-            updateCartTotals();
-            return;
-        }
-
-        cart.forEach((item, index) => {
-            const row = `
-                <tr>
-                    <td>
-                        ${item.name}<br>
-                        <small>${item.item_code || ""}</small>
-                    </td>
-                    <td>
-                        <input type="number" min="1" step="0.01" value="${item.qty}"
-                               class="form-control form-control-sm"
-                               onchange="updateQty(${index}, this.value)">
-                    </td>
-                    <td class="text-end">${formatMoney(item.price)}</td>
-                    <td class="text-end">${formatMoney(item.amount)}</td>
-                    <td class="text-center">
-                        <button type="button" class="btn btn-danger btn-sm" onclick="removeCartItem(${index})">X</button>
-                    </td>
-                </tr>
-            `;
-            cartBody.innerHTML += row;
-        });
-
-        updateCartTotals();
-    }
-
-    function updateQty(index, qtyValue) {
-        let qty = parseFloat(qtyValue || 0);
-        if (qty <= 0) qty = 1;
-
-        cart[index].qty = qty;
-        cart[index].amount = cart[index].qty * cart[index].price;
-        renderCart();
-    }
-
-    function removeCartItem(index) {
-        cart.splice(index, 1);
-        renderCart();
-    }
-
-    function updateCartTotals() {
-        let total = 0;
-
-        cart.forEach(item => {
-            total += item.amount;
-        });
-
-        const discount = parseFloat(document.getElementById("discount").value || 0);
-        const grandTotal = total - discount;
-
-        document.getElementById("total").value = formatMoney(total);
-        document.getElementById("grand_total").value = formatMoney(grandTotal > 0 ? grandTotal : 0);
-
-        updateBalance();
-    }
-
-    function togglePaymentFields() {
-        const paymentMethod = document.getElementById("payment_method").value;
-
-        document.getElementById("cashFields").style.display = paymentMethod === "cash" ? "block" : "none";
-        document.getElementById("cardFields").style.display = paymentMethod === "card" ? "block" : "none";
-        document.getElementById("creditFields").style.display = paymentMethod === "credit" ? "block" : "none";
-
-        updateBalance();
-    }
-
-    function updateBalance() {
-        const paymentMethod = document.getElementById("payment_method").value;
-
-        if (paymentMethod !== "cash") {
-            document.getElementById("balance").value = "0.00";
-            return;
-        }
-
-        const grandTotal = parseFloat(document.getElementById("grand_total").value || 0);
-        const received = parseFloat(document.getElementById("received_amount").value || 0);
-        const balance = received - grandTotal;
-
-        document.getElementById("balance").value = formatMoney(balance);
-    }
-
-    async function saveSale() {
-        if (cart.length === 0) {
-            alert("Cart is empty");
-            return;
-        }
-
-        const paymentMethod = document.getElementById("payment_method").value;
-        const total = document.getElementById("total").value;
-        const discount = document.getElementById("discount").value;
-        const grandTotal = document.getElementById("grand_total").value;
-        const received = document.getElementById("received_amount").value;
-        const balance = document.getElementById("balance").value;
-        const cardLast4 = document.getElementById("card_last4").value;
-        const chequeNumber = document.getElementById("cheque_number").value;
-        const customerName = document.getElementById("customer_name").value;
-        const customerPhone = document.getElementById("customer_phone").value;
-
-        const payload = {
-            items: cart.map(item => ({
-                id: item.id,
-                qty: cleanNumber(item.qty),
-                price: cleanNumber(item.price)
-            })),
-            total: cleanNumber(total),
-            discount: cleanNumber(discount),
-            grand_total: cleanNumber(grandTotal),
-            payment_method: paymentMethod,
-            received: cleanNumber(received),
-            balance: cleanNumber(balance),
-            card_last4: cardLast4,
-            cheque_number: chequeNumber,
-            customer_name: customerName,
-            customer_phone: customerPhone
-        };
-
-        try {
-            const response = await fetch("{% url 'save_sale' %}", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    "X-CSRFToken": "{{ csrf_token }}"
-                },
-                body: JSON.stringify(payload)
-            });
-
-            const data = await response.json();
-
-            if (data.status === "success") {
-                window.location.href = `/invoice/${data.sale_id}/`;
-            } else {
-                alert(data.message || "Error saving sale");
-            }
-        } catch (error) {
-            alert("Error saving sale");
-        }
-    }
-
-    document.addEventListener("DOMContentLoaded", function () {
-        togglePaymentFields();
-        renderCart();
-    });
-</script>
+    <div class="print-actions">
+        <button type="button" onclick="window.print()">Print Receipt</button>
+        <a href="{% url 'pos' %}">Back to POS</a>
+    </div>
 
 </body>
 </html>

@@ -19,9 +19,6 @@ from .models import (
 )
 
 
-# =========================
-# HELPERS
-# =========================
 def to_decimal(val):
     try:
         if val is None:
@@ -79,9 +76,6 @@ def generate_next_item_code():
         return "1000000000"
 
 
-# =========================
-# AUTH / DASHBOARD
-# =========================
 @login_required
 def dashboard(request):
     owner_access = is_owner(request.user)
@@ -118,9 +112,6 @@ def logout_view(request):
     return redirect("login")
 
 
-# =========================
-# USER MANAGEMENT
-# =========================
 @login_required
 @user_passes_test(is_owner)
 def user_list(request):
@@ -223,9 +214,6 @@ def edit_user(request, user_id):
     })
 
 
-# =========================
-# POS
-# =========================
 @user_passes_test(can_use_pos)
 def pos_page(request):
     query = request.GET.get("q", "").strip()
@@ -320,9 +308,6 @@ def invoice_page(request, sale_id):
     return render(request, "pos/invoice.html", {"sale": sale})
 
 
-# =========================
-# SALES RETURN
-# =========================
 @user_passes_test(can_use_pos)
 def sales_return(request):
     sales = Sale.objects.all().order_by("-id")
@@ -394,9 +379,6 @@ def return_receipt(request, return_id):
     return render(request, "pos/return_receipt.html", {"r": r})
 
 
-# =========================
-# ITEM MANAGEMENT
-# =========================
 @login_required
 def add_item(request):
     categories = Category.objects.all().order_by("name")
@@ -524,9 +506,6 @@ def stock_history(request):
     return render(request, "pos/stock_history.html", {"rows": rows})
 
 
-# =========================
-# REPORTS
-# =========================
 @login_required
 def daily_report(request):
     today = timezone.localdate()
@@ -569,9 +548,6 @@ def monthly_report(request):
     })
 
 
-# =========================
-# GL MASTER
-# =========================
 @user_passes_test(can_use_gl)
 def gl_list(request):
     gls = GLMaster.objects.all().order_by("gl_code")
@@ -594,9 +570,6 @@ def add_gl(request):
     return render(request, "pos/add_gl.html")
 
 
-# =========================
-# PROJECT
-# =========================
 @user_passes_test(can_use_project)
 def project_list(request):
     projects = Project.objects.all().order_by("-id")
@@ -628,9 +601,6 @@ def create_project(request):
     return render(request, "pos/create_project.html")
 
 
-# =========================
-# PROJECT EXPENSE
-# =========================
 @user_passes_test(can_use_project)
 def project_expense_list(request):
     expenses = ProjectExpense.objects.select_related(
@@ -709,9 +679,6 @@ def add_project_expense(request):
     })
 
 
-# =========================
-# PETTY CASH
-# =========================
 @user_passes_test(can_use_project)
 def petty_cash_list(request):
     petty_cashes = ProjectPettyCash.objects.select_related("user", "created_by").order_by("-issue_date", "-id")
@@ -842,9 +809,6 @@ def add_petty_cash_expense(request, petty_cash_id):
     })
 
 
-# =========================
-# PROJECT INCOME
-# =========================
 @user_passes_test(can_use_project)
 def project_income_list(request):
     incomes = ProjectIncome.objects.select_related("project", "gl_account", "created_by").order_by("-income_date", "-id")
@@ -895,9 +859,6 @@ def add_project_income(request):
     })
 
 
-# =========================
-# PROJECT PROFIT
-# =========================
 @user_passes_test(can_use_project)
 def project_profit_dashboard(request):
     projects = Project.objects.all().order_by("-created_at")
@@ -905,9 +866,7 @@ def project_profit_dashboard(request):
 
     for project in projects:
         direct_expense = project.expenses.aggregate(total=Sum("amount"))["total"] or Decimal("0")
-        petty_cash_expense = ProjectPettyCashExpense.objects.filter(
-            project=project
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        petty_cash_expense = ProjectPettyCashExpense.objects.filter(project=project).aggregate(total=Sum("amount"))["total"] or Decimal("0")
         total_income = project.incomes.aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
         total_expense = Decimal(str(direct_expense)) + Decimal(str(petty_cash_expense))
