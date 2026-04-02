@@ -3,26 +3,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Invoice</title>
+    <title>Invoice Receipt</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <style>
         body {
             font-family: monospace;
             font-size: 12px;
             width: 280px;
-            margin: auto;
+            margin: 0 auto;
+            padding: 8px;
+            color: #000;
         }
 
-        .center { text-align: center; }
-        .right { text-align: right; }
+        .center {
+            text-align: center;
+        }
+
+        .right {
+            text-align: right;
+        }
+
+        .bold {
+            font-weight: bold;
+        }
 
         .logo {
-            height: 60px;
-            margin-bottom: 5px;
+            max-height: 60px;
+            margin-bottom: 6px;
         }
 
         hr {
-            border-top: 1px dashed black;
+            border: none;
+            border-top: 1px dashed #000;
             margin: 6px 0;
         }
 
@@ -31,147 +44,208 @@
             border-collapse: collapse;
         }
 
-        th, td {
-            padding: 2px 0;
+        td, th {
             font-size: 12px;
+            padding: 2px 0;
+            vertical-align: top;
         }
 
-        .item-name {
-            max-width: 140px;
-            word-wrap: break-word;
+        .item-col {
+            width: 52%;
+            word-break: break-word;
         }
 
-        .bold {
-            font-weight: bold;
+        .qty-col {
+            width: 12%;
+            text-align: right;
+        }
+
+        .price-col {
+            width: 18%;
+            text-align: right;
+        }
+
+        .amt-col {
+            width: 18%;
+            text-align: right;
+        }
+
+        .meta td:first-child {
+            width: 35%;
+        }
+
+        .meta td:last-child {
+            width: 65%;
+            text-align: right;
+        }
+
+        .totals td:first-child {
+            width: 55%;
+        }
+
+        .totals td:last-child {
+            width: 45%;
+            text-align: right;
+        }
+
+        .print-actions {
+            text-align: center;
+            margin-top: 12px;
+        }
+
+        .print-actions button,
+        .print-actions a {
+            display: inline-block;
+            padding: 6px 10px;
+            margin: 2px;
+            font-size: 12px;
+            text-decoration: none;
+            border: 1px solid #444;
+            background: #f5f5f5;
+            color: #000;
+            border-radius: 4px;
+            cursor: pointer;
         }
 
         @media print {
             body {
-                width: 100%;
+                width: auto;
+                margin: 0;
+                padding: 4px;
             }
 
-            .no-print {
+            .print-actions {
                 display: none;
+            }
+
+            @page {
+                size: 80mm auto;
+                margin: 3mm;
             }
         }
     </style>
 </head>
+<body>
 
-<body onload="window.print()">
+    <div class="center">
+        <img src="{% static 'logo.png' %}" alt="Logo" class="logo">
+        <div class="bold">P&I Constructions</div>
+        <div>Retail &amp; Project Materials</div>
+        <div>Matara Road, Magalla, Galle</div>
+        <div>0773613005 / 0912224090</div>
+    </div>
 
-<div class="center">
+    <hr>
 
-    <img src="{% static 'logo.png' %}" class="logo">
+    <table class="meta">
+        <tr>
+            <td class="bold">Invoice No</td>
+            <td>{{ sale.invoice_no }}</td>
+        </tr>
+        <tr>
+            <td class="bold">Date</td>
+            <td>{{ sale.created_at|date:"Y-m-d H:i" }}</td>
+        </tr>
+        <tr>
+            <td class="bold">Cashier</td>
+            <td>
+                {% if sale.created_by %}
+                    {{ sale.created_by.username }}
+                {% else %}
+                    -
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <td class="bold">Payment</td>
+            <td>{{ sale.get_payment_method_display }}</td>
+        </tr>
 
-    <div class="bold">P&I Constructions</div>
-    <div>Retail & Project Materials</div>
-    <div>Matara Road, Galle</div>
-    <div>0773613005 / 0912224090</div>
-
-</div>
-
-<hr>
-
-<table>
-<tr>
-    <td>Inv</td>
-    <td class="right">{{ sale.invoice_no }}</td>
-</tr>
-<tr>
-    <td>Date</td>
-    <td class="right">{{ sale.created_at|date:"Y-m-d H:i" }}</td>
-</tr>
-<tr>
-    <td>Cashier</td>
-    <td class="right">
-        {% if sale.created_by %}
-            {{ sale.created_by.username }}
-        {% else %}
-            -
+        {% if sale.card_last4 %}
+        <tr>
+            <td class="bold">Card Last 4</td>
+            <td>{{ sale.card_last4 }}</td>
+        </tr>
         {% endif %}
-    </td>
-</tr>
-<tr>
-    <td>Pay</td>
-    <td class="right">{{ sale.get_payment_method_display }}</td>
-</tr>
 
-{% if sale.card_last4 %}
-<tr>
-    <td>Card</td>
-    <td class="right">{{ sale.card_last4 }}</td>
-</tr>
-{% endif %}
+        {% if sale.cheque_number %}
+        <tr>
+            <td class="bold">Cheque No</td>
+            <td>{{ sale.cheque_number }}</td>
+        </tr>
+        {% endif %}
+    </table>
 
-{% if sale.cheque_number %}
-<tr>
-    <td>Cheque</td>
-    <td class="right">{{ sale.cheque_number }}</td>
-</tr>
-{% endif %}
-</table>
+    <hr>
 
-<hr>
+    <table>
+        <thead>
+            <tr class="bold">
+                <th class="item-col">Item</th>
+                <th class="qty-col">Q</th>
+                <th class="price-col">P</th>
+                <th class="amt-col">A</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in sale.sale_items.all %}
+            <tr>
+                <td class="item-col">
+                    {{ row.item.name }}<br>
+                    <small>{{ row.item.item_code }}</small>
+                </td>
+                <td class="qty-col">{{ row.qty }}</td>
+                <td class="price-col">{{ row.price }}</td>
+                <td class="amt-col">{{ row.amount }}</td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="4" class="center">No items found</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
 
-<table>
-<tr class="bold">
-    <td>Item</td>
-    <td class="right">Q</td>
-    <td class="right">P</td>
-    <td class="right">A</td>
-</tr>
+    <hr>
 
-{% for row in sale.sale_items.all %}
-<tr>
-    <td class="item-name">
-        {{ row.item.name }}<br>
-        <small>{{ row.item.item_code }}</small>
-    </td>
-    <td class="right">{{ row.qty }}</td>
-    <td class="right">{{ row.price }}</td>
-    <td class="right">{{ row.amount }}</td>
-</tr>
-{% empty %}
-<tr>
-    <td colspan="4" class="center">No items</td>
-</tr>
-{% endfor %}
-</table>
+    <table class="totals">
+        <tr>
+            <td>Total</td>
+            <td>{{ sale.total }}</td>
+        </tr>
+        <tr>
+            <td>Discount</td>
+            <td>{{ sale.discount }}</td>
+        </tr>
+        <tr class="bold">
+            <td>Grand Total</td>
+            <td>{{ sale.grand_total }}</td>
+        </tr>
 
-<hr>
+        {% if sale.payment_method == 'cash' %}
+        <tr>
+            <td>Received</td>
+            <td>{{ sale.received_amount }}</td>
+        </tr>
+        <tr>
+            <td>Balance</td>
+            <td>{{ sale.balance }}</td>
+        </tr>
+        {% endif %}
+    </table>
 
-<table>
-<tr>
-    <td>Total</td>
-    <td class="right">{{ sale.total }}</td>
-</tr>
-<tr>
-    <td>Disc</td>
-    <td class="right">{{ sale.discount }}</td>
-</tr>
-<tr class="bold">
-    <td>Grand</td>
-    <td class="right">{{ sale.grand_total }}</td>
-</tr>
+    <hr>
 
-{% if sale.payment_method == 'cash' %}
-<tr>
-    <td>Recv</td>
-    <td class="right">{{ sale.received_amount }}</td>
-</tr>
-<tr>
-    <td>Bal</td>
-    <td class="right">{{ sale.balance }}</td>
-</tr>
-{% endif %}
-</table>
+    <div class="center">
+        <div>Thank You! Come Again!</div>
+        <small>Goods once sold will be handled as per store policy.</small><br>
+        <small>Keep this bill for warranty claims.</small>
+    </div>
 
-<hr>
-
-<div class="center">
-    Thank You!<br>
-    <small>Keep bill for warranty</small>
-</div>
+    <div class="print-actions">
+        <button type="button" onclick="window.print()">Print Receipt</button>
+        <a href="{% url 'pos' %}">Back to POS</a>
+    </div>
 
 </body>
 </html>
