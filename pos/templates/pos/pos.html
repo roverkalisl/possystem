@@ -110,14 +110,18 @@
 <div class="container-fluid p-3">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3 class="mb-0">POS System</h3>
-        <div>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
-            <a href="{% url 'item_list' %}" class="btn btn-info btn-sm">Items</a>
-            <a href="{% url 'sales_return' %}" class="btn btn-warning btn-sm">Sales Return</a>
-            <a href="{% url 'logout' %}" class="btn btn-danger btn-sm">Logout</a>
-        </div>
+    <h3 class="mb-0">POS System</h3>
+    <div>
+        <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+        {% if show_items %}
+        <a href="{% url 'item_list' %}" class="btn btn-info btn-sm">Items</a>
+        {% endif %}
+        <a href="{% url 'sales_return' %}" class="btn btn-warning btn-sm">Sales Return</a>
+        <a href="{% url 'daily_report' %}" class="btn btn-primary btn-sm">Daily Report</a>
+        <a href="{% url 'monthly_report' %}" class="btn btn-dark btn-sm">Monthly Report</a>
+        <a href="{% url 'logout' %}" class="btn btn-danger btn-sm">Logout</a>
     </div>
+</div>
 
     <div class="row">
 
