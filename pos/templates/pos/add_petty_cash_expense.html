@@ -11,6 +11,14 @@
 </head>
 <body class="p-4">
 
+{% if messages %}
+    {% for message in messages %}
+        <script>
+            alert("{{ message|escapejs }}");
+        </script>
+    {% endfor %}
+{% endif %}
+
 <div class="container">
     <div class="card shadow-sm p-4">
 
@@ -32,14 +40,6 @@
             <br>
             Balance: {{ petty_cash.balance }}
         </div>
-
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}success{% endif %}">
-                    {{ message }}
-                </div>
-            {% endfor %}
-        {% endif %}
 
         <form method="POST">
             {% csrf_token %}

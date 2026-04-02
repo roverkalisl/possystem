@@ -1,3 +1,4 @@
+{% load humanize %}
 <!DOCTYPE html>
 <html>
 <head>
@@ -10,6 +11,14 @@
     </style>
 </head>
 <body class="p-4">
+
+{% if messages %}
+    {% for message in messages %}
+        <script>
+            alert("{{ message|escapejs }}");
+        </script>
+    {% endfor %}
+{% endif %}
 
 <div class="container-fluid">
 
@@ -24,19 +33,66 @@
     <div class="card shadow-sm p-3 mb-3">
         <div class="row">
             <div class="col-md-3">
-                <strong>User:</strong>
-                {% if petty_cash.user.get_full_name %}
-                    {{ petty_cash.user.get_full_name }}
+                <strong>Employee:</strong>
+                {% if petty_cash.employee %}
+                    {{ petty_cash.employee.emp_no }} - {{ petty_cash.employee.full_name }}
+                    <br>
+                    <small class="text-muted">
+                        {{ petty_cash.employee.designation|default:"-" }}
+                    </small>
+                {% elif petty_cash.user %}
+                    {% if petty_cash.user.get_full_name %}
+                        {{ petty_cash.user.get_full_name }}
+                    {% else %}
+                        {{ petty_cash.user.username }}
+                    {% endif %}
                 {% else %}
-                    {{ petty_cash.user.username }}
+                    -
                 {% endif %}
             </div>
-            <div class="col-md-2"><strong>Date:</strong> {{ petty_cash.issue_date }}</div>
-            <div class="col-md-2"><strong>Issued:</strong> {{ petty_cash.amount_issued }}</div>
-            <div class="col-md-2"><strong>Spent:</strong> {{ petty_cash.total_spent }}</div>
-            <div class="col-md-3"><strong>Balance:</strong> {{ petty_cash.balance }}</div>
+
+            <div class="col-md-2">
+                <strong>Date:</strong><br>
+                {{ petty_cash.issue_date|date:"Y-m-d" }}
+            </div>
+
+            <div class="col-md-2">
+                <strong>Limit:</strong><br>
+                {% if petty_cash.employee %}
+                    Rs. {{ petty_cash.employee.petty_cash_limit|floatformat:2|intcomma }}
+                {% else %}
+                    -
+                {% endif %}
+            </div>
+
+            <div class="col-md-2">
+                <strong>Issued:</strong><br>
+                Rs. {{ petty_cash.amount_issued|floatformat:2|intcomma }}
+            </div>
+
+            <div class="col-md-1">
+                <strong>Spent:</strong><br>
+                Rs. {{ petty_cash.total_spent|floatformat:2|intcomma }}
+            </div>
+
+            <div class="col-md-2">
+                <strong>Balance:</strong><br>
+                Rs. {{ petty_cash.balance|floatformat:2|intcomma }}
+            </div>
         </div>
-        <div class="mt-2"><strong>Note:</strong> {{ petty_cash.note|default:"-" }}</div>
+
+        <div class="mt-2">
+            <strong>Available Limit:</strong>
+            {% if petty_cash.employee %}
+                Rs. {{ petty_cash.employee.available_petty_cash_limit|floatformat:2|intcomma }}
+            {% else %}
+                -
+            {% endif %}
+        </div>
+
+        <div class="mt-2">
+            <strong>Note:</strong> {{ petty_cash.note|default:"-" }}
+        </div>
     </div>
 
     <div class="card shadow-sm p-3">
@@ -44,6 +100,7 @@
             <table class="table table-bordered table-striped bg-white">
                 <thead class="table-dark">
                     <tr>
+                        <th>Expense No</th>
                         <th>Date</th>
                         <th>Project</th>
                         <th>Description</th>
@@ -52,16 +109,20 @@
                         <th>GL</th>
                         <th>Amount</th>
                         <th>User</th>
+                        {% if is_owner %}
+                        <th>Action</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
                     {% for e in expenses %}
                     <tr>
-                        <td>{{ e.expense_date }}</td>
+                        <td>{{ e.expense_no|default:"-" }}</td>
+                        <td>{{ e.expense_date|date:"Y-m-d" }}</td>
                         <td>{{ e.project.project_id }} - {{ e.project.project_name }}</td>
                         <td>{{ e.description }}</td>
                         <td>{{ e.bill_no|default:"-" }}</td>
-                        <td>{{ e.bill_date|default:"-" }}</td>
+                        <td>{{ e.bill_date|date:"Y-m-d"|default:"-" }}</td>
                         <td>
                             {% if e.gl_account %}
                                 {{ e.gl_account.gl_code }} - {{ e.gl_account.gl_name }}
@@ -69,12 +130,23 @@
                                 -
                             {% endif %}
                         </td>
-                        <td>{{ e.amount }}</td>
+                        <td>Rs. {{ e.amount|floatformat:2|intcomma }}</td>
                         <td>{{ e.created_by.username|default:"-" }}</td>
+                        {% if is_owner %}
+                        <td>
+                            <a href="{% url 'delete_petty_cash_expense' e.id %}"
+                               class="btn btn-danger btn-sm"
+                               onclick="return confirm('Delete this expense?')">
+                               Delete
+                            </a>
+                        </td>
+                        {% endif %}
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="text-center">No petty cash expenses found</td>
+                        <td colspan="{% if is_owner %}10{% else %}9{% endif %}" class="text-center">
+                            No petty cash expenses found
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

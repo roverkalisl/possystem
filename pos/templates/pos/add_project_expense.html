@@ -3,129 +3,138 @@
 <head>
     <title>Add Project Expense</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
+
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
     <style>
         body { background: #f4f6f9; }
         .card { border-radius: 12px; }
+        .form-label { font-weight: 500; }
     </style>
 </head>
 <body class="p-4">
 
+<!-- ✅ POPUP MESSAGE -->
+{% if messages %}
+    {% for message in messages %}
+        <script>
+            alert("{{ message|escapejs }}");
+        </script>
+    {% endfor %}
+{% endif %}
+
 <div class="container">
+
     <div class="card shadow-sm p-4">
+
+        <!-- HEADER -->
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3>➕ Add Project Expense</h3>
+            <h3>Add Project Expense</h3>
             <div>
-                <a href="{% url 'project_expense_list' %}" class="btn btn-info btn-sm">Expense List</a>
-                <a href="{% url 'project_list' %}" class="btn btn-secondary btn-sm">Projects</a>
+                <a href="{% url 'project_expense_list' %}" class="btn btn-secondary btn-sm">Back</a>
+                <a href="{% url 'dashboard' %}" class="btn btn-dark btn-sm">Dashboard</a>
             </div>
         </div>
 
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}success{% endif %}">
-                    {{ message }}
-                </div>
-            {% endfor %}
-        {% endif %}
-
+        <!-- FORM -->
         <form method="POST">
             {% csrf_token %}
 
+            <!-- PROJECT -->
             <div class="mb-3">
                 <label class="form-label">Project</label>
                 <select name="project" class="form-select" required>
                     <option value="">Select Project</option>
                     {% for p in projects %}
-                        <option value="{{ p.id }}">{{ p.project_id }} - {{ p.project_name }}</option>
+                        <option value="{{ p.id }}">
+                            {{ p.project_id }} - {{ p.project_name }}
+                        </option>
                     {% endfor %}
                 </select>
             </div>
 
+            <!-- TYPE -->
+            <div class="mb-3">
+                <label class="form-label">Expense Type</label>
+                <select name="expense_type" class="form-select">
+                    <option value="direct">Direct Expense</option>
+                    <option value="inventory">Inventory Issue</option>
+                    <option value="service">Service</option>
+                </select>
+            </div>
+
+            <!-- DATE -->
             <div class="mb-3">
                 <label class="form-label">Expense Date</label>
                 <input type="date" name="expense_date" class="form-control">
             </div>
 
-            <div class="mb-3">
-                <label class="form-label">Expense Type</label>
-                <select name="expense_type" id="expense_type" class="form-select" onchange="toggleExpenseType()" required>
-                    <option value="inventory">Inventory Item</option>
-                    <option value="direct">Direct Item</option>
-                    <option value="service">Service</option>
-                </select>
-            </div>
-
-            <div class="mb-3" id="itemField">
-                <label class="form-label">Inventory Item</label>
-                <select name="item" class="form-select">
-                    <option value="">Select Item</option>
-                    {% for i in items %}
-                        <option value="{{ i.id }}">{{ i.item_code }} - {{ i.name }}</option>
-                    {% endfor %}
-                </select>
-                <small class="text-muted">Use this for stock issue items.</small>
-            </div>
-
+            <!-- DESCRIPTION -->
             <div class="mb-3">
                 <label class="form-label">Description</label>
                 <input type="text" name="description" class="form-control" required>
             </div>
 
+            <!-- ITEM -->
             <div class="mb-3">
-                <label class="form-label">GL Account</label>
-                <select name="gl_account" class="form-select" required>
-                    <option value="">Select GL</option>
-                    {% for gl in expense_gls %}
-                        <option value="{{ gl.id }}">{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                <label class="form-label">Item (optional)</label>
+                <select name="item" class="form-select">
+                    <option value="">Select Item</option>
+                    {% for item in items %}
+                        <option value="{{ item.id }}">
+                            {{ item.name }} ({{ item.item_code }})
+                        </option>
                     {% endfor %}
                 </select>
             </div>
 
+            <!-- GL -->
+            <div class="mb-3">
+                <label class="form-label">GL Account</label>
+                <select name="gl_account" class="form-select">
+                    <option value="">Select GL</option>
+                    {% for gl in expense_gls %}
+                        <option value="{{ gl.id }}">
+                            {{ gl.gl_code }} - {{ gl.gl_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- QTY + PRICE -->
             <div class="row">
-                <div class="col-md-4 mb-3">
+                <div class="col-md-6 mb-3">
                     <label class="form-label">Qty</label>
-                    <input type="number" step="0.01" name="qty" id="qty" value="1" class="form-control" oninput="calculateAmount()">
+                    <input type="number" step="0.01" name="qty" id="qty" class="form-control" value="1" oninput="calcAmount()">
                 </div>
-
-                <div class="col-md-4 mb-3">
+                <div class="col-md-6 mb-3">
                     <label class="form-label">Unit Price</label>
-                    <input type="number" step="0.01" name="unit_price" id="unit_price" value="0" class="form-control" oninput="calculateAmount()">
-                </div>
-
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">Amount</label>
-                    <input type="number" step="0.01" name="amount" id="amount" value="0" class="form-control" required>
+                    <input type="number" step="0.01" name="unit_price" id="price" class="form-control" value="0" oninput="calcAmount()">
                 </div>
             </div>
 
-            <button class="btn btn-success w-100">💾 Save Expense</button>
+            <!-- AMOUNT -->
+            <div class="mb-3">
+                <label class="form-label">Amount</label>
+                <input type="number" step="0.01" name="amount" id="amount" class="form-control" required>
+            </div>
+
+            <!-- SAVE BUTTON -->
+            <button class="btn btn-success w-100">Save Expense</button>
+
         </form>
+
     </div>
 </div>
 
+<!-- AUTO CALC SCRIPT -->
 <script>
-function toggleExpenseType() {
-    const type = document.getElementById("expense_type").value;
-    const itemField = document.getElementById("itemField");
+function calcAmount() {
+    let qty = parseFloat(document.getElementById("qty").value || 0);
+    let price = parseFloat(document.getElementById("price").value || 0);
 
-    if (type === "inventory") {
-        itemField.style.display = "block";
-    } else {
-        itemField.style.display = "none";
-    }
+    document.getElementById("amount").value = (qty * price).toFixed(2);
 }
-
-function calculateAmount() {
-    const qty = parseFloat(document.getElementById("qty").value) || 0;
-    const unitPrice = parseFloat(document.getElementById("unit_price").value) || 0;
-    document.getElementById("amount").value = (qty * unitPrice).toFixed(2);
-}
-
-document.addEventListener("DOMContentLoaded", function () {
-    toggleExpenseType();
-    calculateAmount();
-});
 </script>
 
 </body>

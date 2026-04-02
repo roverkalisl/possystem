@@ -15,10 +15,13 @@ from .models import (
     Item, Category, Supplier, GLMaster,
     Sale, SaleItem, SalesReturn, StockTransaction,
     Project, ProjectExpense, ProjectPettyCash,
-    ProjectPettyCashExpense, ProjectIncome
+    ProjectPettyCashExpense, ProjectIncome, Employee
 )
 
 
+# =========================
+# HELPERS
+# =========================
 def to_decimal(val):
     try:
         if val is None:
@@ -49,11 +52,15 @@ def can_use_pos(user):
 
 
 def can_use_project(user):
-    return is_owner(user) or is_manager(user) or is_clerk(user)
+    return is_owner(user) or is_manager(user) or is_clerk(user) or is_cashier(user)
 
 
 def can_use_gl(user):
     return is_owner(user)
+
+
+def can_manage_items(user):
+    return is_owner(user) or is_manager(user) or is_clerk(user)
 
 
 def generate_project_id(project_type):
@@ -65,43 +72,46 @@ def generate_project_id(project_type):
 
 def generate_next_item_code():
     last_item = Item.objects.order_by("-id").first()
-
     if not last_item or not last_item.item_code:
         return "1000000000"
-
     try:
-        last_number = int(str(last_item.item_code).strip())
-        return str(last_number + 1)
+        return str(int(str(last_item.item_code).strip()) + 1)
     except Exception:
         return "1000000000"
 
 
-@login_required
-def dashboard(request):
-    owner_access = is_owner(request.user)
-
-    return render(request, "pos/dashboard.html", {
-        "show_pos": can_use_pos(request.user),
-        "show_project": can_use_project(request.user),
-        "show_gl": can_use_gl(request.user),
-        "show_users": owner_access,
-    })
+def generate_petty_cash_expense_no():
+    last = ProjectPettyCashExpense.objects.exclude(expense_no__isnull=True).order_by("-id").first()
+    if last and last.expense_no and str(last.expense_no).isdigit():
+        return str(int(last.expense_no) + 1)
+    return "400000"
 
 
+def generate_project_expense_no():
+    last = ProjectExpense.objects.exclude(expense_no__isnull=True).order_by("-id").first()
+    if last and last.expense_no and str(last.expense_no).isdigit():
+        return str(int(last.expense_no) + 1)
+    return "500000"
+
+
+# =========================
+# AUTH / DASHBOARD
+# =========================
 def login_view(request):
     if request.user.is_authenticated:
         return redirect("dashboard")
 
     if request.method == "POST":
-        user = authenticate(
-            request,
-            username=request.POST.get("username"),
-            password=request.POST.get("password"),
-        )
-        if user:
+        username = request.POST.get("username")
+        password = request.POST.get("password")
+
+        user = authenticate(request, username=username, password=password)
+
+        if user is not None:
             login(request, user)
             return redirect("dashboard")
-        messages.error(request, "Invalid login")
+        else:
+            messages.error(request, "Invalid username or password")
 
     return render(request, "pos/login.html")
 
@@ -112,6 +122,20 @@ def logout_view(request):
     return redirect("login")
 
 
+@login_required
+def dashboard(request):
+    return render(request, "pos/dashboard.html", {
+        "show_pos": can_use_pos(request.user),
+        "show_project": can_use_project(request.user),
+        "show_gl": can_use_gl(request.user),
+        "show_users": is_owner(request.user),
+        "show_items": can_manage_items(request.user),
+        "show_employees": is_owner(request.user),
+    })
+
+# =========================
+# USER MANAGEMENT
+# =========================
 @login_required
 @user_passes_test(is_owner)
 def user_list(request):
@@ -198,8 +222,8 @@ def edit_user(request, user_id):
             user_obj.set_password(password)
 
         user_obj.save()
-
         user_obj.groups.clear()
+
         group = Group.objects.filter(name=role).first()
         if group:
             user_obj.groups.add(group)
@@ -214,6 +238,9 @@ def edit_user(request, user_id):
     })
 
 
+# =========================
+# POS
+# =========================
 @user_passes_test(can_use_pos)
 def pos_page(request):
     query = request.GET.get("q", "").strip()
@@ -229,6 +256,7 @@ def pos_page(request):
     return render(request, "pos/pos.html", {
         "items": items,
         "query": query,
+        "show_items": can_manage_items(request.user),
     })
 
 
@@ -308,6 +336,9 @@ def invoice_page(request, sale_id):
     return render(request, "pos/invoice.html", {"sale": sale})
 
 
+# =========================
+# SALES RETURN
+# =========================
 @user_passes_test(can_use_pos)
 def sales_return(request):
     sales = Sale.objects.all().order_by("-id")
@@ -379,7 +410,10 @@ def return_receipt(request, return_id):
     return render(request, "pos/return_receipt.html", {"r": r})
 
 
-@login_required
+# =========================
+# ITEM MANAGEMENT
+# =========================
+@user_passes_test(can_manage_items)
 def add_item(request):
     categories = Category.objects.all().order_by("name")
     suppliers = Supplier.objects.all().order_by("name")
@@ -432,7 +466,7 @@ def add_item(request):
     })
 
 
-@login_required
+@user_passes_test(can_manage_items)
 def item_list(request):
     query = request.GET.get("q", "").strip()
 
@@ -455,7 +489,7 @@ def item_list(request):
     })
 
 
-@login_required
+@user_passes_test(can_manage_items)
 def edit_item(request, item_id):
     item = get_object_or_404(Item, id=item_id)
     categories = Category.objects.all().order_by("name")
@@ -500,12 +534,15 @@ def edit_item(request, item_id):
     })
 
 
-@login_required
+@user_passes_test(can_manage_items)
 def stock_history(request):
     rows = StockTransaction.objects.select_related("item").order_by("-created_at")
     return render(request, "pos/stock_history.html", {"rows": rows})
 
 
+# =========================
+# REPORTS
+# =========================
 @login_required
 def daily_report(request):
     today = timezone.localdate()
@@ -548,6 +585,9 @@ def monthly_report(request):
     })
 
 
+# =========================
+# GL MASTER
+# =========================
 @user_passes_test(can_use_gl)
 def gl_list(request):
     gls = GLMaster.objects.all().order_by("gl_code")
@@ -570,6 +610,9 @@ def add_gl(request):
     return render(request, "pos/add_gl.html")
 
 
+# =========================
+# PROJECT
+# =========================
 @user_passes_test(can_use_project)
 def project_list(request):
     projects = Project.objects.all().order_by("-id")
@@ -601,6 +644,9 @@ def create_project(request):
     return render(request, "pos/create_project.html")
 
 
+# =========================
+# PROJECT EXPENSE
+# =========================
 @user_passes_test(can_use_project)
 def project_expense_list(request):
     expenses = ProjectExpense.objects.select_related(
@@ -617,6 +663,7 @@ def project_expense_list(request):
         "expenses": expenses,
         "projects": projects,
         "selected_project": project_id,
+        "is_owner": is_owner(request.user),
     })
 
 
@@ -627,25 +674,42 @@ def add_project_expense(request):
     items = Item.objects.all().order_by("name")
 
     if request.method == "POST":
-        expense_type = request.POST.get("expense_type")
         project_id = request.POST.get("project")
+        expense_type = request.POST.get("expense_type") or "direct"
         expense_date = request.POST.get("expense_date") or timezone.now().date()
-        item_id = request.POST.get("item") or None
-        description = request.POST.get("description", "").strip()
+        description = (request.POST.get("description") or "").strip()
         qty = to_decimal(request.POST.get("qty") or 1)
         unit_price = to_decimal(request.POST.get("unit_price") or 0)
         amount = to_decimal(request.POST.get("amount") or 0)
-        gl_account_id = request.POST.get("gl_account")
+        gl_account_id = request.POST.get("gl_account") or None
+        item_id = request.POST.get("item") or None
 
-        if not gl_account_id:
-            messages.error(request, "GL is required")
-            return redirect("add_project_expense")
+        if not project_id:
+            messages.error(request, "Project is required.")
+            return render(request, "pos/add_project_expense.html", {
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "items": items,
+            })
+
+        if not description:
+            messages.error(request, "Description is required.")
+            return render(request, "pos/add_project_expense.html", {
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "items": items,
+            })
 
         if amount <= 0:
-            messages.error(request, "Amount must be greater than 0")
-            return redirect("add_project_expense")
+            messages.error(request, "Amount must be greater than 0.")
+            return render(request, "pos/add_project_expense.html", {
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "items": items,
+            })
 
-        ProjectExpense.objects.create(
+        expense = ProjectExpense.objects.create(
+            expense_no=generate_project_expense_no(),
             project_id=project_id,
             expense_type=expense_type,
             expense_date=expense_date,
@@ -669,7 +733,7 @@ def add_project_expense(request):
                 qty=qty,
             )
 
-        messages.success(request, "Expense added")
+        messages.success(request, f"Saved successfully. Expense No: {expense.expense_no}")
         return redirect("project_expense_list")
 
     return render(request, "pos/add_project_expense.html", {
@@ -679,34 +743,57 @@ def add_project_expense(request):
     })
 
 
+# =========================
+# PETTY CASH
+# =========================
 @user_passes_test(can_use_project)
 def petty_cash_list(request):
-    petty_cashes = ProjectPettyCash.objects.select_related("user", "created_by").order_by("-issue_date", "-id")
+    petty_cashes = ProjectPettyCash.objects.all().order_by("-issue_date", "-id")
+
     return render(request, "pos/petty_cash_list.html", {
         "petty_cashes": petty_cashes,
+        "is_owner": is_owner(request.user),
     })
 
 
 @user_passes_test(can_use_project)
 def add_petty_cash(request):
-    users = User.objects.filter(is_active=True).order_by("username")
+    employees = Employee.objects.filter(is_active=True).order_by("emp_no")
 
     if request.method == "POST":
-        user_id = request.POST.get("user")
+        employee_id = request.POST.get("employee") or None
         issue_date = request.POST.get("issue_date") or timezone.now().date()
         amount_issued = to_decimal(request.POST.get("amount_issued"))
-        note = request.POST.get("note", "").strip()
+        note = (request.POST.get("note") or "").strip()
 
-        if not user_id:
-            messages.error(request, "User is required.")
+        if not employee_id:
+            messages.error(request, "Employee is required.")
             return render(request, "pos/add_petty_cash.html", {
-                "users": users,
+                "employees": employees,
+            })
+
+        if amount_issued <= 0:
+            messages.error(request, "Amount must be greater than 0.")
+            return render(request, "pos/add_petty_cash.html", {
+                "employees": employees,
+            })
+
+        employee = get_object_or_404(Employee, id=employee_id)
+
+        if amount_issued > employee.available_petty_cash_limit:
+            messages.error(
+                request,
+                f"Petty cash limit exceeded. Available limit: {employee.available_petty_cash_limit}"
+            )
+            return render(request, "pos/add_petty_cash.html", {
+                "employees": employees,
             })
 
         petty_cash_no = f"PC{ProjectPettyCash.objects.count() + 1:05d}"
 
         ProjectPettyCash.objects.create(
-            user_id=user_id,
+            employee=employee,
+            user=employee.user if employee.user else request.user,
             petty_cash_no=petty_cash_no,
             issue_date=issue_date,
             amount_issued=amount_issued,
@@ -714,18 +801,17 @@ def add_petty_cash(request):
             created_by=request.user,
         )
 
-        messages.success(request, f"Petty cash created: {petty_cash_no}")
+        messages.success(request, f"Petty Cash saved successfully. No: {petty_cash_no}")
         return redirect("petty_cash_list")
 
     return render(request, "pos/add_petty_cash.html", {
-        "users": users,
+        "employees": employees,
     })
-
 
 @user_passes_test(can_use_project)
 def petty_cash_detail(request, petty_cash_id):
     petty_cash = get_object_or_404(
-        ProjectPettyCash.objects.select_related("user", "created_by"),
+        ProjectPettyCash.objects.select_related("employee", "user", "created_by"),
         id=petty_cash_id
     )
     expenses = petty_cash.expenses.select_related(
@@ -735,8 +821,8 @@ def petty_cash_detail(request, petty_cash_id):
     return render(request, "pos/petty_cash_detail.html", {
         "petty_cash": petty_cash,
         "expenses": expenses,
+        "is_owner": is_owner(request.user),
     })
-
 
 @user_passes_test(can_use_project)
 def add_petty_cash_expense(request, petty_cash_id):
@@ -747,12 +833,12 @@ def add_petty_cash_expense(request, petty_cash_id):
     if request.method == "POST":
         project_id = request.POST.get("project")
         expense_date = request.POST.get("expense_date") or timezone.now().date()
-        description = request.POST.get("description", "").strip()
+        description = (request.POST.get("description") or "").strip()
         gl_account_id = request.POST.get("gl_account") or None
-        bill_no = request.POST.get("bill_no", "").strip()
+        bill_no = (request.POST.get("bill_no") or "").strip()
         bill_date = request.POST.get("bill_date") or None
         amount = to_decimal(request.POST.get("amount"))
-        note = request.POST.get("note", "").strip()
+        note = (request.POST.get("note") or "").strip()
 
         if not project_id:
             messages.error(request, "Project is required.")
@@ -786,7 +872,8 @@ def add_petty_cash_expense(request, petty_cash_id):
                 "expense_gls": expense_gls,
             })
 
-        ProjectPettyCashExpense.objects.create(
+        expense = ProjectPettyCashExpense.objects.create(
+            expense_no=generate_petty_cash_expense_no(),
             petty_cash=petty_cash,
             project_id=project_id,
             expense_date=expense_date,
@@ -799,7 +886,7 @@ def add_petty_cash_expense(request, petty_cash_id):
             created_by=request.user,
         )
 
-        messages.success(request, "Petty cash expense added successfully.")
+        messages.success(request, f"Saved successfully. Expense No: {expense.expense_no}")
         return redirect("petty_cash_detail", petty_cash_id=petty_cash.id)
 
     return render(request, "pos/add_petty_cash_expense.html", {
@@ -808,7 +895,25 @@ def add_petty_cash_expense(request, petty_cash_id):
         "expense_gls": expense_gls,
     })
 
+@user_passes_test(is_owner)
+def delete_project_expense(request, expense_id):
+    expense = get_object_or_404(ProjectExpense, id=expense_id)
+    expense.delete()
+    messages.success(request, "Project expense deleted successfully.")
+    return redirect("project_expense_list")
 
+
+@user_passes_test(is_owner)
+def delete_petty_cash_expense(request, expense_id):
+    expense = get_object_or_404(ProjectPettyCashExpense, id=expense_id)
+    petty_cash_id = expense.petty_cash.id
+    expense.delete()
+    messages.success(request, "Petty cash expense deleted successfully.")
+    return redirect("petty_cash_detail", petty_cash_id=petty_cash_id)
+
+# =========================
+# PROJECT INCOME
+# =========================
 @user_passes_test(can_use_project)
 def project_income_list(request):
     incomes = ProjectIncome.objects.select_related("project", "gl_account", "created_by").order_by("-income_date", "-id")
@@ -859,6 +964,9 @@ def add_project_income(request):
     })
 
 
+# =========================
+# PROJECT PROFIT
+# =========================
 @user_passes_test(can_use_project)
 def project_profit_dashboard(request):
     projects = Project.objects.all().order_by("-created_at")
@@ -895,3 +1003,89 @@ def project_profit_dashboard(request):
         "grand_total_expense": grand_total_expense,
         "grand_profit": grand_profit,
     })
+@user_passes_test(is_owner)
+def employee_list(request):
+    employees = Employee.objects.select_related("user").order_by("emp_no")
+    return render(request, "pos/employee_list.html", {
+        "employees": employees,
+    })
+
+
+@user_passes_test(is_owner)
+def add_employee(request):
+    users = User.objects.filter(is_active=True).order_by("username")
+
+    if request.method == "POST":
+        user_id = request.POST.get("user") or None
+        full_name = (request.POST.get("full_name") or "").strip()
+        designation = (request.POST.get("designation") or "").strip()
+        address = (request.POST.get("address") or "").strip()
+        tel = (request.POST.get("tel") or "").strip()
+        petty_cash_limit = to_decimal(request.POST.get("petty_cash_limit"))
+        is_active = request.POST.get("is_active") == "on"
+
+        if not full_name:
+            messages.error(request, "Employee name is required.")
+            return render(request, "pos/add_employee.html", {"users": users})
+
+        Employee.objects.create(
+            user_id=user_id if user_id else None,
+            full_name=full_name,
+            designation=designation,
+            address=address,
+            tel=tel,
+            petty_cash_limit=petty_cash_limit,
+            is_active=is_active,
+        )
+
+        messages.success(request, "Employee created successfully.")
+        return redirect("employee_list")
+
+    return render(request, "pos/add_employee.html", {
+        "users": users,
+    })
+
+
+@user_passes_test(is_owner)
+def edit_employee(request, employee_id):
+    employee = get_object_or_404(Employee, id=employee_id)
+    users = User.objects.filter(is_active=True).order_by("username")
+
+    if request.method == "POST":
+        user_id = request.POST.get("user") or None
+        full_name = (request.POST.get("full_name") or "").strip()
+        designation = (request.POST.get("designation") or "").strip()
+        address = (request.POST.get("address") or "").strip()
+        tel = (request.POST.get("tel") or "").strip()
+        petty_cash_limit = to_decimal(request.POST.get("petty_cash_limit"))
+        is_active = request.POST.get("is_active") == "on"
+
+        if not full_name:
+            messages.error(request, "Employee name is required.")
+            return render(request, "pos/edit_employee.html", {
+                "employee": employee,
+                "users": users,
+            })
+
+        employee.user_id = user_id if user_id else None
+        employee.full_name = full_name
+        employee.designation = designation
+        employee.address = address
+        employee.tel = tel
+        employee.petty_cash_limit = petty_cash_limit
+        employee.is_active = is_active
+        employee.save()
+
+        messages.success(request, "Employee updated successfully.")
+        return redirect("employee_list")
+
+    return render(request, "pos/edit_employee.html", {
+        "employee": employee,
+        "users": users,
+    })
+@user_passes_test(is_owner)
+def delete_petty_cash(request, petty_cash_id):
+    petty_cash = get_object_or_404(ProjectPettyCash, id=petty_cash_id)
+    petty_cash.delete()
+    messages.success(request, "Petty cash deleted successfully.")
+    return redirect("petty_cash_list")

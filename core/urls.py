@@ -47,4 +47,10 @@ urlpatterns = [
     path('project-income/add/', views.add_project_income, name='add_project_income'),
 
     path('project-profit/', views.project_profit_dashboard, name='project_profit_dashboard'),
+    path('project-expense/delete/<int:expense_id>/', views.delete_project_expense, name='delete_project_expense'),
+    path('petty-cash-expense/delete/<int:expense_id>/', views.delete_petty_cash_expense, name='delete_petty_cash_expense'),
+    path('employees/', views.employee_list, name='employee_list'),
+    path('employees/add/', views.add_employee, name='add_employee'),
+    path('employees/edit/<int:employee_id>/', views.edit_employee, name='edit_employee'),
+    path('petty-cash/delete/<int:petty_cash_id>/', views.delete_petty_cash, name='delete_petty_cash'),
 ]

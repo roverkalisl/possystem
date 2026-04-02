@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add Employee</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f4f6f9; }
+        .card { border-radius: 12px; }
+    </style>
+</head>
+<body class="p-4">
+{% load currency_filters %}
+
+{% if messages %}
+    {% for message in messages %}
+        <script>alert("{{ message|escapejs }}");</script>
+    {% endfor %}
+{% endif %}
+
+<div class="container">
+    <div class="card shadow-sm p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3>Add Employee</h3>
+            <div>
+                <a href="{% url 'employee_list' %}" class="btn btn-info btn-sm">Employee List</a>
+                <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+            </div>
+        </div>
+
+        <form method="POST">
+            {% csrf_token %}
+
+            <div class="mb-3">
+                <label class="form-label">Linked User (optional)</label>
+                <select name="user" class="form-select">
+                    <option value="">Select User</option>
+                    {% for u in users %}
+                        <option value="{{ u.id }}">{{ u.username }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Emp Name</label>
+                <input type="text" name="full_name" class="form-control" required>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Designation</label>
+                <input type="text" name="designation" class="form-control">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Address</label>
+                <textarea name="address" class="form-control" rows="3"></textarea>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Tel</label>
+                <input type="text" name="tel" class="form-control">
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label">Petty Cash Limit</label>
+                <input type="number" step="0.01" name="petty_cash_limit" class="form-control" value="0">
+            </div>
+
+            <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" name="is_active" id="is_active" checked>
+                <label class="form-check-label" for="is_active">Active</label>
+            </div>
+
+            <button class="btn btn-success w-100">Save Employee</button>
+        </form>
+    </div>
+</div>
+
+</body>
+</html>

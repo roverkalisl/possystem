@@ -4,6 +4,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 
+
 class Category(models.Model):
     name = models.CharField(max_length=100)
 
@@ -235,6 +236,8 @@ class ProjectExpense(models.Model):
         ("service", "Service"),
     ]
 
+    expense_no = models.CharField(max_length=20, unique=True, blank=True, null=True)
+
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="expenses")
     expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES, default="direct")
     expense_date = models.DateField(default=timezone.now)
@@ -255,15 +258,24 @@ class ProjectExpense(models.Model):
         ordering = ["-expense_date", "-id"]
 
     def __str__(self):
-        return f"{self.project.project_id} - {self.description}"
-
+        return self.expense_no or f"{self.project.project_id} - {self.description}"
 
 class ProjectPettyCash(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="petty_cash_received")
+
+    employee = models.ForeignKey(
+        "Employee",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="petty_cashes"
+    )
+
     petty_cash_no = models.CharField(max_length=50, unique=True)
     issue_date = models.DateField(default=timezone.now)
     amount_issued = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     note = models.TextField(blank=True, null=True)
+
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="petty_cash_created")
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -275,15 +287,16 @@ class ProjectPettyCash(models.Model):
 
     @property
     def total_spent(self):
-        total = self.expenses.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
-        return Decimal(total)
+        total = self.expenses.aggregate(total=models.Sum("amount"))["total"]
+        return Decimal(total or 0)
 
     @property
     def balance(self):
-        return Decimal(self.amount_issued) - Decimal(self.total_spent)
-
+        return Decimal(self.amount_issued or 0) - Decimal(self.total_spent or 0)
 
 class ProjectPettyCashExpense(models.Model):
+    expense_no = models.CharField(max_length=20, unique=True, blank=True, null=True)
+
     petty_cash = models.ForeignKey(ProjectPettyCash, on_delete=models.CASCADE, related_name="expenses")
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="petty_cash_expenses")
     expense_date = models.DateField(default=timezone.now)
@@ -304,8 +317,7 @@ class ProjectPettyCashExpense(models.Model):
         ordering = ["-expense_date", "-id"]
 
     def __str__(self):
-        return f"{self.petty_cash.petty_cash_no} - {self.description}"
-
+        return self.expense_no or f"{self.petty_cash.petty_cash_no} - {self.description}"
 
 class ProjectIncome(models.Model):
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="incomes")
@@ -323,3 +335,51 @@ class ProjectIncome(models.Model):
 
     def __str__(self):
         return f"{self.project.project_id} - {self.amount}"
+    
+class Employee(models.Model):
+    user = models.OneToOneField(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="employee_profile"
+    )
+    emp_no = models.CharField(max_length=20, unique=True, blank=True, null=True)
+    full_name = models.CharField(max_length=150)
+    designation = models.CharField(max_length=100, blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    tel = models.CharField(max_length=20, blank=True, null=True)
+    petty_cash_limit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["emp_no"]
+
+    def __str__(self):
+        return f"{self.emp_no} - {self.full_name}"
+
+    def save(self, *args, **kwargs):
+        if not self.emp_no:
+            last = Employee.objects.exclude(emp_no__isnull=True).order_by("-id").first()
+            if last and last.emp_no and last.emp_no.startswith("EMP"):
+                try:
+                    last_no = int(last.emp_no.replace("EMP", ""))
+                    self.emp_no = f"EMP{last_no + 1:06d}"
+                except ValueError:
+                    self.emp_no = "EMP000001"
+            else:
+                self.emp_no = "EMP000001"
+        super().save(*args, **kwargs)
+
+    @property
+    def petty_cash_outstanding(self):
+        issued = self.petty_cashes.aggregate(total=models.Sum("amount_issued"))["total"] or Decimal("0")
+        spent = ProjectPettyCashExpense.objects.filter(
+            petty_cash__employee=self
+        ).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+        return Decimal(issued) - Decimal(spent)
+
+    @property
+    def available_petty_cash_limit(self):
+        return Decimal(self.petty_cash_limit) - Decimal(self.petty_cash_outstanding)

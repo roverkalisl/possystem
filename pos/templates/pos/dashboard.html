@@ -109,6 +109,15 @@
             </div>
         </div>
         {% endif %}
+{% if show_employees %}
+<div class="col-md-4 mb-3">
+    <div class="card dashboard-card shadow-sm p-4 text-center"
+         onclick="window.location.href='{% url 'employee_list' %}'">
+        <h4>Employees</h4>
+        <p class="mb-0">Employee Details & Limits</p>
+    </div>
+</div>
+{% endif %}
 
         {% if show_users %}
         <div class="col-md-4 mb-3">

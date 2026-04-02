@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Project Expenses</title>
+    <title>Project Expense List</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
@@ -11,20 +11,28 @@
 </head>
 <body class="p-4">
 
+{% if messages %}
+    {% for message in messages %}
+        <script>
+            alert("{{ message|escapejs }}");
+        </script>
+    {% endfor %}
+{% endif %}
+
 <div class="container-fluid">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>💸 Project Expenses</h3>
+        <h4>Project Expense List</h4>
         <div>
             <a href="{% url 'add_project_expense' %}" class="btn btn-success btn-sm">+ Add Expense</a>
-            <a href="{% url 'project_list' %}" class="btn btn-secondary btn-sm">Projects</a>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
         </div>
     </div>
 
     <div class="card shadow-sm p-3 mb-3">
         <form method="GET">
             <div class="row">
-                <div class="col-md-10 mb-2">
+                <div class="col-md-10">
                     <select name="project" class="form-select">
                         <option value="">All Projects</option>
                         {% for p in projects %}
@@ -46,39 +54,57 @@
             <table class="table table-bordered table-striped bg-white">
                 <thead class="table-dark">
                     <tr>
+                        <th>Expense No</th>
                         <th>Date</th>
                         <th>Project</th>
                         <th>Description</th>
-                        <th>GL</th>
+                        <th>Type</th>
                         <th>Item</th>
+                        <th>GL</th>
                         <th>Qty</th>
                         <th>Unit Price</th>
                         <th>Amount</th>
                         <th>User</th>
+                        {% if is_owner %}
+                        <th>Action</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
-                    {% for e in expenses %}
+                    {% for expense in expenses %}
                     <tr>
-                        <td>{{ e.expense_date }}</td>
-                        <td>{{ e.project.project_id }}</td>
-                        <td>{{ e.description }}</td>
+                        <td>{{ expense.expense_no|default:"-" }}</td>
+                        <td>{{ expense.expense_date }}</td>
+                        <td>{{ expense.project.project_id }} - {{ expense.project.project_name }}</td>
+                        <td>{{ expense.description }}</td>
+                        <td>{{ expense.get_expense_type_display }}</td>
+                        <td>{% if expense.item %}{{ expense.item.name }}{% else %}-{% endif %}</td>
                         <td>
-                            {% if e.gl_account %}
-                                {{ e.gl_account.gl_code }} - {{ e.gl_account.gl_name }}
+                            {% if expense.gl_account %}
+                                {{ expense.gl_account.gl_code }} - {{ expense.gl_account.gl_name }}
                             {% else %}
                                 -
                             {% endif %}
                         </td>
-                        <td>{{ e.item.name|default:"-" }}</td>
-                        <td>{{ e.qty }}</td>
-                        <td>{{ e.unit_price }}</td>
-                        <td>{{ e.amount }}</td>
-                        <td>{{ e.created_by.username|default:"-" }}</td>
+                        <td>{{ expense.qty }}</td>
+                        <td>{{ expense.unit_price }}</td>
+                        <td>{{ expense.amount }}</td>
+                        <td>{{ expense.created_by.username|default:"-" }}</td>
+                        {% if is_owner %}
+                        <td>
+                            <a href="{% url 'delete_project_expense' expense.id %}"
+                               class="btn btn-danger btn-sm"
+                               onclick="return confirm('Delete this expense?')">
+                               Delete
+                            </a>
+                        </td>
+                        {% endif %}
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="9" class="text-center">No expenses found</td>
+                        <td colspan="{% if is_owner %}12{% else %}11{% endif %}" class="text-center">
+                            No expense records found
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

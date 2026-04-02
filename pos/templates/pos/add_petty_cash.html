@@ -11,34 +11,34 @@
 </head>
 <body class="p-4">
 
+{% if messages %}
+    {% for message in messages %}
+        <script>
+            alert("{{ message|escapejs }}");
+        </script>
+    {% endfor %}
+{% endif %}
+
 <div class="container">
     <div class="card shadow-sm p-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3>Add Project Petty Cash</h3>
+            <h3>Add Petty Cash</h3>
             <div>
                 <a href="{% url 'petty_cash_list' %}" class="btn btn-info btn-sm">Petty Cash List</a>
                 <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
             </div>
         </div>
 
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}success{% endif %}">
-                    {{ message }}
-                </div>
-            {% endfor %}
-        {% endif %}
-
         <form method="POST">
             {% csrf_token %}
 
             <div class="mb-3">
-                <label class="form-label">User</label>
-                <select name="user" class="form-select" required>
-                    <option value="">Select User</option>
-                    {% for u in users %}
-                        <option value="{{ u.id }}">
-                            {% if u.get_full_name %}{{ u.get_full_name }}{% else %}{{ u.username }}{% endif %}
+                <label class="form-label">Employee</label>
+                <select name="employee" class="form-select" required>
+                    <option value="">Select Employee</option>
+                    {% for e in employees %}
+                        <option value="{{ e.id }}">
+                            {{ e.emp_no }} - {{ e.full_name }} | Limit: {{ e.petty_cash_limit }} | Available: {{ e.available_petty_cash_limit }}
                         </option>
                     {% endfor %}
                 </select>
