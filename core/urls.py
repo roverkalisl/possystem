@@ -53,4 +53,12 @@ urlpatterns = [
     path('employees/add/', views.add_employee, name='add_employee'),
     path('employees/edit/<int:employee_id>/', views.edit_employee, name='edit_employee'),
     path('petty-cash/delete/<int:petty_cash_id>/', views.delete_petty_cash, name='delete_petty_cash'),
+    path('project-invoices/', views.project_invoice_list, name='project_invoice_list'),
+    path('project-invoices/add/', views.add_project_invoice, name='add_project_invoice'),
+    path('project-invoices/<int:invoice_id>/', views.project_invoice_detail, name='project_invoice_detail'),
+    path('project-invoices/<int:invoice_id>/add-payment/', views.add_project_invoice_payment, name='add_project_invoice_payment'),
+    path('project-invoice-payment/delete/<int:payment_id>/', views.delete_project_invoice_payment, name='delete_project_invoice_payment'),
+    path('project-invoices/delete/<int:invoice_id>/', views.delete_project_invoice, name='delete_project_invoice'),
+    path('project-invoices/<int:invoice_id>/print/', views.print_project_invoice, name='print_project_invoice'),
+    path('project-invoices/<int:invoice_id>/print/', views.print_project_invoice, name='print_project_invoice'),
 ]

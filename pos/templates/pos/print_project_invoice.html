@@ -1,0 +1,292 @@
+{% load static %}
+{% load currency_filters %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Print Invoice</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            font-size: 13px;
+            color: #000;
+            margin: 0;
+            padding: 20px;
+            background: #fff;
+        }
+
+        .invoice-box {
+            max-width: 900px;
+            margin: auto;
+            padding: 20px;
+            border: 1px solid #ddd;
+        }
+
+        .top-section {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #000;
+            padding-bottom: 15px;
+            margin-bottom: 20px;
+        }
+
+        .company {
+            width: 55%;
+        }
+
+        .company img {
+            max-width: 120px;
+            margin-bottom: 10px;
+        }
+
+        .company h2 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .company p {
+            margin: 3px 0;
+        }
+
+        .invoice-title {
+            width: 40%;
+            text-align: right;
+        }
+
+        .invoice-title h1 {
+            margin: 0;
+            font-size: 32px;
+        }
+
+        .info-table {
+            width: 100%;
+            margin-bottom: 20px;
+            border-collapse: collapse;
+        }
+
+        .info-table td {
+            vertical-align: top;
+            padding: 6px 4px;
+        }
+
+        .main-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        .main-table th,
+        .main-table td {
+            border: 1px solid #000;
+            padding: 8px;
+            text-align: left;
+        }
+
+        .main-table th {
+            background: #f2f2f2;
+        }
+
+        .text-end {
+            text-align: right;
+        }
+
+        .summary {
+            width: 350px;
+            margin-left: auto;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+
+        .summary td {
+            padding: 8px;
+            border: 1px solid #000;
+        }
+
+        .summary .label {
+            font-weight: bold;
+            width: 55%;
+        }
+
+        .notes {
+            margin-top: 25px;
+        }
+
+        .notes h4 {
+            margin-bottom: 8px;
+        }
+
+        .signature {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .signature-box {
+            width: 260px;
+            text-align: center;
+        }
+
+        .signature-line {
+            border-top: 1px solid #000;
+            margin-top: 40px;
+            padding-top: 5px;
+        }
+
+        .print-btn {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .print-btn button {
+            padding: 10px 18px;
+            border: none;
+            background: #000;
+            color: #fff;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        @media print {
+            .print-btn {
+                display: none;
+            }
+
+            body {
+                padding: 0;
+            }
+
+            .invoice-box {
+                border: none;
+                max-width: 100%;
+                padding: 0;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="print-btn">
+    <button onclick="window.print()">Print Invoice</button>
+</div>
+
+<div class="invoice-box">
+
+    <div class="top-section">
+        <div class="company">
+            <img src="{% static 'logo.png' %}" alt="Logo">
+            <h2>P&I Constructions</h2>
+            <p>Matara Road, Magalla, Galle</p>
+            <p>Tel: 077 361 3005 / 091 222 4090</p>
+        </div>
+
+        <div class="invoice-title">
+            <h1>INVOICE</h1>
+            <p><strong>Invoice No:</strong> {{ invoice.invoice_no }}</p>
+            <p><strong>Date:</strong> {{ invoice.invoice_date|date:"Y-m-d" }}</p>
+        </div>
+    </div>
+
+    <table class="info-table">
+        <tr>
+            <td width="50%">
+                <strong>Bill To</strong><br>
+                {{ invoice.bill_to_name|default:"-" }}<br>
+                {{ invoice.bill_to_address|linebreaksbr }}
+            </td>
+            <td width="50%" class="text-end">
+                <strong>Project:</strong> {{ invoice.project.project_id }} - {{ invoice.project.project_name }}<br>
+                <strong>Type:</strong> {{ invoice.get_invoice_type_display }}<br>
+                {% if invoice.project.location %}
+                <strong>Location:</strong> {{ invoice.project.location }}
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+
+    <table class="main-table">
+        <thead>
+            <tr>
+                <th style="width: 8%;">No</th>
+                <th style="width: 12%;">Qty</th>
+                <th style="width: 15%;">Item Code</th>
+                <th>Description</th>
+                <th style="width: 18%;" class="text-end">Price Each</th>
+                <th style="width: 18%;" class="text-end">Amount</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>1</td>
+                <td>{{ invoice.qty }}</td>
+                <td>{{ invoice.item_code|default:"-" }}</td>
+                <td>{{ invoice.description }}</td>
+                <td class="text-end">LKR {{ invoice.price_each|money }}</td>
+                <td class="text-end">LKR {{ invoice.total_amount|money }}</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <table class="summary">
+        <tr>
+            <td class="label">Total</td>
+            <td class="text-end">LKR {{ invoice.total_amount|money }}</td>
+        </tr>
+        <tr>
+            <td class="label">Payments / Credits</td>
+            <td class="text-end">LKR {{ invoice.paid_amount|money }}</td>
+        </tr>
+        <tr>
+            <td class="label">Balance Due</td>
+            <td class="text-end">LKR {{ invoice.balance_amount|money }}</td>
+        </tr>
+        <tr>
+            <td class="label">Status</td>
+            <td class="text-end">{{ invoice.get_status_display }}</td>
+        </tr>
+    </table>
+
+    {% if payments %}
+    <div class="notes">
+        <h4>Payments Received</h4>
+        <table class="main-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Note</th>
+                    <th class="text-end">Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in payments %}
+                <tr>
+                    <td>{{ p.payment_date|date:"Y-m-d" }}</td>
+                    <td>{{ p.get_payment_type_display }}</td>
+                    <td>{{ p.note|default:"-" }}</td>
+                    <td class="text-end">LKR {{ p.amount|money }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <div class="notes">
+        <h4>Special Notes</h4>
+        <p>{{ invoice.note|default:"AT YOUR SERVICE EVERY TIME" }}</p>
+    </div>
+
+    <div class="signature">
+        <div class="signature-box">
+            <div class="signature-line">Authorized Signature</div>
+        </div>
+        <div class="signature-box">
+            <div class="signature-line">Date</div>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>

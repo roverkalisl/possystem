@@ -89,6 +89,13 @@
             </div>
         </div>
         {% endif %}
+<div class="col-md-4 mb-3">
+    <div class="card dashboard-card shadow-sm p-4 text-center"
+         onclick="window.location.href='{% url 'project_invoice_list' %}'">
+        <h4>Project Income</h4>
+        <p class="mb-0">Invoices & Payments</p>
+    </div>
+</div>
 
         {% if show_project %}
         <div class="col-md-4 mb-3">

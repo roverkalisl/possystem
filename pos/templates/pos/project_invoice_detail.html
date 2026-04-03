@@ -1,0 +1,132 @@
+{% load currency_filters %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Project Invoice Detail</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f4f6f9; }
+        .card { border-radius: 12px; }
+    </style>
+</head>
+<body class="p-4">
+
+{% if messages %}
+    {% for message in messages %}
+        <script>alert("{{ message|escapejs }}");</script>
+    {% endfor %}
+{% endif %}
+
+<div class="container-fluid">
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h3>{{ invoice.invoice_no }}</h3>
+        <div>
+            <a href="{% url 'add_project_invoice_payment' invoice.id %}" class="btn btn-success btn-sm">+ Add Payment</a>
+            <a href="{% url 'project_invoice_list' %}" class="btn btn-secondary btn-sm">Back</a>
+		<a href="{% url 'print_project_invoice' invoice.id %}" class="btn btn-dark btn-sm" target="_blank">Print Invoice</a>
+        </div>
+    </div>
+
+    <div class="card shadow-sm p-3 mb-3">
+        <div class="row">
+            <div class="col-md-3">
+                <strong>Project:</strong><br>
+                {{ invoice.project.project_id }} - {{ invoice.project.project_name }}
+            </div>
+            <div class="col-md-2">
+                <strong>Date:</strong><br>
+                {{ invoice.invoice_date|date:"Y-m-d" }}
+            </div>
+            <div class="col-md-2">
+                <strong>Type:</strong><br>
+                {{ invoice.get_invoice_type_display }}
+            </div>
+            <div class="col-md-2">
+                <strong>Total:</strong><br>
+                Rs. {{ invoice.total_amount|money }}
+            </div>
+            <div class="col-md-1">
+                <strong>Paid:</strong><br>
+                Rs. {{ invoice.paid_amount|money }}
+            </div>
+            <div class="col-md-2">
+                <strong>Balance:</strong><br>
+                Rs. {{ invoice.balance_amount|money }}
+            </div>
+        </div>
+
+        <div class="mt-3">
+            <strong>Bill To:</strong><br>
+            {{ invoice.bill_to_name|default:"-" }}<br>
+            {{ invoice.bill_to_address|linebreaksbr }}
+        </div>
+
+        <div class="mt-2">
+            <strong>Description:</strong> {{ invoice.description }}
+        </div>
+
+        <div class="mt-2">
+            <strong>Status:</strong>
+            {% if invoice.status == "paid" %}
+                <span class="badge bg-success">Paid</span>
+            {% elif invoice.status == "partial" %}
+                <span class="badge bg-warning text-dark">Partial</span>
+            {% else %}
+                <span class="badge bg-danger">Unpaid</span>
+            {% endif %}
+        </div>
+
+        <div class="mt-2">
+            <strong>Note:</strong> {{ invoice.note|default:"-" }}
+        </div>
+    </div>
+
+    <div class="card shadow-sm p-3">
+        <h5 class="mb-3">Payments</h5>
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped bg-white">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Amount</th>
+                        <th>Note</th>
+                        <th>User</th>
+                        {% if is_owner %}
+                        <th>Action</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in payments %}
+                    <tr>
+                        <td>{{ p.payment_date|date:"Y-m-d" }}</td>
+                        <td>{{ p.get_payment_type_display }}</td>
+                        <td>Rs. {{ p.amount|money }}</td>
+                        <td>{{ p.note|default:"-" }}</td>
+                        <td>{{ p.created_by.username|default:"-" }}</td>
+                        {% if is_owner %}
+                        <td>
+                            <a href="{% url 'delete_project_invoice_payment' p.id %}"
+                               class="btn btn-danger btn-sm"
+                               onclick="return confirm('Delete this payment?')">
+                               Delete
+                            </a>
+                        </td>
+                        {% endif %}
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="{% if is_owner %}6{% else %}5{% endif %}" class="text-center">No payments found</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+</body>
+</html>

@@ -384,3 +384,104 @@ class Employee(models.Model):
     @property
     def available_petty_cash_limit(self):
         return Decimal(self.petty_cash_limit) - Decimal(self.petty_cash_outstanding)
+class ProjectInvoice(models.Model):
+    INVOICE_TYPE_CHOICES = [
+        ("advance", "Advance"),
+        ("installment", "Installment"),
+        ("final", "Final Payment"),
+        ("other", "Other"),
+    ]
+
+    STATUS_CHOICES = [
+        ("unpaid", "Unpaid"),
+        ("partial", "Partial"),
+        ("paid", "Paid"),
+    ]
+
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="project_invoices")
+
+    invoice_no = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    invoice_date = models.DateField(default=timezone.now)
+
+    bill_to_name = models.CharField(max_length=200, blank=True, null=True)
+    bill_to_address = models.TextField(blank=True, null=True)
+
+    invoice_type = models.CharField(max_length=20, choices=INVOICE_TYPE_CHOICES, default="advance")
+    description = models.CharField(max_length=255)
+
+    qty = models.DecimalField(max_digits=12, decimal_places=2, default=1)
+    item_code = models.CharField(max_length=50, blank=True, null=True)
+    price_each = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    paid_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    balance_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="unpaid")
+
+    note = models.TextField(blank=True, null=True)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-invoice_date", "-id"]
+
+    def __str__(self):
+        return self.invoice_no or f"{self.project.project_id} - {self.description}"
+
+    def save(self, *args, **kwargs):
+        if not self.invoice_no:
+            last = ProjectInvoice.objects.exclude(invoice_no__isnull=True).order_by("-id").first()
+            if last and last.invoice_no and str(last.invoice_no).replace("PINV", "").isdigit():
+                next_no = int(str(last.invoice_no).replace("PINV", "")) + 1
+                self.invoice_no = f"PINV{next_no:06d}"
+            else:
+                self.invoice_no = "PINV000001"
+
+        if not self.total_amount or self.total_amount == 0:
+            self.total_amount = Decimal(self.qty or 0) * Decimal(self.price_each or 0)
+
+        paid_total = self.payments.aggregate(total=models.Sum("amount"))["total"] if self.pk else Decimal("0")
+        paid_total = Decimal(paid_total or 0)
+
+        self.paid_amount = paid_total
+        self.balance_amount = Decimal(self.total_amount or 0) - paid_total
+
+        if paid_total <= 0:
+            self.status = "unpaid"
+        elif paid_total < Decimal(self.total_amount or 0):
+            self.status = "partial"
+        else:
+            self.status = "paid"
+            self.balance_amount = Decimal("0")
+
+        super().save(*args, **kwargs)
+
+
+class ProjectInvoicePayment(models.Model):
+    PAYMENT_TYPE_CHOICES = [
+        ("advance", "Advance"),
+        ("installment", "Installment"),
+        ("final", "Final Payment"),
+        ("other", "Other"),
+    ]
+
+    invoice = models.ForeignKey(ProjectInvoice, on_delete=models.CASCADE, related_name="payments")
+    payment_date = models.DateField(default=timezone.now)
+    payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES, default="advance")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    note = models.TextField(blank=True, null=True)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-payment_date", "-id"]
+
+    def __str__(self):
+        return f"{self.invoice.invoice_no} - {self.amount}"
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        self.invoice.save()
+    

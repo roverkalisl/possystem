@@ -10,7 +10,7 @@ from django.db.models import Q, Sum, F
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
-
+from .models import ProjectInvoice, ProjectInvoicePayment
 from .models import (
     Item, Category, Supplier, GLMaster,
     Sale, SaleItem, SalesReturn, StockTransaction,
@@ -51,6 +51,9 @@ def can_add_expenses(user):
 
 
 def can_use_pos(user):
+    return is_owner(user) or is_cashier(user)
+
+def can_use_income(user):
     return is_owner(user) or is_cashier(user)
 
 
@@ -1092,3 +1095,158 @@ def delete_petty_cash(request, petty_cash_id):
     petty_cash.delete()
     messages.success(request, "Petty cash deleted successfully.")
     return redirect("petty_cash_list")
+
+@user_passes_test(can_use_income)
+def project_invoice_list(request):
+    invoices = ProjectInvoice.objects.select_related(
+        "project", "created_by"
+    ).order_by("-invoice_date", "-id")
+
+    project_id = request.GET.get("project")
+    if project_id:
+        invoices = invoices.filter(project_id=project_id)
+
+    projects = Project.objects.all().order_by("-id")
+
+    return render(request, "pos/project_invoice_list.html", {
+        "invoices": invoices,
+        "projects": projects,
+        "selected_project": project_id,
+    })
+@user_passes_test(can_use_income)
+def add_project_invoice(request):
+    projects = Project.objects.all().order_by("-id")
+
+    if request.method == "POST":
+        project_id = request.POST.get("project")
+        invoice_date = request.POST.get("invoice_date") or timezone.now().date()
+        bill_to_name = (request.POST.get("bill_to_name") or "").strip()
+        bill_to_address = (request.POST.get("bill_to_address") or "").strip()
+        invoice_type = request.POST.get("invoice_type") or "advance"
+        description = (request.POST.get("description") or "").strip()
+        qty = to_decimal(request.POST.get("qty") or 1)
+        item_code = (request.POST.get("item_code") or "").strip()
+        price_each = to_decimal(request.POST.get("price_each") or 0)
+        note = (request.POST.get("note") or "").strip()
+
+        if not project_id:
+            messages.error(request, "Project is required.")
+            return render(request, "pos/add_project_invoice.html", {
+                "projects": projects,
+            })
+
+        if not description:
+            messages.error(request, "Description is required.")
+            return render(request, "pos/add_project_invoice.html", {
+                "projects": projects,
+            })
+
+        total_amount = qty * price_each
+
+        invoice = ProjectInvoice.objects.create(
+            project_id=project_id,
+            invoice_date=invoice_date,
+            bill_to_name=bill_to_name,
+            bill_to_address=bill_to_address,
+            invoice_type=invoice_type,
+            description=description,
+            qty=qty,
+            item_code=item_code,
+            price_each=price_each,
+            total_amount=total_amount,
+            note=note,
+            created_by=request.user,
+        )
+
+        invoice.save()
+
+        messages.success(request, f"Invoice created successfully. Invoice No: {invoice.invoice_no}")
+        return redirect("project_invoice_detail", invoice_id=invoice.id)
+
+    return render(request, "pos/add_project_invoice.html", {
+        "projects": projects,
+    })
+
+@user_passes_test(can_use_income)
+def project_invoice_detail(request, invoice_id):
+    invoice = get_object_or_404(
+        ProjectInvoice.objects.select_related("project", "created_by"),
+        id=invoice_id
+    )
+
+    payments = invoice.payments.select_related("created_by").order_by("-payment_date", "-id")
+
+    return render(request, "pos/project_invoice_detail.html", {
+        "invoice": invoice,
+        "payments": payments,
+        "is_owner": is_owner(request.user),
+    })
+
+@user_passes_test(can_use_income)
+def add_project_invoice_payment(request, invoice_id):
+    invoice = get_object_or_404(ProjectInvoice, id=invoice_id)
+
+    if request.method == "POST":
+        payment_date = request.POST.get("payment_date") or timezone.now().date()
+        payment_type = request.POST.get("payment_type") or "advance"
+        amount = to_decimal(request.POST.get("amount"))
+        note = (request.POST.get("note") or "").strip()
+
+        if amount <= 0:
+            messages.error(request, "Amount must be greater than 0.")
+            return render(request, "pos/add_project_invoice_payment.html", {
+                "invoice": invoice,
+            })
+
+        if amount > invoice.balance_amount:
+            messages.error(request, "Payment exceeds invoice balance.")
+            return render(request, "pos/add_project_invoice_payment.html", {
+                "invoice": invoice,
+            })
+
+        ProjectInvoicePayment.objects.create(
+            invoice=invoice,
+            payment_date=payment_date,
+            payment_type=payment_type,
+            amount=amount,
+            note=note,
+            created_by=request.user,
+        )
+
+        invoice.save()
+
+        messages.success(request, "Payment added successfully.")
+        return redirect("project_invoice_detail", invoice_id=invoice.id)
+
+    return render(request, "pos/add_project_invoice_payment.html", {
+        "invoice": invoice,
+    })
+
+@user_passes_test(is_owner)
+def delete_project_invoice_payment(request, payment_id):
+    payment = get_object_or_404(ProjectInvoicePayment, id=payment_id)
+    invoice_id = payment.invoice.id
+    payment.delete()
+    payment.invoice.save()
+    messages.success(request, "Invoice payment deleted successfully.")
+    return redirect("project_invoice_detail", invoice_id=invoice_id)
+
+@user_passes_test(is_owner)
+def delete_project_invoice(request, invoice_id):
+    invoice = get_object_or_404(ProjectInvoice, id=invoice_id)
+    invoice.delete()
+    messages.success(request, "Project invoice deleted successfully.")
+    return redirect("project_invoice_list")
+
+@user_passes_test(can_use_income)
+def print_project_invoice(request, invoice_id):
+    invoice = get_object_or_404(
+        ProjectInvoice.objects.select_related("project", "created_by"),
+        id=invoice_id
+    )
+    payments = invoice.payments.select_related("created_by").order_by("-payment_date", "-id")
+
+    return render(request, "pos/print_project_invoice.html", {
+        "invoice": invoice,
+        "payments": payments,
+    })
