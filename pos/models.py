@@ -192,6 +192,7 @@ class Project(models.Model):
     PROJECT_TYPE_CHOICES = [
         ("BL", "Building"),
         ("SW", "Swimming Pool"),
+        ("RS", "Retail Shop"),
     ]
 
     project_id = models.CharField(max_length=50, unique=True)
