@@ -32,10 +32,12 @@
 
             <div class="mb-3">
                 <label class="form-label">Project</label>
-                <select name="project" class="form-select" required>
+                <select name="project" id="project_select" class="form-select" required>
                     <option value="">Select Project</option>
                     {% for p in projects %}
-                        <option value="{{ p.id }}">
+                        <option value="{{ p.id }}"
+                                data-client="{{ p.client_name|default:'' }}"
+                                data-location="{{ p.location|default:'' }}">
                             {{ p.project_id }} - {{ p.project_name }}{% if p.location %} | {{ p.location }}{% endif %}
                         </option>
                     {% endfor %}
@@ -49,12 +51,12 @@
 
             <div class="mb-3">
                 <label class="form-label">Bill To Name</label>
-                <input type="text" name="bill_to_name" class="form-control">
+                <input type="text" name="bill_to_name" id="bill_to_name" class="form-control">
             </div>
 
             <div class="mb-3">
                 <label class="form-label">Bill To Address</label>
-                <textarea name="bill_to_address" class="form-control" rows="3"></textarea>
+                <textarea name="bill_to_address" id="bill_to_address" class="form-control" rows="3"></textarea>
             </div>
 
             <div class="mb-3">
@@ -73,15 +75,11 @@
             </div>
 
             <div class="row">
-                <div class="col-md-4 mb-3">
+                <div class="col-md-6 mb-3">
                     <label class="form-label">Qty</label>
                     <input type="number" step="0.01" name="qty" id="qty" class="form-control" value="1" oninput="calcTotal()">
                 </div>
-                <div class="col-md-4 mb-3">
-                    <label class="form-label">Item Code</label>
-                    <input type="text" name="item_code" class="form-control">
-                </div>
-                <div class="col-md-4 mb-3">
+                <div class="col-md-6 mb-3">
                     <label class="form-label">Price Each</label>
                     <input type="number" step="0.01" name="price_each" id="price_each" class="form-control" value="0" oninput="calcTotal()">
                 </div>
@@ -108,6 +106,13 @@ function calcTotal() {
     let price = parseFloat(document.getElementById("price_each").value || 0);
     document.getElementById("total_amount").value = (qty * price).toFixed(2);
 }
+
+document.getElementById("project_select").addEventListener("change", function() {
+    let selected = this.options[this.selectedIndex];
+    document.getElementById("bill_to_name").value = selected.getAttribute("data-client") || "";
+    document.getElementById("bill_to_address").value = selected.getAttribute("data-location") || "";
+});
+
 calcTotal();
 </script>
 

@@ -1125,7 +1125,6 @@ def add_project_invoice(request):
         invoice_type = request.POST.get("invoice_type") or "advance"
         description = (request.POST.get("description") or "").strip()
         qty = to_decimal(request.POST.get("qty") or 1)
-        item_code = (request.POST.get("item_code") or "").strip()
         price_each = to_decimal(request.POST.get("price_each") or 0)
         note = (request.POST.get("note") or "").strip()
 
@@ -1151,7 +1150,6 @@ def add_project_invoice(request):
             invoice_type=invoice_type,
             description=description,
             qty=qty,
-            item_code=item_code,
             price_each=price_each,
             total_amount=total_amount,
             note=note,
@@ -1166,7 +1164,6 @@ def add_project_invoice(request):
     return render(request, "pos/add_project_invoice.html", {
         "projects": projects,
     })
-
 @user_passes_test(can_use_income)
 def project_invoice_detail(request, invoice_id):
     invoice = get_object_or_404(
