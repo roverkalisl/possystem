@@ -1159,11 +1159,12 @@ def add_project_invoice(request):
         invoice.save()
 
         messages.success(request, f"Invoice created successfully. Invoice No: {invoice.invoice_no}")
-        return redirect("project_invoice_detail", invoice_id=invoice.id)
+        return redirect("print_project_invoice", invoice_id=invoice.id)
 
     return render(request, "pos/add_project_invoice.html", {
         "projects": projects,
     })
+
 @user_passes_test(can_use_income)
 def project_invoice_detail(request, invoice_id):
     invoice = get_object_or_404(
@@ -1201,7 +1202,7 @@ def add_project_invoice_payment(request, invoice_id):
                 "invoice": invoice,
             })
 
-        ProjectInvoicePayment.objects.create(
+        payment = ProjectInvoicePayment.objects.create(
             invoice=invoice,
             payment_date=payment_date,
             payment_type=payment_type,
@@ -1213,7 +1214,7 @@ def add_project_invoice_payment(request, invoice_id):
         invoice.save()
 
         messages.success(request, "Payment added successfully.")
-        return redirect("project_invoice_detail", invoice_id=invoice.id)
+        return redirect("print_project_payment_receipt", payment_id=payment.id)
 
     return render(request, "pos/add_project_invoice_payment.html", {
         "invoice": invoice,
@@ -1246,4 +1247,16 @@ def print_project_invoice(request, invoice_id):
     return render(request, "pos/print_project_invoice.html", {
         "invoice": invoice,
         "payments": payments,
+    })
+
+@user_passes_test(can_use_income)
+def print_project_payment_receipt(request, payment_id):
+    payment = get_object_or_404(
+        ProjectInvoicePayment.objects.select_related("invoice", "invoice__project", "created_by"),
+        id=payment_id
+    )
+
+    return render(request, "pos/print_project_payment_receipt.html", {
+        "payment": payment,
+        "invoice": payment.invoice,
     })

@@ -467,6 +467,7 @@ class ProjectInvoicePayment(models.Model):
     ]
 
     invoice = models.ForeignKey(ProjectInvoice, on_delete=models.CASCADE, related_name="payments")
+    receipt_no = models.CharField(max_length=50, unique=True, blank=True, null=True)
     payment_date = models.DateField(default=timezone.now)
     payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES, default="advance")
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -479,9 +480,16 @@ class ProjectInvoicePayment(models.Model):
         ordering = ["-payment_date", "-id"]
 
     def __str__(self):
-        return f"{self.invoice.invoice_no} - {self.amount}"
+        return self.receipt_no or f"{self.invoice.invoice_no} - {self.amount}"
 
     def save(self, *args, **kwargs):
+        if not self.receipt_no:
+            last = ProjectInvoicePayment.objects.exclude(receipt_no__isnull=True).order_by("-id").first()
+            if last and last.receipt_no and str(last.receipt_no).replace("PREC", "").isdigit():
+                next_no = int(str(last.receipt_no).replace("PREC", "")) + 1
+                self.receipt_no = f"PREC{next_no:06d}"
+            else:
+                self.receipt_no = "PREC000001"
+
         super().save(*args, **kwargs)
         self.invoice.save()
-    

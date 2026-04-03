@@ -61,4 +61,6 @@ urlpatterns = [
     path('project-invoices/delete/<int:invoice_id>/', views.delete_project_invoice, name='delete_project_invoice'),
     path('project-invoices/<int:invoice_id>/print/', views.print_project_invoice, name='print_project_invoice'),
     path('project-invoices/<int:invoice_id>/print/', views.print_project_invoice, name='print_project_invoice'),
+    path('project-invoices/<int:invoice_id>/print/', views.print_project_invoice, name='print_project_invoice'),
+path('project-invoice-payments/<int:payment_id>/print/', views.print_project_payment_receipt, name='print_project_payment_receipt'),
 ]
