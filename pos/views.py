@@ -45,6 +45,9 @@ def is_clerk(user):
 
 def is_cashier(user):
     return user.groups.filter(name__iexact="Cashier").exists()
+# ✅ NEW
+def can_add_expenses(user):
+    return is_owner(user) or is_cashier(user)
 
 
 def can_use_pos(user):
@@ -667,7 +670,7 @@ def project_expense_list(request):
     })
 
 
-@user_passes_test(can_use_project)
+@user_passes_test(can_add_expenses)
 def add_project_expense(request):
     projects = Project.objects.all().order_by("-id")
     expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
@@ -824,7 +827,7 @@ def petty_cash_detail(request, petty_cash_id):
         "is_owner": is_owner(request.user),
     })
 
-@user_passes_test(can_use_project)
+@user_passes_test(can_add_expenses)
 def add_petty_cash_expense(request, petty_cash_id):
     petty_cash = get_object_or_404(ProjectPettyCash, id=petty_cash_id)
     projects = Project.objects.all().order_by("-id")
