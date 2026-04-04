@@ -47,13 +47,13 @@
            <div class="mb-3">
     <label class="form-label">Project</label>
     <select name="project" class="form-select" required>
-        <option value="">Select Project</option>
-        {% for p in projects %}
-            <option value="{{ p.id }}">
-                {{ p.project_id }} - {{ p.project_name }}{% if p.location %} | {{ p.location }}{% endif %}
-            </option>
-        {% endfor %}
-    </select>
+    <option value="">Select Project</option>
+    {% for p in projects %}
+        <option value="{{ p.id }}">
+            {{ p.project_id }} - {{ p.project_name }} - {{ p.client_name }}{% if p.location %} - {{ p.location }}{% endif %}
+        </option>
+    {% endfor %}
+</select>
 </div>>
 
             <div class="mb-3">

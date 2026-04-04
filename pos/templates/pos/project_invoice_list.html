@@ -31,14 +31,14 @@
         <form method="GET">
             <div class="row">
                 <div class="col-md-10">
-                    <select name="project" class="form-select">
-                        <option value="">All Projects</option>
-                        {% for p in projects %}
-                            <option value="{{ p.id }}" {% if selected_project == p.id|stringformat:"s" %}selected{% endif %}>
-                                {{ p.project_id }} - {{ p.project_name }}{% if p.location %} | {{ p.location }}{% endif %}
-                            </option>
-                        {% endfor %}
-                    </select>
+                    <select name="project" class="form-select" required>
+    <option value="">All Project</option>
+    {% for p in projects %}
+        <option value="{{ p.id }}">
+            {{ p.project_id }} - {{ p.project_name }} - {{ p.client_name }}{% if p.location %} - {{ p.location }}{% endif %}
+        </option>
+    {% endfor %}
+</select>
                 </div>
                 <div class="col-md-2">
                     <button class="btn btn-primary w-100">Filter</button>
