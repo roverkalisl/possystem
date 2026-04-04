@@ -1066,18 +1066,29 @@ def project_profit_dashboard(request):
     project_rows = []
 
     for project in projects:
-        direct_expense = project.expenses.filter(is_active=True).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-        petty_cash_expense = ProjectPettyCashExpense.objects.filter(project=project, is_active=True).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-        total_income = project.incomes.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        direct_expense = project.expenses.filter(is_active=True).aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0")
+
+        petty_cash_expense = ProjectPettyCashExpense.objects.filter(
+            project=project,
+            is_active=True
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+        total_income = ProjectInvoicePayment.objects.filter(
+            invoice__project=project,
+            invoice__is_active=True,
+            is_active=True
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
         total_expense = Decimal(str(direct_expense)) + Decimal(str(petty_cash_expense))
         profit = Decimal(str(total_income)) - total_expense
 
         project_rows.append({
             "project": project,
-            "total_income": total_income,
-            "direct_expense": direct_expense,
-            "petty_cash_expense": petty_cash_expense,
+            "total_income": Decimal(str(total_income)),
+            "direct_expense": Decimal(str(direct_expense)),
+            "petty_cash_expense": Decimal(str(petty_cash_expense)),
             "total_expense": total_expense,
             "profit": profit,
         })
@@ -1096,7 +1107,6 @@ def project_profit_dashboard(request):
         "grand_total_expense": grand_total_expense,
         "grand_profit": grand_profit,
     })
-
 
 # =========================
 # EMPLOYEES
