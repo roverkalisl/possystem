@@ -1093,11 +1093,11 @@ def project_profit_dashboard(request):
             "profit": profit,
         })
 
-    grand_income = sum([row["total_income"] for row in project_rows], Decimal("0"))
-    grand_direct_expense = sum([row["direct_expense"] for row in project_rows], Decimal("0"))
-    grand_petty_cash = sum([row["petty_cash_expense"] for row in project_rows], Decimal("0"))
-    grand_total_expense = sum([row["total_expense"] for row in project_rows], Decimal("0"))
-    grand_profit = sum([row["profit"] for row in project_rows], Decimal("0"))
+    grand_income = sum((row["total_income"] for row in project_rows), Decimal("0"))
+    grand_direct_expense = sum((row["direct_expense"] for row in project_rows), Decimal("0"))
+    grand_petty_cash = sum((row["petty_cash_expense"] for row in project_rows), Decimal("0"))
+    grand_total_expense = sum((row["total_expense"] for row in project_rows), Decimal("0"))
+    grand_profit = sum((row["profit"] for row in project_rows), Decimal("0"))
 
     return render(request, "pos/project_profit_dashboard.html", {
         "project_rows": project_rows,
