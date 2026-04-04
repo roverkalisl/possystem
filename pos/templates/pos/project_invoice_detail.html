@@ -36,8 +36,8 @@
         </div>
 
         <div class="row mb-3">
-            <div class="col-md-3"><strong>Total:</strong> Rs. {{ invoice.total_amount|money }}</div>
-            <div class="col-md-3"><strong>Paid:</strong> Rs. {{ invoice.paid_amount|money }}</div>
+            <div class="col-md-3"><strong>Total Invoice Amount:</strong> Rs. {{ invoice.total_amount|money }}</div>
+            <div class="col-md-3"><strong>Total Payment Amount:</strong> Rs. {{ invoice.paid_amount|money }}</div>
             <div class="col-md-3"><strong>Balance:</strong> Rs. {{ invoice.balance_amount|money }}</div>
             <div class="col-md-3"><strong>Status:</strong> {{ invoice.get_status_display }}</div>
         </div>
