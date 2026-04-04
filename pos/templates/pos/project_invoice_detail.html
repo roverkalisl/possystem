@@ -12,13 +12,18 @@
     <div class="card shadow-sm p-3 p-md-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <h4>Project Invoice Detail</h4>
-            <div>
-                <a href="{% url 'project_invoice_list' %}" class="btn btn-secondary btn-sm">Back</a>
-                <a href="{% url 'print_project_invoice' invoice.id %}" class="btn btn-primary btn-sm">Print Invoice</a>
-                {% if invoice.is_active %}
-                <a href="{% url 'add_project_invoice_payment' invoice.id %}" class="btn btn-success btn-sm">Add Payment</a>
-                {% endif %}
-            </div>
+           <div>
+    <a href="{% url 'project_invoice_list' %}" class="btn btn-secondary btn-sm">Back</a>
+    <a href="{% url 'print_project_invoice' invoice.id %}" class="btn btn-primary btn-sm">Print Invoice</a>
+
+    {% if invoice.is_active %}
+        {% if invoice.status == "paid" %}
+            <button class="btn btn-success btn-sm" disabled title="This invoice is already fully paid">Fully Paid</button>
+        {% else %}
+            <a href="{% url 'add_project_invoice_payment' invoice.id %}" class="btn btn-success btn-sm">Add Payment</a>
+        {% endif %}
+    {% endif %}
+</div>
         </div>
 
         <div class="row mb-3">
