@@ -15,13 +15,9 @@
             <div>
                 <a href="{% url 'project_invoice_list' %}" class="btn btn-secondary btn-sm">Back</a>
                 <a href="{% url 'print_project_invoice' invoice.id %}" class="btn btn-primary btn-sm">Print Invoice</a>
-               {% if invoice.is_active %}
-    {% if invoice.status == "paid" %}
-        <button class="btn btn-success btn-sm" disabled title="This invoice has already been fully paid">Fully Paid</button>
-    {% else %}
-        <a href="{% url 'add_project_invoice_payment' invoice.id %}" class="btn btn-success btn-sm">Add Payment</a>
-    {% endif %}
-{% endif %}
+                {% if invoice.is_active %}
+                <a href="{% url 'add_project_invoice_payment' invoice.id %}" class="btn btn-success btn-sm">Add Payment</a>
+                {% endif %}
             </div>
         </div>
 

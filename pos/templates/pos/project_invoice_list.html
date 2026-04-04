@@ -48,7 +48,7 @@
         </form>
 
         <div class="table-responsive">
-            <table class="table table-bordered table-striped bg-white">
+            <table class="table table-bordered table-striped bg-white align-middle">
                 <thead class="table-dark">
                     <tr>
                         <th>Invoice No</th>
@@ -73,7 +73,15 @@
                         <td>Rs. {{ invoice.total_amount|money }}</td>
                         <td>Rs. {{ invoice.paid_amount|money }}</td>
                         <td>Rs. {{ invoice.balance_amount|money }}</td>
-                        <td>{{ invoice.get_status_display }}</td>
+                        <td>
+                            {% if invoice.status == "paid" %}
+                                <span class="badge bg-success">Paid</span>
+                            {% elif invoice.status == "partial" %}
+                                <span class="badge bg-warning text-dark">Partial</span>
+                            {% else %}
+                                <span class="badge bg-danger">Not Paid</span>
+                            {% endif %}
+                        </td>
                         <td>
                             {% if invoice.is_active %}
                                 <span class="badge bg-success">Active</span>
