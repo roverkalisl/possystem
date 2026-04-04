@@ -868,18 +868,9 @@ def add_petty_cash(request):
 
         employee = get_object_or_404(Employee, id=employee_id, is_active=True)
 
-        if amount_issued > employee.available_petty_cash_limit:
-            messages.error(
-                request,
-                f"Petty cash limit exceeded. Available limit: {employee.available_petty_cash_limit}"
-            )
-            return render(request, "pos/add_petty_cash.html", {
-                "employees": employees,
-            })
-
         petty_cash_no = f"PC{ProjectPettyCash.objects.count() + 1:05d}"
 
-        ProjectPettyCash.objects.create(
+        petty_cash = ProjectPettyCash.objects.create(
             employee=employee,
             user=employee.user if employee.user else request.user,
             petty_cash_no=petty_cash_no,
@@ -889,13 +880,24 @@ def add_petty_cash(request):
             created_by=request.user,
         )
 
-        messages.success(request, f"Petty Cash saved successfully. No: {petty_cash_no}")
+        employee.refresh_from_db()
+        new_outstanding = employee.petty_cash_outstanding
+
+        if Decimal(str(new_outstanding)) > Decimal(str(employee.petty_cash_limit or 0)):
+            messages.warning(
+                request,
+                f"Petty Cash saved successfully. No: {petty_cash.petty_cash_no} "
+                f"| Warning: Employee outstanding balance is over the limit. "
+                f"Limit: {employee.petty_cash_limit} | Outstanding: {new_outstanding}"
+            )
+        else:
+            messages.success(request, f"Petty Cash saved successfully. No: {petty_cash.petty_cash_no}")
+
         return redirect("petty_cash_list")
 
     return render(request, "pos/add_petty_cash.html", {
         "employees": employees,
     })
-
 
 @user_passes_test(can_use_project)
 def petty_cash_detail(request, petty_cash_id):
@@ -1430,29 +1432,6 @@ def edit_petty_cash(request, petty_cash_id):
 
         employee = get_object_or_404(Employee, id=employee_id, is_active=True)
 
-        spent_excluding_current = ProjectPettyCash.objects.filter(
-            employee=employee,
-            is_active=True
-        ).exclude(id=petty_cash.id).aggregate(total=Sum("amount_issued"))["total"] or Decimal("0")
-
-        expense_total_for_employee = ProjectPettyCashExpense.objects.filter(
-            petty_cash__employee=employee,
-            is_active=True
-        ).exclude(petty_cash_id=petty_cash.id).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-
-        outstanding_other = Decimal(spent_excluding_current) - Decimal(expense_total_for_employee or 0)
-        available_limit = Decimal(employee.petty_cash_limit) - Decimal(outstanding_other)
-
-        if amount_issued > available_limit:
-            messages.error(
-                request,
-                f"Petty cash limit exceeded. Available limit: {available_limit}"
-            )
-            return render(request, "pos/edit_petty_cash.html", {
-                "petty_cash": petty_cash,
-                "employees": employees,
-            })
-
         petty_cash.employee = employee
         petty_cash.user = employee.user if employee.user else petty_cash.user
         petty_cash.issue_date = issue_date
@@ -1460,14 +1439,25 @@ def edit_petty_cash(request, petty_cash_id):
         petty_cash.note = note
         petty_cash.save()
 
-        messages.success(request, "Petty cash updated successfully.")
+        employee.refresh_from_db()
+        new_outstanding = employee.petty_cash_outstanding
+
+        if Decimal(str(new_outstanding)) > Decimal(str(employee.petty_cash_limit or 0)):
+            messages.warning(
+                request,
+                f"Petty cash updated successfully. "
+                f"Warning: Employee outstanding balance is over the limit. "
+                f"Limit: {employee.petty_cash_limit} | Outstanding: {new_outstanding}"
+            )
+        else:
+            messages.success(request, "Petty cash updated successfully.")
+
         return redirect("petty_cash_list")
 
     return render(request, "pos/edit_petty_cash.html", {
         "petty_cash": petty_cash,
         "employees": employees,
     })
-
 
 @user_passes_test(is_owner)
 def edit_project_expense(request, expense_id):
