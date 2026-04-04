@@ -4,7 +4,6 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 
 
-
 class Category(models.Model):
     name = models.CharField(max_length=100)
 
@@ -91,6 +90,15 @@ class Item(models.Model):
     )
 
     created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_items"
+    )
 
     class Meta:
         ordering = ["name"]
@@ -207,6 +215,15 @@ class Project(models.Model):
 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    is_active = models.BooleanField(default=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="updated_projects"
+    )
 
     class Meta:
         ordering = ["-created_at"]
@@ -216,8 +233,8 @@ class Project(models.Model):
 
     @property
     def total_expense(self):
-        direct = self.expenses.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
-        petty = ProjectPettyCashExpense.objects.filter(project=self).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+        direct = self.expenses.filter(is_active=True).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+        petty = ProjectPettyCashExpense.objects.filter(project=self, is_active=True).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
         return Decimal(direct) + Decimal(petty)
 
     @property
@@ -255,88 +272,25 @@ class ProjectExpense(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    is_active = models.BooleanField(default=True)
+    inactive_at = models.DateTimeField(null=True, blank=True)
+    inactive_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inactive_project_expenses"
+    )
+    inactive_reason = models.TextField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
     class Meta:
         ordering = ["-expense_date", "-id"]
 
     def __str__(self):
         return self.expense_no or f"{self.project.project_id} - {self.description}"
 
-class ProjectPettyCash(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="petty_cash_received")
 
-    employee = models.ForeignKey(
-        "Employee",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="petty_cashes"
-    )
-
-    petty_cash_no = models.CharField(max_length=50, unique=True)
-    issue_date = models.DateField(default=timezone.now)
-    amount_issued = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    note = models.TextField(blank=True, null=True)
-
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="petty_cash_created")
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-issue_date", "-id"]
-
-    def __str__(self):
-        return self.petty_cash_no
-
-    @property
-    def total_spent(self):
-        total = self.expenses.aggregate(total=models.Sum("amount"))["total"]
-        return Decimal(total or 0)
-
-    @property
-    def balance(self):
-        return Decimal(self.amount_issued or 0) - Decimal(self.total_spent or 0)
-
-class ProjectPettyCashExpense(models.Model):
-    expense_no = models.CharField(max_length=20, unique=True, blank=True, null=True)
-
-    petty_cash = models.ForeignKey(ProjectPettyCash, on_delete=models.CASCADE, related_name="expenses")
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="petty_cash_expenses")
-    expense_date = models.DateField(default=timezone.now)
-    description = models.CharField(max_length=255)
-
-    gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True)
-
-    bill_no = models.CharField(max_length=100, blank=True, null=True)
-    bill_date = models.DateField(blank=True, null=True)
-
-    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    note = models.TextField(blank=True, null=True)
-
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-expense_date", "-id"]
-
-    def __str__(self):
-        return self.expense_no or f"{self.petty_cash.petty_cash_no} - {self.description}"
-
-class ProjectIncome(models.Model):
-    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="incomes")
-    income_date = models.DateField(default=timezone.now)
-    description = models.CharField(max_length=255)
-    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-
-    gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True)
-
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-income_date", "-id"]
-
-    def __str__(self):
-        return f"{self.project.project_id} - {self.amount}"
-    
 class Employee(models.Model):
     user = models.OneToOneField(
         User,
@@ -375,15 +329,121 @@ class Employee(models.Model):
 
     @property
     def petty_cash_outstanding(self):
-        issued = self.petty_cashes.aggregate(total=models.Sum("amount_issued"))["total"] or Decimal("0")
+        issued = self.petty_cashes.filter(is_active=True).aggregate(total=models.Sum("amount_issued"))["total"] or Decimal("0")
         spent = ProjectPettyCashExpense.objects.filter(
-            petty_cash__employee=self
+            petty_cash__employee=self,
+            is_active=True
         ).aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
         return Decimal(issued) - Decimal(spent)
 
     @property
     def available_petty_cash_limit(self):
         return Decimal(self.petty_cash_limit) - Decimal(self.petty_cash_outstanding)
+
+
+class ProjectPettyCash(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="petty_cash_received")
+
+    employee = models.ForeignKey(
+        "Employee",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="petty_cashes"
+    )
+
+    petty_cash_no = models.CharField(max_length=50, unique=True)
+    issue_date = models.DateField(default=timezone.now)
+    amount_issued = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    note = models.TextField(blank=True, null=True)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="petty_cash_created")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    is_active = models.BooleanField(default=True)
+    inactive_at = models.DateTimeField(null=True, blank=True)
+    inactive_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inactive_petty_cash_records"
+    )
+    inactive_reason = models.TextField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-issue_date", "-id"]
+
+    def __str__(self):
+        return self.petty_cash_no
+
+    @property
+    def total_spent(self):
+        total = self.expenses.filter(is_active=True).aggregate(total=models.Sum("amount"))["total"]
+        return Decimal(total or 0)
+
+    @property
+    def balance(self):
+        return Decimal(self.amount_issued or 0) - Decimal(self.total_spent or 0)
+
+
+class ProjectPettyCashExpense(models.Model):
+    expense_no = models.CharField(max_length=20, unique=True, blank=True, null=True)
+
+    petty_cash = models.ForeignKey(ProjectPettyCash, on_delete=models.CASCADE, related_name="expenses")
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="petty_cash_expenses")
+    expense_date = models.DateField(default=timezone.now)
+    description = models.CharField(max_length=255)
+
+    gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True)
+
+    bill_no = models.CharField(max_length=100, blank=True, null=True)
+    bill_date = models.DateField(blank=True, null=True)
+
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    note = models.TextField(blank=True, null=True)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    is_active = models.BooleanField(default=True)
+    inactive_at = models.DateTimeField(null=True, blank=True)
+    inactive_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inactive_petty_cash_expenses"
+    )
+    inactive_reason = models.TextField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-expense_date", "-id"]
+
+    def __str__(self):
+        return self.expense_no or f"{self.petty_cash.petty_cash_no} - {self.description}"
+
+
+class ProjectIncome(models.Model):
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="incomes")
+    income_date = models.DateField(default=timezone.now)
+    description = models.CharField(max_length=255)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-income_date", "-id"]
+
+    def __str__(self):
+        return f"{self.project.project_id} - {self.amount}"
+
+
 class ProjectInvoice(models.Model):
     INVOICE_TYPE_CHOICES = [
         ("advance", "Advance"),
@@ -423,6 +483,18 @@ class ProjectInvoice(models.Model):
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    is_active = models.BooleanField(default=True)
+    inactive_at = models.DateTimeField(null=True, blank=True)
+    inactive_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inactive_project_invoices"
+    )
+    inactive_reason = models.TextField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
     class Meta:
         ordering = ["-invoice_date", "-id"]
 
@@ -441,7 +513,7 @@ class ProjectInvoice(models.Model):
         if not self.total_amount or self.total_amount == 0:
             self.total_amount = Decimal(self.qty or 0) * Decimal(self.price_each or 0)
 
-        paid_total = self.payments.aggregate(total=models.Sum("amount"))["total"] if self.pk else Decimal("0")
+        paid_total = self.payments.filter(is_active=True).aggregate(total=models.Sum("amount"))["total"] if self.pk else Decimal("0")
         paid_total = Decimal(paid_total or 0)
 
         self.paid_amount = paid_total
@@ -475,6 +547,18 @@ class ProjectInvoicePayment(models.Model):
 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    is_active = models.BooleanField(default=True)
+    inactive_at = models.DateTimeField(null=True, blank=True)
+    inactive_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inactive_project_invoice_payments"
+    )
+    inactive_reason = models.TextField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-payment_date", "-id"]

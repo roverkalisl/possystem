@@ -24,8 +24,8 @@
         <h3>{{ invoice.invoice_no }}</h3>
         <div>
             <a href="{% url 'add_project_invoice_payment' invoice.id %}" class="btn btn-success btn-sm">+ Add Payment</a>
+            <a href="{% url 'print_project_invoice' invoice.id %}" class="btn btn-dark btn-sm" target="_blank">Print Invoice</a>
             <a href="{% url 'project_invoice_list' %}" class="btn btn-secondary btn-sm">Back</a>
-		<a href="{% url 'print_project_invoice' invoice.id %}" class="btn btn-dark btn-sm" target="_blank">Print Invoice</a>
         </div>
     </div>
 
@@ -52,8 +52,14 @@
                 Rs. {{ invoice.paid_amount|money }}
             </div>
             <div class="col-md-2">
-                <strong>Balance:</strong><br>
-                Rs. {{ invoice.balance_amount|money }}
+                <strong>Status:</strong><br>
+                {% if invoice.status == "paid" %}
+                    <span class="badge bg-success">Paid</span>
+                {% elif invoice.status == "partial" %}
+                    <span class="badge bg-warning text-dark">Partial</span>
+                {% else %}
+                    <span class="badge bg-danger">Unpaid</span>
+                {% endif %}
             </div>
         </div>
 
@@ -68,14 +74,11 @@
         </div>
 
         <div class="mt-2">
-            <strong>Status:</strong>
-            {% if invoice.status == "paid" %}
-                <span class="badge bg-success">Paid</span>
-            {% elif invoice.status == "partial" %}
-                <span class="badge bg-warning text-dark">Partial</span>
-            {% else %}
-                <span class="badge bg-danger">Unpaid</span>
-            {% endif %}
+            <strong>Qty:</strong> {{ invoice.qty }}
+        </div>
+
+        <div class="mt-2">
+            <strong>Price Each:</strong> Rs. {{ invoice.price_each|money }}
         </div>
 
         <div class="mt-2">
@@ -89,37 +92,42 @@
             <table class="table table-bordered table-striped bg-white">
                 <thead class="table-dark">
                     <tr>
+                        <th>Receipt No</th>
                         <th>Date</th>
                         <th>Type</th>
                         <th>Amount</th>
                         <th>Note</th>
                         <th>User</th>
-                        {% if is_owner %}
                         <th>Action</th>
-                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
                     {% for p in payments %}
                     <tr>
+                        <td>{{ p.receipt_no }}</td>
                         <td>{{ p.payment_date|date:"Y-m-d" }}</td>
                         <td>{{ p.get_payment_type_display }}</td>
                         <td>Rs. {{ p.amount|money }}</td>
                         <td>{{ p.note|default:"-" }}</td>
                         <td>{{ p.created_by.username|default:"-" }}</td>
-                        {% if is_owner %}
                         <td>
-                            <a href="{% url 'delete_project_invoice_payment' p.id %}"
-                               class="btn btn-danger btn-sm"
-                               onclick="return confirm('Delete this payment?')">
-                               Delete
+                            <a href="{% url 'print_project_payment_receipt' p.id %}"
+                               class="btn btn-dark btn-sm mb-1"
+                               target="_blank">
+                               Print Receipt
                             </a>
+                            {% if is_owner %}
+                            <a href="{% url 'delete_project_invoice_payment' p.id %}"
+                               class="btn btn-warning btn-sm"
+                               onclick="return confirm('Deactivate this payment?')">
+                               Deactivate
+                            </a>
+                            {% endif %}
                         </td>
-                        {% endif %}
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="{% if is_owner %}6{% else %}5{% endif %}" class="text-center">No payments found</td>
+                        <td colspan="7" class="text-center">No payments found</td>
                     </tr>
                     {% endfor %}
                 </tbody>

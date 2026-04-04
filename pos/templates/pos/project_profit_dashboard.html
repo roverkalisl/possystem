@@ -1,3 +1,4 @@
+{% load currency_filters %}
 <!DOCTYPE html>
 <html>
 <head>
@@ -29,7 +30,7 @@
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h4>Project Profit Dashboard</h4>
         <div>
-            <a href="{% url 'project_income_list' %}" class="btn btn-outline-success btn-sm">Income</a>
+            <a href="{% url 'project_invoice_list' %}" class="btn btn-outline-success btn-sm">Income</a>
             <a href="{% url 'project_expense_list' %}" class="btn btn-outline-danger btn-sm">Expenses</a>
             <a href="{% url 'petty_cash_list' %}" class="btn btn-outline-primary btn-sm">Petty Cash</a>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
@@ -40,26 +41,26 @@
         <div class="col-md-3 mb-2">
             <div class="card shadow-sm p-3">
                 <h6>Total Income</h6>
-                <h4>{{ grand_income }}</h4>
+                <h4>Rs. {{ grand_income|money }}</h4>
             </div>
         </div>
         <div class="col-md-3 mb-2">
             <div class="card shadow-sm p-3">
                 <h6>Direct Expenses</h6>
-                <h4>{{ grand_direct_expense }}</h4>
+                <h4>Rs. {{ grand_direct_expense|money }}</h4>
             </div>
         </div>
         <div class="col-md-3 mb-2">
             <div class="card shadow-sm p-3">
                 <h6>Petty Cash Expenses</h6>
-                <h4>{{ grand_petty_cash }}</h4>
+                <h4>Rs. {{ grand_petty_cash|money }}</h4>
             </div>
         </div>
         <div class="col-md-3 mb-2">
             <div class="card shadow-sm p-3">
                 <h6>Net Profit</h6>
                 <h4 class="{% if grand_profit >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
-                    {{ grand_profit }}
+                    Rs. {{ grand_profit|money }}
                 </h4>
             </div>
         </div>
@@ -86,12 +87,12 @@
                         <td>{{ row.project.project_id }}</td>
                         <td>{{ row.project.project_name }}</td>
                         <td>{{ row.project.client_name }}</td>
-                        <td>{{ row.total_income }}</td>
-                        <td>{{ row.direct_expense }}</td>
-                        <td>{{ row.petty_cash_expense }}</td>
-                        <td>{{ row.total_expense }}</td>
+                        <td>Rs. {{ row.total_income|money }}</td>
+                        <td>Rs. {{ row.direct_expense|money }}</td>
+                        <td>Rs. {{ row.petty_cash_expense|money }}</td>
+                        <td>Rs. {{ row.total_expense|money }}</td>
                         <td class="{% if row.profit >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
-                            {{ row.profit }}
+                            Rs. {{ row.profit|money }}
                         </td>
                     </tr>
                     {% empty %}
@@ -100,3 +101,11 @@
                     </tr>
                     {% endfor %}
                 </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+
+</body>
+</html>

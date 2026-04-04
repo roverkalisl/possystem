@@ -55,11 +55,11 @@
                         <th>Invoice No</th>
                         <th>Date</th>
                         <th>Project</th>
+                        <th>Bill To</th>
                         <th>Type</th>
                         <th>Description</th>
                         <th>Total</th>
                         <th>Paid</th>
-                        <th>Balance</th>
                         <th>Status</th>
                         <th>Action</th>
                     </tr>
@@ -70,11 +70,11 @@
                         <td>{{ inv.invoice_no }}</td>
                         <td>{{ inv.invoice_date|date:"Y-m-d" }}</td>
                         <td>{{ inv.project.project_id }} - {{ inv.project.project_name }}</td>
+                        <td>{{ inv.bill_to_name|default:"-" }}</td>
                         <td>{{ inv.get_invoice_type_display }}</td>
                         <td>{{ inv.description }}</td>
                         <td>Rs. {{ inv.total_amount|money }}</td>
                         <td>Rs. {{ inv.paid_amount|money }}</td>
-                        <td>Rs. {{ inv.balance_amount|money }}</td>
                         <td>
                             {% if inv.status == "paid" %}
                                 <span class="badge bg-success">Paid</span>
@@ -85,7 +85,16 @@
                             {% endif %}
                         </td>
                         <td>
-                            <a href="{% url 'project_invoice_detail' inv.id %}" class="btn btn-primary btn-sm">View</a>
+                            <a href="{% url 'project_invoice_detail' inv.id %}" class="btn btn-primary btn-sm mb-1">View</a>
+                            <a href="{% url 'add_project_invoice_payment' inv.id %}" class="btn btn-success btn-sm mb-1">Add Payment</a>
+                            <a href="{% url 'print_project_invoice' inv.id %}" class="btn btn-dark btn-sm mb-1" target="_blank">Print Invoice</a>
+                            {% if is_owner %}
+                            <a href="{% url 'delete_project_invoice' inv.id %}"
+                               class="btn btn-warning btn-sm"
+                               onclick="return confirm('Deactivate this invoice?')">
+                               Deactivate
+                            </a>
+                            {% endif %}
                         </td>
                     </tr>
                     {% empty %}

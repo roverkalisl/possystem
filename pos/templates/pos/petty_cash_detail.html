@@ -1,4 +1,4 @@
-{% load humanize %}
+{% load currency_filters %}
 <!DOCTYPE html>
 <html>
 <head>
@@ -14,16 +14,14 @@
 
 {% if messages %}
     {% for message in messages %}
-        <script>
-            alert("{{ message|escapejs }}");
-        </script>
+        <script>alert("{{ message|escapejs }}");</script>
     {% endfor %}
 {% endif %}
 
 <div class="container-fluid">
 
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>{{ petty_cash.petty_cash_no }}</h3>
+        <h3>Petty Cash Detail</h3>
         <div>
             <a href="{% url 'add_petty_cash_expense' petty_cash.id %}" class="btn btn-success btn-sm">+ Add Expense</a>
             <a href="{% url 'petty_cash_list' %}" class="btn btn-secondary btn-sm">Back</a>
@@ -33,69 +31,38 @@
     <div class="card shadow-sm p-3 mb-3">
         <div class="row">
             <div class="col-md-3">
-                <strong>Employee:</strong>
-                {% if petty_cash.employee %}
-                    {{ petty_cash.employee.emp_no }} - {{ petty_cash.employee.full_name }}
-                    <br>
-                    <small class="text-muted">
-                        {{ petty_cash.employee.designation|default:"-" }}
-                    </small>
-                {% elif petty_cash.user %}
-                    {% if petty_cash.user.get_full_name %}
-                        {{ petty_cash.user.get_full_name }}
-                    {% else %}
-                        {{ petty_cash.user.username }}
-                    {% endif %}
-                {% else %}
-                    -
-                {% endif %}
+                <strong>Petty Cash No:</strong><br>
+                {{ petty_cash.petty_cash_no }}
             </div>
-
             <div class="col-md-2">
                 <strong>Date:</strong><br>
                 {{ petty_cash.issue_date|date:"Y-m-d" }}
             </div>
-
-            <div class="col-md-2">
-                <strong>Limit:</strong><br>
+            <div class="col-md-3">
+                <strong>Employee:</strong><br>
                 {% if petty_cash.employee %}
-                    Rs. {{ petty_cash.employee.petty_cash_limit|floatformat:2|intcomma }}
+                    {{ petty_cash.employee.emp_no }} - {{ petty_cash.employee.full_name }}
                 {% else %}
                     -
                 {% endif %}
             </div>
-
             <div class="col-md-2">
-                <strong>Issued:</strong><br>
-                Rs. {{ petty_cash.amount_issued|floatformat:2|intcomma }}
+                <strong>Amount Issued:</strong><br>
+                Rs. {{ petty_cash.amount_issued|money }}
             </div>
-
-            <div class="col-md-1">
-                <strong>Spent:</strong><br>
-                Rs. {{ petty_cash.total_spent|floatformat:2|intcomma }}
-            </div>
-
             <div class="col-md-2">
                 <strong>Balance:</strong><br>
-                Rs. {{ petty_cash.balance|floatformat:2|intcomma }}
+                Rs. {{ petty_cash.balance|money }}
             </div>
         </div>
 
-        <div class="mt-2">
-            <strong>To Be Reimbursed:</strong>
-            {% if petty_cash.employee %}
-                Rs. {{ petty_cash.employee.available_petty_cash_limit|floatformat:2|intcomma }}
-            {% else %}
-                -
-            {% endif %}
-        </div>
-
-        <div class="mt-2">
+        <div class="mt-3">
             <strong>Note:</strong> {{ petty_cash.note|default:"-" }}
         </div>
     </div>
 
     <div class="card shadow-sm p-3">
+        <h5 class="mb-3">Expenses</h5>
         <div class="table-responsive">
             <table class="table table-bordered table-striped bg-white">
                 <thead class="table-dark">
@@ -108,7 +75,7 @@
                         <th>Bill Date</th>
                         <th>GL</th>
                         <th>Amount</th>
-                        <th>User</th>
+                        <th>Created By</th>
                         {% if is_owner %}
                         <th>Action</th>
                         {% endif %}
@@ -117,36 +84,28 @@
                 <tbody>
                     {% for e in expenses %}
                     <tr>
-                        <td>{{ e.expense_no|default:"-" }}</td>
+                        <td>{{ e.expense_no }}</td>
                         <td>{{ e.expense_date|date:"Y-m-d" }}</td>
                         <td>{{ e.project.project_id }} - {{ e.project.project_name }}</td>
                         <td>{{ e.description }}</td>
                         <td>{{ e.bill_no|default:"-" }}</td>
                         <td>{{ e.bill_date|date:"Y-m-d"|default:"-" }}</td>
-                        <td>
-                            {% if e.gl_account %}
-                                {{ e.gl_account.gl_code }} - {{ e.gl_account.gl_name }}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                        <td>Rs. {{ e.amount|floatformat:2|intcomma }}</td>
+                        <td>{{ e.gl_account|default:"-" }}</td>
+                        <td>Rs. {{ e.amount|money }}</td>
                         <td>{{ e.created_by.username|default:"-" }}</td>
                         {% if is_owner %}
                         <td>
                             <a href="{% url 'delete_petty_cash_expense' e.id %}"
-                               class="btn btn-danger btn-sm"
-                               onclick="return confirm('Delete this expense?')">
-                               Delete
+                               class="btn btn-warning btn-sm"
+                               onclick="return confirm('Deactivate this petty cash expense?')">
+                               Deactivate
                             </a>
                         </td>
                         {% endif %}
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="{% if is_owner %}10{% else %}9{% endif %}" class="text-center">
-                            No petty cash expenses found
-                        </td>
+                        <td colspan="{% if is_owner %}10{% else %}9{% endif %}" class="text-center">No expenses found</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -155,6 +114,5 @@
     </div>
 
 </div>
-
 </body>
 </html>

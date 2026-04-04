@@ -1,32 +1,26 @@
-{% load humanize %}
+{% load currency_filters %}
 <!DOCTYPE html>
 <html>
 <head>
     <title>Petty Cash List</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
-
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-
     <style>
         body { background: #f4f6f9; }
         .card { border-radius: 12px; }
     </style>
 </head>
-
 <body class="p-4">
 
 {% if messages %}
     {% for message in messages %}
-        <script>
-            alert("{{ message|escapejs }}");
-        </script>
+        <script>alert("{{ message|escapejs }}");</script>
     {% endfor %}
 {% endif %}
 
 <div class="container-fluid">
-
     <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>Petty Cash Management</h3>
+        <h3>Petty Cash List</h3>
         <div>
             <a href="{% url 'add_petty_cash' %}" class="btn btn-success btn-sm">+ Add Petty Cash</a>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
@@ -35,102 +29,63 @@
 
     <div class="card shadow-sm p-3">
         <div class="table-responsive">
-
-            <table class="table table-bordered table-striped bg-white align-middle">
-
+            <table class="table table-bordered table-striped bg-white">
                 <thead class="table-dark">
                     <tr>
-                        <th>No</th>
+                        <th>Petty Cash No</th>
+                        <th>Date</th>
                         <th>Employee</th>
-                        <th>Issue Date</th>
-                        <th>Issued</th>
-                        <th>Spent</th>
+                        <th>User</th>
+                        <th>Amount Issued</th>
+                        <th>Total Spent</th>
                         <th>Balance</th>
-                        <th>Status</th>
+                        <th>Note</th>
+                        <th>Created By</th>
                         <th>Action</th>
                     </tr>
                 </thead>
-
                 <tbody>
-
                     {% for pc in petty_cashes %}
                     <tr>
-                        <td><strong>{{ pc.petty_cash_no }}</strong></td>
-
+                        <td>{{ pc.petty_cash_no }}</td>
+                        <td>{{ pc.issue_date|date:"Y-m-d" }}</td>
                         <td>
                             {% if pc.employee %}
-                                <strong>{{ pc.employee.emp_no }}</strong><br>
-                                {{ pc.employee.full_name }}<br>
-                                <small class="text-muted">
-                                    {{ pc.employee.designation|default:"-" }}
-                                </small><br>
-                                <small class="text-muted">
-                                    Limit: Rs. {{ pc.employee.petty_cash_limit|floatformat:2|intcomma }}
-                                </small><br>
-                                <small class="text-muted">
-                                    Available: Rs. {{ pc.employee.available_petty_cash_limit|floatformat:2|intcomma }}
-                                </small>
-                            {% elif pc.user %}
-                                {% if pc.user.get_full_name %}
-                                    {{ pc.user.get_full_name }}
-                                {% else %}
-                                    {{ pc.user.username }}
-                                {% endif %}
+                                {{ pc.employee.emp_no }} - {{ pc.employee.full_name }}
                             {% else %}
                                 -
                             {% endif %}
                         </td>
-
-                        <td>{{ pc.issue_date|date:"Y-m-d"|default:"-" }}</td>
-
-                        <td>Rs. {{ pc.amount_issued|default:0|floatformat:2|intcomma }}</td>
-
-                        <td>Rs. {{ pc.total_spent|default:0|floatformat:2|intcomma }}</td>
-
+                        <td>{{ pc.user.username|default:"-" }}</td>
+                        <td>Rs. {{ pc.amount_issued|money }}</td>
+                        <td>Rs. {{ pc.total_spent|money }}</td>
+                        <td>Rs. {{ pc.balance|money }}</td>
+                        <td>{{ pc.note|default:"-" }}</td>
+                        <td>{{ pc.created_by.username|default:"-" }}</td>
                         <td>
-                            <strong>Rs. {{ pc.balance|default:0|floatformat:2|intcomma }}</strong>
-                        </td>
-
-                        <td>
-                            {% if pc.balance and pc.balance > 0 %}
-                                <span class="badge bg-warning text-dark">Open</span>
-                            {% else %}
-                                <span class="badge bg-success">Closed</span>
-                            {% endif %}
-                        </td>
-
-                        <td>
-                            <a href="{% url 'petty_cash_detail' pc.id %}"
-                               class="btn btn-primary btn-sm mb-1 w-100">
-                                View
-                            </a>
-
+                            <a href="{% url 'petty_cash_detail' pc.id %}" class="btn btn-primary btn-sm mb-1">View</a>
                             {% if is_owner %}
                             <a href="{% url 'delete_petty_cash' pc.id %}"
-                               class="btn btn-danger btn-sm w-100"
-                               onclick="return confirm('Are you sure to delete this?')">
-                                Delete
+                               class="btn btn-warning btn-sm"
+                               onclick="return confirm('Deactivate this petty cash record?')">
+                               Deactivate
+				{% if is_owner %}
+				<a href="{% url 'edit_petty_cash' pc.id %}" class="btn btn-primary btn-sm mb-1">Edit</a>
+				{% endif %}
                             </a>
                             {% endif %}
                         </td>
                     </tr>
-
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="text-center">
-                            No petty cash records found
-                        </td>
+                        <td colspan="10" class="text-center">No petty cash records found</td>
                     </tr>
                     {% endfor %}
-
                 </tbody>
-
             </table>
-
         </div>
     </div>
 
 </div>
-
 </body>
 </html>
