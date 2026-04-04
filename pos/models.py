@@ -480,11 +480,8 @@ class ProjectInvoice(models.Model):
 
     note = models.TextField(blank=True, null=True)
 
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
     is_active = models.BooleanField(default=True)
-    inactive_at = models.DateTimeField(null=True, blank=True)
+    inactive_at = models.DateTimeField(blank=True, null=True)
     inactive_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -493,7 +490,14 @@ class ProjectInvoice(models.Model):
         related_name="inactive_project_invoices"
     )
     inactive_reason = models.TextField(blank=True, null=True)
-    updated_at = models.DateTimeField(auto_now=True)
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_project_invoices"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-invoice_date", "-id"]
@@ -513,22 +517,42 @@ class ProjectInvoice(models.Model):
         if not self.total_amount or self.total_amount == 0:
             self.total_amount = Decimal(self.qty or 0) * Decimal(self.price_each or 0)
 
-        paid_total = self.payments.filter(is_active=True).aggregate(total=models.Sum("amount"))["total"] if self.pk else Decimal("0")
-        paid_total = Decimal(paid_total or 0)
+        paid_total = Decimal("0")
+        if self.pk:
+            paid_total = self.payments.filter(is_active=True).aggregate(
+                total=models.Sum("amount")
+            )["total"] or Decimal("0")
 
-        self.paid_amount = paid_total
-        self.balance_amount = Decimal(self.total_amount or 0) - paid_total
+        self.paid_amount = Decimal(paid_total)
+        self.balance_amount = Decimal(self.total_amount or 0) - Decimal(paid_total)
 
         if paid_total <= 0:
             self.status = "unpaid"
-        elif paid_total < Decimal(self.total_amount or 0):
+        elif Decimal(paid_total) < Decimal(self.total_amount or 0):
             self.status = "partial"
         else:
             self.status = "paid"
             self.balance_amount = Decimal("0")
 
         super().save(*args, **kwargs)
+        
+class ProjectInvoiceItem(models.Model):
+    invoice = models.ForeignKey(ProjectInvoice, on_delete=models.CASCADE, related_name="items")
+    item_code = models.CharField(max_length=50, blank=True, null=True)
+    description = models.CharField(max_length=255)
+    qty = models.DecimalField(max_digits=12, decimal_places=2, default=1)
+    price_each = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.invoice.invoice_no} - {self.description}"
+
+    def save(self, *args, **kwargs):
+        self.amount = Decimal(str(self.qty or 0)) * Decimal(str(self.price_each or 0))
+        super().save(*args, **kwargs)    
 
 class ProjectInvoicePayment(models.Model):
     PAYMENT_TYPE_CHOICES = [
@@ -538,18 +562,24 @@ class ProjectInvoicePayment(models.Model):
         ("other", "Other"),
     ]
 
+    PAYMENT_METHOD_CHOICES = [
+        ("cash", "Cash"),
+        ("card", "Card"),
+        ("cheque", "Cheque"),
+    ]
+
     invoice = models.ForeignKey(ProjectInvoice, on_delete=models.CASCADE, related_name="payments")
     receipt_no = models.CharField(max_length=50, unique=True, blank=True, null=True)
     payment_date = models.DateField(default=timezone.now)
     payment_type = models.CharField(max_length=20, choices=PAYMENT_TYPE_CHOICES, default="advance")
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default="cash")
+    card_no = models.CharField(max_length=50, blank=True, null=True)
+    cheque_no = models.CharField(max_length=50, blank=True, null=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     note = models.TextField(blank=True, null=True)
 
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
     is_active = models.BooleanField(default=True)
-    inactive_at = models.DateTimeField(null=True, blank=True)
+    inactive_at = models.DateTimeField(blank=True, null=True)
     inactive_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -558,7 +588,9 @@ class ProjectInvoicePayment(models.Model):
         related_name="inactive_project_invoice_payments"
     )
     inactive_reason = models.TextField(blank=True, null=True)
-    updated_at = models.DateTimeField(auto_now=True)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="created_project_invoice_payments")
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-payment_date", "-id"]

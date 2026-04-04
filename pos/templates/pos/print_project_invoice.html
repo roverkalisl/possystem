@@ -1,291 +1,349 @@
-{% load static %}
 {% load currency_filters %}
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Print Invoice</title>
+    <title>Project Invoice</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
+        @page { size: A4; margin: 12mm; }
+
         body {
             font-family: Arial, sans-serif;
-            font-size: 13px;
-            color: #000;
             margin: 0;
-            padding: 20px;
+            color: #222;
             background: #fff;
         }
 
-        .invoice-box {
-            max-width: 900px;
-            margin: auto;
-            padding: 20px;
-            border: 1px solid #ddd;
+        .page { width: 100%; }
+
+        .print-btn {
+            margin: 14px;
+            padding: 10px 18px;
+            border: none;
+            background: #1e2a78;
+            color: #fff;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
         }
 
-        .top-section {
+        .header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            border-bottom: 2px solid #000;
-            padding-bottom: 15px;
-            margin-bottom: 20px;
+            margin-bottom: 22px;
         }
 
-        .company {
-            width: 55%;
+        .company { width: 48%; }
+        .company h1 {
+            margin: 0 0 10px 0;
+            font-size: 28px;
+            line-height: 1.2;
+            color: #1e2a78;
+            font-weight: 800;
+            text-transform: uppercase;
         }
+        .company .details { font-size: 14px; line-height: 1.7; }
 
-        .company img {
-            max-width: 120px;
-            margin-bottom: 10px;
-        }
+        .right-head { width: 36%; text-align: right; }
 
-        .company h2 {
-            margin: 0;
-            font-size: 24px;
-        }
-
-        .company p {
-            margin: 3px 0;
+        .logo-box { margin-bottom: 10px; }
+        .logo-box img {
+            max-width: 180px;
+            max-height: 90px;
+            object-fit: contain;
         }
 
         .invoice-title {
-            width: 40%;
-            text-align: right;
+            font-size: 38px;
+            color: #1e2a78;
+            font-weight: 800;
+            margin: 8px 0 0 0;
         }
 
-        .invoice-title h1 {
-            margin: 0;
-            font-size: 32px;
-        }
-
-        .info-table {
-            width: 100%;
-            margin-bottom: 20px;
-            border-collapse: collapse;
-        }
-
-        .info-table td {
-            vertical-align: top;
-            padding: 6px 4px;
-        }
-
-        .main-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 15px;
-        }
-
-        .main-table th,
-        .main-table td {
-            border: 1px solid #000;
-            padding: 8px;
-            text-align: left;
-        }
-
-        .main-table th {
-            background: #f2f2f2;
-        }
-
-        .text-end {
-            text-align: right;
-        }
-
-        .summary {
-            width: 350px;
-            margin-left: auto;
-            margin-top: 20px;
-            border-collapse: collapse;
-        }
-
-        .summary td {
-            padding: 8px;
-            border: 1px solid #000;
-        }
-
-        .summary .label {
-            font-weight: bold;
-            width: 55%;
-        }
-
-        .notes {
-            margin-top: 25px;
-        }
-
-        .notes h4 {
-            margin-bottom: 8px;
-        }
-
-        .signature {
-            margin-top: 50px;
+        .top-grid {
             display: flex;
             justify-content: space-between;
+            gap: 18px;
+            margin-bottom: 18px;
         }
 
-        .signature-box {
-            width: 260px;
-            text-align: center;
+        .bill-to, .meta, .project-box, .notes-box, .total-box {
+            border: 1.5px solid #cfd5e3;
+            border-radius: 8px;
+            background: #fff;
         }
 
-        .signature-line {
-            border-top: 1px solid #000;
-            margin-top: 40px;
-            padding-top: 5px;
+        .bill-to, .project-box { padding: 12px 14px; }
+        .bill-to { width: 48%; }
+        .meta { width: 32%; padding: 10px 14px; }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #1e2a78;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: .3px;
         }
 
-        .print-btn {
-            text-align: center;
-            margin-bottom: 20px;
-        }
-
-        .print-btn button {
-            padding: 10px 18px;
-            border: none;
-            background: #000;
-            color: #fff;
-            cursor: pointer;
+        .bill-text, .project-text, .meta-table {
             font-size: 14px;
+            line-height: 1.7;
+        }
+
+        .meta-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .meta-table td {
+            padding: 4px 0;
+            vertical-align: top;
+        }
+
+        .meta-table td:first-child {
+            width: 42%;
+            font-weight: 700;
+        }
+
+        .project-box { margin-bottom: 16px; }
+
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 16px;
+        }
+
+        .items-table th {
+            background: #1e2a78;
+            color: #fff;
+            font-size: 13px;
+            font-weight: 700;
+            padding: 10px 8px;
+            border: 1px solid #cfd5e3;
+            text-align: center;
+        }
+
+        .items-table td {
+            border: 1px solid #cfd5e3;
+            padding: 10px 8px;
+            font-size: 14px;
+            vertical-align: top;
+        }
+
+        .center { text-align: center; }
+        .right { text-align: right; white-space: nowrap; }
+
+        .bottom-grid {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            margin-top: 6px;
+        }
+
+        .notes-box {
+            width: 64%;
+            min-height: 92px;
+            padding: 12px 14px;
+        }
+
+        .note-text { font-size: 14px; line-height: 1.6; }
+
+        .total-box {
+            width: 32%;
+            overflow: hidden;
+        }
+
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            font-size: 15px;
+            border-bottom: 1px solid #cfd5e3;
+        }
+
+        .total-row:last-child { border-bottom: none; }
+
+        .total-row.grand {
+            background: #f4f7ff;
+            font-size: 22px;
+            font-weight: 800;
+            color: #1e2a78;
+        }
+
+        .footer { margin-top: 34px; }
+
+        .signatures {
+            display: flex;
+            gap: 40px;
+        }
+
+        .sign-box {
+            width: 180px;
+            text-align: center;
+            font-size: 13px;
+        }
+
+        .sign-line {
+            border-top: 1px solid #444;
+            margin-top: 36px;
+            padding-top: 6px;
+        }
+
+        .footer-note {
+            margin-top: 24px;
+            text-align: center;
+            font-size: 16px;
+            font-weight: 700;
+            color: #1e2a78;
         }
 
         @media print {
-            .print-btn {
-                display: none;
-            }
-
+            .print-btn { display: none; }
             body {
-                padding: 0;
-            }
-
-            .invoice-box {
-                border: none;
-                max-width: 100%;
-                padding: 0;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
         }
     </style>
 </head>
 <body>
 
-<div class="print-btn">
-    <button onclick="window.print()">Print Invoice</button>
-</div>
+<button class="print-btn" onclick="printAndBack()">Print Invoice</button>
 
-<div class="invoice-box">
-
-    <div class="top-section">
+<div class="page">
+    <div class="header">
         <div class="company">
-            <img src="{% static 'logo.png' %}" alt="Logo">
-            <h2>P&I Constructions</h2>
-            <p>Matara Road, Magalla, Galle</p>
-            <p>Tel: 077 361 3005 / 091 222 4090</p>
+            <h1>P &amp; I Constructions (Pvt) Ltd.</h1>
+            <div class="details">
+                Matara Road<br>
+                Magalla, Galle<br>
+                T.P 077 - 361 3005<br>
+                P.V 00301745
+            </div>
         </div>
 
-        <div class="invoice-title">
-            <h1>INVOICE</h1>
-            <p><strong>Invoice No:</strong> {{ invoice.invoice_no }}</p>
-            <p><strong>Date:</strong> {{ invoice.invoice_date|date:"Y-m-d" }}</p>
+        <div class="right-head">
+            <div class="logo-box">
+                <img src="/static/logo.png" alt="Company Logo">
+            </div>
+            <div class="invoice-title">INVOICE</div>
         </div>
     </div>
 
-    <table class="info-table">
-        <tr>
-            <td width="50%">
-                <strong>Bill To</strong><br>
+    <div class="top-grid">
+        <div class="bill-to">
+            <div class="section-title">Bill To</div>
+            <div class="bill-text">
                 {{ invoice.bill_to_name|default:"-" }}<br>
-                {{ invoice.bill_to_address|linebreaksbr }}
-            </td>
-            <td width="50%" class="text-end">
-                <strong>Project:</strong> {{ invoice.project.project_id }} - {{ invoice.project.project_name }}<br>
-                <strong>Type:</strong> {{ invoice.get_invoice_type_display }}<br>
-                {% if invoice.project.location %}
-                <strong>Location:</strong> {{ invoice.project.location }}
-                {% endif %}
-            </td>
-        </tr>
-    </table>
+                {{ invoice.bill_to_address|linebreaksbr|default:"-" }}
+            </div>
+        </div>
 
-    <table class="main-table">
+        <div class="meta">
+            <div class="section-title">Invoice Details</div>
+            <table class="meta-table">
+                <tr>
+                    <td>Invoice No</td>
+                    <td>{{ invoice.invoice_no }}</td>
+                </tr>
+                <tr>
+                    <td>Date</td>
+                    <td>{{ invoice.invoice_date|date:"d/m/Y" }}</td>
+                </tr>
+                <tr>
+                    <td>Project No</td>
+                    <td>{{ invoice.project.project_id }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="project-box">
+        <div class="section-title">Project Details</div>
+        <div class="project-text">
+            <strong>Project No:</strong> {{ invoice.project.project_id }}<br>
+            <strong>Project Name:</strong> {{ invoice.project.project_name }}<br>
+            <strong>Client Name:</strong> {{ invoice.project.client_name }}<br>
+            {% if invoice.project.location %}
+            <strong>Location:</strong> {{ invoice.project.location }}<br>
+            {% endif %}
+            <strong>Project Type:</strong> {{ invoice.project.get_project_type_display }}
+        </div>
+    </div>
+
+    <table class="items-table">
         <thead>
             <tr>
-                <th style="width: 8%;">No</th>
-                <th style="width: 12%;">Qty</th>
-                <th>Description</th>
-                <th style="width: 18%;" class="text-end">Price Each</th>
-                <th style="width: 18%;" class="text-end">Amount</th>
+                <th style="width:7%;">SN</th>
+                <th style="width:16%;">Item Code</th>
+                <th style="width:37%;">Description</th>
+                <th style="width:10%;">Qty</th>
+                <th style="width:15%;">Unit Price</th>
+                <th style="width:15%;">Amount</th>
             </tr>
         </thead>
         <tbody>
+            {% for row in invoice_items %}
             <tr>
-                <td>1</td>
-                <td>{{ invoice.qty }}</td>
-                <td>{{ invoice.item_code|default:"-" }}</td>
-                <td>{{ invoice.description }}</td>
-                <td class="text-end">LKR {{ invoice.price_each|money }}</td>
-                <td class="text-end">LKR {{ invoice.total_amount|money }}</td>
+                <td class="center">{{ forloop.counter }}</td>
+                <td class="center">{{ row.item_code|default:"-" }}</td>
+                <td>{{ row.description }}</td>
+                <td class="center">{{ row.qty }}</td>
+                <td class="right">{{ row.price_each|money }}</td>
+                <td class="right">{{ row.amount|money }}</td>
             </tr>
+            {% empty %}
+            <tr>
+                <td class="center">1</td>
+                <td class="center">-</td>
+                <td>{{ invoice.description }}</td>
+                <td class="center">1</td>
+                <td class="right">{{ invoice.total_amount|money }}</td>
+                <td class="right">{{ invoice.total_amount|money }}</td>
+            </tr>
+            {% endfor %}
         </tbody>
     </table>
 
-    <table class="summary">
-        <tr>
-            <td class="label">Total</td>
-            <td class="text-end">LKR {{ invoice.total_amount|money }}</td>
-        </tr>
-        <tr>
-            <td class="label">Payments / Credits</td>
-            <td class="text-end">LKR {{ invoice.paid_amount|money }}</td>
-        </tr>
-        <tr>
-            <td class="label">Balance Due</td>
-            <td class="text-end">LKR {{ invoice.balance_amount|money }}</td>
-        </tr>
-        <tr>
-            <td class="label">Status</td>
-            <td class="text-end">{{ invoice.get_status_display }}</td>
-        </tr>
-    </table>
-
-    {% if payments %}
-    <div class="notes">
-        <h4>Payments Received</h4>
-        <table class="main-table">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    <th>Type</th>
-                    <th>Note</th>
-                    <th class="text-end">Amount</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for p in payments %}
-                <tr>
-                    <td>{{ p.payment_date|date:"Y-m-d" }}</td>
-                    <td>{{ p.get_payment_type_display }}</td>
-                    <td>{{ p.note|default:"-" }}</td>
-                    <td class="text-end">LKR {{ p.amount|money }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-    {% endif %}
-
-    <div class="notes">
-        <h4>Special Notes</h4>
-        <p>{{ invoice.note|default:"AT YOUR SERVICE EVERY TIME" }}</p>
-    </div>
-
-    <div class="signature">
-        <div class="signature-box">
-            <div class="signature-line">Authorized Signature</div>
+    <div class="bottom-grid">
+        <div class="notes-box">
+            <div class="section-title">Special Notes</div>
+            <div class="note-text">{{ invoice.note|default:"-" }}</div>
         </div>
-        <div class="signature-box">
-            <div class="signature-line">Date</div>
+
+        <div class="total-box">
+            <div class="total-row grand">
+                <span>Total</span>
+                <span>LKR {{ invoice.total_amount|money }}</span>
+            </div>
         </div>
     </div>
 
+    <div class="footer">
+        <div class="signatures">
+            <div class="sign-box">
+                <div class="sign-line">Authorized Signature</div>
+            </div>
+            <div class="sign-box">
+                <div class="sign-line">Date</div>
+            </div>
+        </div>
+
+        <div class="footer-note">AT YOUR SERVICE EVERY TIME</div>
+    </div>
 </div>
+
+<script>
+function printAndBack() {
+    window.print();
+    setTimeout(function () {
+        window.location.href = "{% url 'project_invoice_list' %}";
+    }, 1200);
+}
+</script>
 
 </body>
 </html>

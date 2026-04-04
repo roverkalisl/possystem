@@ -11,7 +11,7 @@
             font-size: 14px;
         }
         .invoice-card {
-            max-width: 900px;
+            max-width: 1100px;
             margin: 0 auto;
             border-radius: 12px;
         }
@@ -25,15 +25,21 @@
             font-size: 14px;
             padding: 0.4rem 0.65rem;
         }
-        textarea.form-control {
-            min-height: 70px;
-        }
         .section-title {
             font-size: 20px;
             font-weight: 600;
         }
         .readonly-box {
             background: #f8f9fa;
+        }
+        .table input {
+            min-width: 100px;
+        }
+        .table th, .table td {
+            vertical-align: middle;
+        }
+        .remove-btn {
+            white-space: nowrap;
         }
     </style>
 </head>
@@ -45,7 +51,7 @@
     {% endfor %}
 {% endif %}
 
-<div class="container-lg">
+<div class="container-fluid">
     <div class="card shadow-sm invoice-card p-3 p-md-4">
         <div class="d-flex justify-content-between align-items-center mb-3">
             <div class="section-title">Add Project Invoice</div>
@@ -54,7 +60,7 @@
             </div>
         </div>
 
-        <form method="POST">
+        <form method="POST" id="invoiceForm">
             {% csrf_token %}
 
             <div class="mb-2">
@@ -88,20 +94,8 @@
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label">Qty</label>
-                    <input type="number" step="0.01" name="qty" id="qty" class="form-control form-control-sm" value="1" oninput="calcTotal()">
-                </div>
-            </div>
-
-            <div class="row g-2 mt-1">
-                <div class="col-md-6">
                     <label class="form-label">Bill To Name</label>
                     <input type="text" name="bill_to_name" id="bill_to_name" class="form-control form-control-sm">
-                </div>
-
-                <div class="col-md-6">
-                    <label class="form-label">Price Each</label>
-                    <input type="number" step="0.01" name="price_each" id="price_each" class="form-control form-control-sm" value="0" oninput="calcTotal()">
                 </div>
             </div>
 
@@ -110,19 +104,62 @@
                 <textarea name="bill_to_address" id="bill_to_address" class="form-control form-control-sm" rows="2"></textarea>
             </div>
 
-            <div class="mt-2">
-                <label class="form-label">Description</label>
-                <input type="text" name="description" class="form-control form-control-sm" required>
+            <div class="mt-3 d-flex justify-content-between align-items-center">
+                <label class="form-label m-0">Invoice Items</label>
+                <button type="button" class="btn btn-success btn-sm" onclick="addRow()">+ Add Row</button>
             </div>
 
+            <div class="table-responsive mt-2">
+                <table class="table table-bordered table-sm bg-white" id="itemsTable">
+                    <thead class="table-dark">
+                        <tr>
+                            <th style="width: 15%;">Item Code</th>
+                            <th style="width: 35%;">Description</th>
+                            <th style="width: 12%;">Qty</th>
+                            <th style="width: 18%;">Price Each</th>
+                            <th style="width: 15%;">Amount</th>
+                            <th style="width: 5%;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="invoiceRows">
+                        <tr>
+                            <td>
+                                <input type="text" name="item_code[]" class="form-control form-control-sm" list="itemCodes" oninput="fillDescription(this)">
+                            </td>
+                            <td>
+                                <input type="text" name="description[]" class="form-control form-control-sm" required>
+                            </td>
+                            <td>
+                                <input type="number" step="0.01" name="qty[]" class="form-control form-control-sm qty" value="1" oninput="calcRow(this)">
+                            </td>
+                            <td>
+                                <input type="number" step="0.01" name="price_each[]" class="form-control form-control-sm price" value="0" oninput="calcRow(this)">
+                            </td>
+                            <td>
+                                <input type="text" class="form-control form-control-sm amount readonly-box" readonly value="0.00">
+                            </td>
+                            <td class="text-center">
+                                <button type="button" class="btn btn-danger btn-sm remove-btn" onclick="removeRow(this)">X</button>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <datalist id="itemCodes">
+                {% for item in items %}
+                <option value="{{ item.item_code }}" data-desc="{{ item.name }}" data-price="{{ item.selling_price }}"></option>
+                {% endfor %}
+            </datalist>
+
             <div class="row g-2 mt-1">
-                <div class="col-md-6">
-                    <label class="form-label">Total Amount</label>
-                    <input type="text" id="total_amount" class="form-control form-control-sm readonly-box" readonly>
-                </div>
-                <div class="col-md-6">
+                <div class="col-md-8">
                     <label class="form-label">Note</label>
                     <input type="text" name="note" class="form-control form-control-sm">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Invoice Total</label>
+                    <input type="text" id="invoice_total" class="form-control form-control-sm readonly-box" readonly value="0.00">
                 </div>
             </div>
 
@@ -134,19 +171,90 @@
 </div>
 
 <script>
-function calcTotal() {
-    let qty = parseFloat(document.getElementById("qty").value || 0);
-    let price = parseFloat(document.getElementById("price_each").value || 0);
-    document.getElementById("total_amount").value = (qty * price).toFixed(2);
+function calcRow(el) {
+    const row = el.closest("tr");
+    const qty = parseFloat(row.querySelector(".qty").value || 0);
+    const price = parseFloat(row.querySelector(".price").value || 0);
+    const amount = qty * price;
+    row.querySelector(".amount").value = amount.toFixed(2);
+    calcInvoiceTotal();
+}
+
+function calcInvoiceTotal() {
+    let total = 0;
+    document.querySelectorAll(".amount").forEach(function(input) {
+        total += parseFloat(input.value || 0);
+    });
+    document.getElementById("invoice_total").value = total.toFixed(2);
+}
+
+function addRow() {
+    const tbody = document.getElementById("invoiceRows");
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+        <td>
+            <input type="text" name="item_code[]" class="form-control form-control-sm" list="itemCodes" oninput="fillDescription(this)">
+        </td>
+        <td>
+            <input type="text" name="description[]" class="form-control form-control-sm" required>
+        </td>
+        <td>
+            <input type="number" step="0.01" name="qty[]" class="form-control form-control-sm qty" value="1" oninput="calcRow(this)">
+        </td>
+        <td>
+            <input type="number" step="0.01" name="price_each[]" class="form-control form-control-sm price" value="0" oninput="calcRow(this)">
+        </td>
+        <td>
+            <input type="text" class="form-control form-control-sm amount readonly-box" readonly value="0.00">
+        </td>
+        <td class="text-center">
+            <button type="button" class="btn btn-danger btn-sm remove-btn" onclick="removeRow(this)">X</button>
+        </td>
+    `;
+    tbody.appendChild(tr);
+    calcInvoiceTotal();
+}
+
+function removeRow(btn) {
+    const rows = document.querySelectorAll("#invoiceRows tr");
+    if (rows.length > 1) {
+        btn.closest("tr").remove();
+        calcInvoiceTotal();
+    }
+}
+
+function fillDescription(input) {
+    const code = input.value.trim();
+    const row = input.closest("tr");
+    const descInput = row.querySelector('input[name="description[]"]');
+    const priceInput = row.querySelector('input[name="price_each[]"]');
+
+    const options = document.querySelectorAll("#itemCodes option");
+    options.forEach(function(opt) {
+        if (opt.value === code) {
+            const desc = opt.getAttribute("data-desc") || "";
+            const price = opt.getAttribute("data-price") || "0";
+            if (!descInput.value) {
+                descInput.value = desc;
+            }
+            if (!priceInput.value || parseFloat(priceInput.value) === 0) {
+                priceInput.value = parseFloat(price).toFixed(2);
+            }
+            calcRow(priceInput);
+        }
+    });
 }
 
 document.getElementById("project_select").addEventListener("change", function() {
-    let selected = this.options[this.selectedIndex];
+    const selected = this.options[this.selectedIndex];
     document.getElementById("bill_to_name").value = selected.getAttribute("data-client") || "";
     document.getElementById("bill_to_address").value = selected.getAttribute("data-location") || "";
 });
 
-calcTotal();
+document.querySelectorAll(".qty, .price").forEach(function(el) {
+    calcRow(el);
+});
+calcInvoiceTotal();
 </script>
 
 </body>

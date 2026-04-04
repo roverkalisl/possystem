@@ -16,9 +16,8 @@ from .models import (
     Sale, SaleItem, SalesReturn, StockTransaction,
     Project, ProjectExpense, ProjectPettyCash,
     ProjectPettyCashExpense, ProjectIncome, Employee,
-    ProjectInvoice, ProjectInvoicePayment
+    ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem
 )
-
 
 # =========================
 # HELPERS
@@ -1200,11 +1199,16 @@ def edit_employee(request, employee_id):
 # =========================
 @user_passes_test(can_use_income)
 def project_invoice_list(request):
-    invoices = ProjectInvoice.objects.filter(is_active=True).select_related(
+    project_id = request.GET.get("project")
+    show_inactive = request.GET.get("show_inactive") == "1"
+
+    invoices = ProjectInvoice.objects.select_related(
         "project", "created_by"
     ).order_by("-invoice_date", "-id")
 
-    project_id = request.GET.get("project")
+    if not show_inactive:
+        invoices = invoices.filter(is_active=True)
+
     if project_id:
         invoices = invoices.filter(project_id=project_id)
 
@@ -1214,12 +1218,13 @@ def project_invoice_list(request):
         "invoices": invoices,
         "projects": projects,
         "selected_project": project_id,
+        "show_inactive": show_inactive,
+        "is_owner": is_owner(request.user),
     })
-
-
 @user_passes_test(can_use_income)
 def add_project_invoice(request):
     projects = Project.objects.filter(is_active=True).order_by("-id")
+    items = Item.objects.filter(is_active=True).order_by("name")
 
     if request.method == "POST":
         project_id = request.POST.get("project")
@@ -1227,20 +1232,74 @@ def add_project_invoice(request):
         bill_to_name = (request.POST.get("bill_to_name") or "").strip()
         bill_to_address = (request.POST.get("bill_to_address") or "").strip()
         invoice_type = request.POST.get("invoice_type") or "advance"
-        description = (request.POST.get("description") or "").strip()
-        qty = to_decimal(request.POST.get("qty") or 1)
-        price_each = to_decimal(request.POST.get("price_each") or 0)
         note = (request.POST.get("note") or "").strip()
+
+        item_codes = request.POST.getlist("item_code[]")
+        descriptions = request.POST.getlist("description[]")
+        qtys = request.POST.getlist("qty[]")
+        prices = request.POST.getlist("price_each[]")
 
         if not project_id:
             messages.error(request, "Project is required.")
-            return render(request, "pos/add_project_invoice.html", {"projects": projects})
+            return render(request, "pos/add_project_invoice.html", {
+                "projects": projects,
+                "items": items,
+            })
 
-        if not description:
-            messages.error(request, "Description is required.")
-            return render(request, "pos/add_project_invoice.html", {"projects": projects})
+        cleaned_rows = []
+        total_amount = Decimal("0")
 
-        total_amount = qty * price_each
+        row_count = max(len(descriptions), len(qtys), len(prices), len(item_codes))
+
+        for i in range(row_count):
+            item_code = (item_codes[i] if i < len(item_codes) else "").strip()
+            description = (descriptions[i] if i < len(descriptions) else "").strip()
+            qty = to_decimal(qtys[i] if i < len(qtys) else 0)
+            price_each = to_decimal(prices[i] if i < len(prices) else 0)
+
+            if not item_code and not description and qty <= 0 and price_each <= 0:
+                continue
+
+            if not description:
+                messages.error(request, f"Description is required for row {i+1}.")
+                return render(request, "pos/add_project_invoice.html", {
+                    "projects": projects,
+                    "items": items,
+                })
+
+            if qty <= 0:
+                messages.error(request, f"Qty must be greater than 0 in row {i+1}.")
+                return render(request, "pos/add_project_invoice.html", {
+                    "projects": projects,
+                    "items": items,
+                })
+
+            if price_each < 0:
+                messages.error(request, f"Price cannot be negative in row {i+1}.")
+                return render(request, "pos/add_project_invoice.html", {
+                    "projects": projects,
+                    "items": items,
+                })
+
+            amount = qty * price_each
+            total_amount += amount
+
+            cleaned_rows.append({
+                "item_code": item_code or None,
+                "description": description,
+                "qty": qty,
+                "price_each": price_each,
+                "amount": amount,
+            })
+
+        if not cleaned_rows:
+            messages.error(request, "At least one invoice item is required.")
+            return render(request, "pos/add_project_invoice.html", {
+                "projects": projects,
+                "items": items,
+            })
+
+        first_description = cleaned_rows[0]["description"]
 
         invoice = ProjectInvoice.objects.create(
             project_id=project_id,
@@ -1248,13 +1307,23 @@ def add_project_invoice(request):
             bill_to_name=bill_to_name,
             bill_to_address=bill_to_address,
             invoice_type=invoice_type,
-            description=description,
-            qty=qty,
-            price_each=price_each,
+            description=first_description,
+            qty=Decimal("1.00"),
+            price_each=total_amount,
             total_amount=total_amount,
             note=note,
             created_by=request.user,
         )
+
+        for row in cleaned_rows:
+            ProjectInvoiceItem.objects.create(
+                invoice=invoice,
+                item_code=row["item_code"],
+                description=row["description"],
+                qty=row["qty"],
+                price_each=row["price_each"],
+                amount=row["amount"],
+            )
 
         invoice.save()
 
@@ -1263,66 +1332,95 @@ def add_project_invoice(request):
 
     return render(request, "pos/add_project_invoice.html", {
         "projects": projects,
+        "items": items,
     })
-
 
 @user_passes_test(can_use_income)
 def project_invoice_detail(request, invoice_id):
     invoice = get_object_or_404(
         ProjectInvoice.objects.select_related("project", "created_by"),
-        id=invoice_id,
-        is_active=True
+        id=invoice_id
     )
 
-    payments = invoice.payments.filter(is_active=True).select_related("created_by").order_by("-payment_date", "-id")
+    show_inactive = request.GET.get("show_inactive") == "1"
+
+    invoice_items = invoice.items.all()
+
+    payments = invoice.payments.select_related("created_by").order_by("-payment_date", "-id")
+    if not show_inactive:
+        payments = payments.filter(is_active=True)
 
     return render(request, "pos/project_invoice_detail.html", {
         "invoice": invoice,
+        "invoice_items": invoice_items,
         "payments": payments,
+        "show_inactive": show_inactive,
         "is_owner": is_owner(request.user),
     })
-
-
 @user_passes_test(can_use_income)
 def add_project_invoice_payment(request, invoice_id):
-    invoice = get_object_or_404(ProjectInvoice, id=invoice_id, is_active=True)
+    invoice = get_object_or_404(ProjectInvoice, id=invoice_id)
 
     if request.method == "POST":
-        payment_date = request.POST.get("payment_date") or timezone.now().date()
-        payment_type = request.POST.get("payment_type") or "advance"
-        amount = to_decimal(request.POST.get("amount"))
-        note = (request.POST.get("note") or "").strip()
+        try:
+            payment_date = request.POST.get("payment_date") or timezone.now().date()
+            payment_type = request.POST.get("payment_type") or "advance"
+            payment_method = request.POST.get("payment_method") or "cash"
+            amount = to_decimal(request.POST.get("amount"))
+            card_no = (request.POST.get("card_no") or "").strip()
+            cheque_no = (request.POST.get("cheque_no") or "").strip()
+            note = (request.POST.get("note") or "").strip()
 
-        if amount <= 0:
-            messages.error(request, "Amount must be greater than 0.")
+            if amount <= 0:
+                messages.error(request, "Amount must be greater than 0.")
+                return render(request, "pos/add_project_invoice_payment.html", {
+                    "invoice": invoice,
+                })
+
+            if amount > invoice.balance_amount:
+                messages.error(request, "Payment exceeds invoice balance.")
+                return render(request, "pos/add_project_invoice_payment.html", {
+                    "invoice": invoice,
+                })
+
+            if payment_method == "card" and not card_no:
+                messages.error(request, "Card No is required for card payments.")
+                return render(request, "pos/add_project_invoice_payment.html", {
+                    "invoice": invoice,
+                })
+
+            if payment_method == "cheque" and not cheque_no:
+                messages.error(request, "Cheque No is required for cheque payments.")
+                return render(request, "pos/add_project_invoice_payment.html", {
+                    "invoice": invoice,
+                })
+
+            payment = ProjectInvoicePayment.objects.create(
+                invoice=invoice,
+                payment_date=payment_date,
+                payment_type=payment_type,
+                payment_method=payment_method,
+                card_no=card_no if payment_method == "card" else None,
+                cheque_no=cheque_no if payment_method == "cheque" else None,
+                amount=amount,
+                note=note,
+                created_by=request.user,
+            )
+
+            invoice.save()
+
+            messages.success(request, "Payment added successfully.")
+            return redirect("print_project_payment_receipt", payment_id=payment.id)
+
+        except Exception as e:
+            messages.error(request, f"Error saving payment: {str(e)}")
             return render(request, "pos/add_project_invoice_payment.html", {
                 "invoice": invoice,
             })
-
-        if amount > invoice.balance_amount:
-            messages.error(request, "Payment exceeds invoice balance.")
-            return render(request, "pos/add_project_invoice_payment.html", {
-                "invoice": invoice,
-            })
-
-        payment = ProjectInvoicePayment.objects.create(
-            invoice=invoice,
-            payment_date=payment_date,
-            payment_type=payment_type,
-            amount=amount,
-            note=note,
-            created_by=request.user,
-        )
-
-        invoice.save()
-
-        messages.success(request, "Payment added successfully.")
-        return redirect("print_project_payment_receipt", payment_id=payment.id)
 
     return render(request, "pos/add_project_invoice_payment.html", {
         "invoice": invoice,
     })
-
 
 @user_passes_test(is_owner)
 def delete_project_invoice_payment(request, payment_id):
@@ -1349,25 +1447,11 @@ def print_project_invoice(request, invoice_id):
         id=invoice_id,
         is_active=True
     )
-    payments = invoice.payments.filter(is_active=True).select_related("created_by").order_by("-payment_date", "-id")
+    invoice_items = invoice.items.all()
 
     return render(request, "pos/print_project_invoice.html", {
         "invoice": invoice,
-        "payments": payments,
-    })
-
-
-@user_passes_test(can_use_income)
-def print_project_payment_receipt(request, payment_id):
-    payment = get_object_or_404(
-        ProjectInvoicePayment.objects.select_related("invoice", "invoice__project", "created_by"),
-        id=payment_id,
-        is_active=True
-    )
-
-    return render(request, "pos/print_project_payment_receipt.html", {
-        "payment": payment,
-        "invoice": payment.invoice,
+        "invoice_items": invoice_items,
     })
 
 @user_passes_test(is_owner)
@@ -1513,4 +1597,85 @@ def edit_project_expense(request, expense_id):
         "projects": projects,
         "expense_gls": expense_gls,
         "items": items,
+    })
+def number_to_words(n):
+    ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"]
+    teens = ["Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
+             "Sixteen", "Seventeen", "Eighteen", "Nineteen"]
+    tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
+
+    def words_under_1000(num):
+        result = ""
+
+        if num >= 100:
+            result += ones[num // 100] + " Hundred "
+            num %= 100
+
+        if 10 <= num <= 19:
+            result += teens[num - 10] + " "
+        else:
+            if num >= 20:
+                result += tens[num // 10] + " "
+                num %= 10
+            if num > 0:
+                result += ones[num] + " "
+
+        return result.strip()
+
+    if n == 0:
+        return "Zero"
+
+    parts = []
+
+    billions = n // 1000000000
+    if billions:
+        parts.append(words_under_1000(billions) + " Billion")
+        n %= 1000000000
+
+    millions = n // 1000000
+    if millions:
+        parts.append(words_under_1000(millions) + " Million")
+        n %= 1000000
+
+    thousands = n // 1000
+    if thousands:
+        parts.append(words_under_1000(thousands) + " Thousand")
+        n %= 1000
+
+    if n:
+        parts.append(words_under_1000(n))
+
+    return " ".join(parts).strip()
+
+
+def amount_to_words(amount):
+    amount = Decimal(str(amount or 0)).quantize(Decimal("0.01"))
+    rupees = int(amount)
+    cents = int((amount - Decimal(rupees)) * 100)
+
+    words = number_to_words(rupees) + " Rupees"
+    if cents > 0:
+        words += " and " + number_to_words(cents) + " Cents"
+    words += " Only"
+
+    return words
+
+@user_passes_test(can_use_income)
+def print_project_payment_receipt(request, payment_id):
+    payment = get_object_or_404(
+        ProjectInvoicePayment.objects.select_related(
+            "invoice",
+            "invoice__project",
+            "created_by"
+        ),
+        id=payment_id
+    )
+
+    invoice = payment.invoice
+    amount_in_words = amount_to_words(payment.amount)
+
+    return render(request, "pos/print_project_payment_receipt.html", {
+        "payment": payment,
+        "invoice": invoice,
+        "amount_in_words": amount_in_words,
     })

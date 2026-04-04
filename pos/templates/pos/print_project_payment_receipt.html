@@ -1,4 +1,3 @@
-{% load static %}
 {% load currency_filters %}
 <!DOCTYPE html>
 <html>
@@ -7,183 +6,385 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         @page {
-            size: 80mm auto;
-            margin: 0;
+            size: A4;
+            margin: 12mm;
         }
 
         body {
-            margin: 0;
-            padding: 0;
             font-family: Arial, sans-serif;
-            font-size: 12px;
-            color: #000;
-            background: #fff;
-        }
-
-        .receipt {
-            width: 80mm;
-            padding: 8px;
-            box-sizing: border-box;
-        }
-
-        .center {
-            text-align: center;
-        }
-
-        .logo {
-            max-width: 70px;
-            max-height: 70px;
-            margin: 0 auto 5px auto;
-            display: block;
-        }
-
-        .title {
-            font-size: 15px;
-            font-weight: bold;
-            margin: 4px 0;
-        }
-
-        .line {
-            border-top: 1px dashed #000;
-            margin: 6px 0;
-        }
-
-        .row {
-            margin: 2px 0;
-            word-wrap: break-word;
-        }
-
-        .label {
-            font-weight: bold;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 6px;
-        }
-
-        th, td {
-            padding: 3px 0;
-            vertical-align: top;
-            font-size: 12px;
-        }
-
-        .text-end {
-            text-align: right;
-        }
-
-        .amount-box {
-            margin-top: 8px;
-            border-top: 1px dashed #000;
-            border-bottom: 1px dashed #000;
-            padding: 6px 0;
-        }
-
-        .big {
-            font-size: 14px;
-            font-weight: bold;
-        }
-
-        .footer {
-            margin-top: 10px;
-            text-align: center;
-            font-size: 11px;
+            margin: 0;
+            background: #ffffff;
+            color: #333;
         }
 
         .print-btn {
-            text-align: center;
-            margin: 10px;
+            margin: 16px;
+            padding: 10px 18px;
+            border: none;
+            background: #1e2a78;
+            color: #fff;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
         }
 
-        .print-btn button {
-            padding: 8px 14px;
-            border: none;
-            background: #000;
-            color: #fff;
-            cursor: pointer;
+        .page {
+            position: relative;
+            min-height: 100vh;
+            padding: 20px 28px 10px;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+
+        .page::before {
+            content: "";
+            position: absolute;
+            left: 8px;
+            top: 0;
+            bottom: 0;
+            border-left: 2px dashed #bfc5d2;
+            opacity: 0.8;
+        }
+
+        .leaf-left,
+        .leaf-right,
+        .ring-right {
+            position: absolute;
+            opacity: 0.18;
+            z-index: 0;
+        }
+
+        .leaf-left {
+            left: -10px;
+            bottom: -10px;
+            width: 120px;
+            height: 120px;
+            border-radius: 0 100% 0 100%;
+            background: #5bb8a7;
+            transform: rotate(20deg);
+        }
+
+        .leaf-right {
+            right: 30px;
+            bottom: -5px;
+            width: 120px;
+            height: 120px;
+            border-radius: 100% 0 100% 0;
+            background: #5bb8a7;
+            transform: rotate(-20deg);
+        }
+
+        .ring-right {
+            right: -10px;
+            bottom: -20px;
+            width: 170px;
+            height: 170px;
+            border: 5px solid #f0b63a;
+            border-radius: 50%;
+        }
+
+        .ring-right::before,
+        .ring-right::after {
+            content: "";
+            position: absolute;
+            border: 5px solid #f0b63a;
+            border-radius: 50%;
+            inset: 14px;
+        }
+
+        .ring-right::after {
+            inset: 30px;
+        }
+
+        .content {
+            position: relative;
+            z-index: 2;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 28px;
+        }
+
+        .left-head {
+            width: 42%;
+        }
+
+        .logo-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .logo-row img {
+            max-width: 95px;
+            max-height: 80px;
+            object-fit: contain;
+        }
+
+        .brand-name {
+            font-size: 18px;
+            font-weight: 800;
+            color: #77b7ae;
+            letter-spacing: 1px;
+        }
+
+        .company-details {
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .right-head {
+            width: 40%;
+            text-align: center;
+        }
+
+        .receipt-title {
+            font-size: 34px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            margin-bottom: 6px;
+            color: #374151;
+        }
+
+        .receipt-no {
+            font-size: 26px;
+            font-weight: 800;
+            margin-bottom: 20px;
+            color: #374151;
+        }
+
+        .date-row {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            gap: 14px;
+            font-size: 16px;
+            margin-top: 6px;
+        }
+
+        .date-line {
+            flex: 1;
+            border-bottom: 1px solid #c8ccd5;
+            min-width: 140px;
+            padding-bottom: 4px;
+            text-align: left;
+        }
+
+        .field-block {
+            margin-top: 20px;
+        }
+
+        .field-row {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 26px;
+            font-size: 15px;
+        }
+
+        .label {
+            width: 170px;
+            font-weight: 700;
+            color: #444;
+        }
+
+        .colon {
+            width: 12px;
+            text-align: center;
+            font-weight: 700;
+        }
+
+        .line-value {
+            flex: 1;
+            border-bottom: 1px solid #c8ccd5;
+            min-height: 24px;
+            padding: 2px 6px 4px;
+            line-height: 1.4;
+        }
+
+        .payment-methods {
+            margin-left: 196px;
+            margin-top: -8px;
+            margin-bottom: 30px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px 50px;
+            width: 55%;
+            font-size: 15px;
+        }
+
+        .method {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .circle {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #c8ccd5;
+            border-radius: 50%;
+            display: inline-block;
+            position: relative;
+        }
+
+        .circle.checked::after {
+            content: "";
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #1e2a78;
+            top: 2px;
+            left: 2px;
+        }
+
+        .signature-area {
+            margin-top: 60px;
+            width: 260px;
+            text-align: center;
+        }
+
+        .signature-line {
+            border-top: 1px solid #b9bec9;
+            padding-top: 8px;
+            font-size: 14px;
+            font-weight: 600;
         }
 
         @media print {
             .print-btn {
                 display: none;
             }
-
             body {
-                margin: 0;
-                padding: 0;
+                -webkit-print-color-adjust: exact;
+                print-color-adjust: exact;
             }
         }
     </style>
 </head>
 <body>
 
-<div class="print-btn">
-    <button onclick="window.print()">Print Receipt</button>
+<button class="print-btn" onclick="printAndBack()">Print Receipt</button>
+
+<div class="page">
+    <div class="leaf-left"></div>
+    <div class="leaf-right"></div>
+    <div class="ring-right"></div>
+
+    <div class="content">
+        <div class="header">
+            <div class="left-head">
+                <div class="logo-row">
+                    <img src="/static/logo.png" alt="Logo">
+                    <div class="brand-name">P &amp; I CONSTRUCTIONS</div>
+                </div>
+
+                <div class="company-details">
+                    Matara Road, Magalla, Galle<br>
+                    077 361 3005<br>
+                    piconstructions@gmail.com
+                </div>
+            </div>
+
+            <div class="right-head">
+                <div class="receipt-title">RECEIPT</div>
+                <div class="receipt-no">No : {{ payment.receipt_no }}</div>
+
+                <div class="date-row">
+                    <div><strong>Date :</strong></div>
+                    <div class="date-line">{{ payment.payment_date|date:"d/m/Y" }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="field-block">
+            <div class="field-row">
+                <div class="label">Received from</div>
+                <div class="colon">:</div>
+                <div class="line-value">{{ invoice.bill_to_name|default:invoice.project.client_name }}</div>
+            </div>
+
+            <div class="field-row">
+                <div class="label">Address</div>
+                <div class="colon">:</div>
+                <div class="line-value">{{ invoice.bill_to_address|default:invoice.project.location }}</div>
+            </div>
+
+            <div class="field-row">
+                <div class="label">Amount</div>
+                <div class="colon">:</div>
+                <div class="line-value">LKR {{ payment.amount|money }}</div>
+            </div>
+
+            <div class="field-row">
+                <div class="label">In Word</div>
+                <div class="colon">:</div>
+                <div class="line-value">{{ amount_in_words }}</div>
+            </div>
+
+            <div class="field-row">
+                <div class="label">Payment For</div>
+                <div class="colon">:</div>
+                <div class="line-value">
+                    {{ payment.get_payment_type_display }} - {{ invoice.project.project_name }}{% if invoice.description %} / {{ invoice.description }}{% endif %}
+                </div>
+            </div>
+        </div>
+
+        <div class="payment-methods">
+            <div class="method">
+                <span class="circle {% if payment.payment_method == 'cash' %}checked{% endif %}"></span>
+                <span>Cash</span>
+            </div>
+            <div class="method">
+                <span class="circle {% if payment.payment_method == 'card' %}checked{% endif %}"></span>
+                <span>Credit Card</span>
+            </div>
+            <div class="method">
+                <span class="circle {% if payment.payment_method == 'cheque' %}checked{% endif %}"></span>
+                <span>Cheque</span>
+            </div>
+            <div class="method">
+                <span class="circle"></span>
+                <span>Money Order</span>
+            </div>
+        </div>
+
+        {% if payment.card_no %}
+        <div class="field-row">
+            <div class="label">Card No</div>
+            <div class="colon">:</div>
+            <div class="line-value">{{ payment.card_no }}</div>
+        </div>
+        {% endif %}
+
+        {% if payment.cheque_no %}
+        <div class="field-row">
+            <div class="label">Cheque No</div>
+            <div class="colon">:</div>
+            <div class="line-value">{{ payment.cheque_no }}</div>
+        </div>
+        {% endif %}
+
+        <div class="signature-area">
+            <div class="signature-line">Authorized Signature</div>
+        </div>
+    </div>
 </div>
 
-<div class="receipt">
-    <div class="center">
-        <img src="{% static 'logo.png' %}" alt="Logo" class="logo">
-        <div class="title">P&I Constructions</div>
-        <div>Matara Road, Magalla, Galle</div>
-        <div>077 361 3005 / 091 222 4090</div>
-        <div class="line"></div>
-        <div class="title">PAYMENT RECEIPT</div>
-    </div>
-
-    <div class="row"><span class="label">Receipt No:</span> {{ payment.receipt_no }}</div>
-    <div class="row"><span class="label">Date:</span> {{ payment.payment_date|date:"Y-m-d" }}</div>
-    <div class="row"><span class="label">Invoice No:</span> {{ invoice.invoice_no }}</div>
-
-    <div class="line"></div>
-
-    <div class="row"><span class="label">Received From:</span></div>
-    <div class="row">{{ invoice.bill_to_name|default:"-" }}</div>
-    <div class="row">{{ invoice.bill_to_address|default:"-" }}</div>
-
-    <div class="line"></div>
-
-    <div class="row"><span class="label">Project:</span></div>
-    <div class="row">{{ invoice.project.project_id }}</div>
-    <div class="row">{{ invoice.project.project_name }}</div>
-    {% if invoice.project.location %}
-    <div class="row">{{ invoice.project.location }}</div>
-    {% endif %}
-
-    <div class="line"></div>
-
-    <table>
-        <tr>
-            <td class="label">Payment Type</td>
-            <td class="text-end">{{ payment.get_payment_type_display }}</td>
-        </tr>
-        <tr>
-            <td class="label">Description</td>
-            <td class="text-end">{{ invoice.description }}</td>
-        </tr>
-    </table>
-
-    <div class="amount-box">
-        <table>
-            <tr>
-                <td class="big">Amount Received</td>
-                <td class="text-end big">LKR {{ payment.amount|money }}</td>
-            </tr>
-        </table>
-    </div>
-
-    {% if payment.note %}
-    <div class="row"><span class="label">Note:</span> {{ payment.note }}</div>
-    {% endif %}
-
-    <div class="line"></div>
-
-    <div class="footer">
-        <div>Payment received with thanks.</div>
-        <div>AT YOUR SERVICE EVERY TIME</div>
-    </div>
-</div>
+<script>
+function printAndBack() {
+    window.print();
+    setTimeout(function () {
+        window.location.href = "{% url 'project_invoice_list' %}";
+    }, 1200);
+}
+</script>
 
 </body>
 </html>
