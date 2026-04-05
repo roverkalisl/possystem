@@ -1,87 +1,78 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Edit Employee</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background: #f4f6f9; }
-        .card { border-radius: 12px; }
-    </style>
-</head>
-<body class="p-4">
+{% extends "base.html" %}
+{% load currency_filters %}
 
-{% if messages %}
-    {% for message in messages %}
-        <script>alert("{{ message|escapejs }}");</script>
-    {% endfor %}
-{% endif %}
+{% block title %}Edit Employee{% endblock %}
 
-<div class="container">
-    <div class="card shadow-sm p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3>Edit Employee</h3>
-            <div>
-                <a href="{% url 'employee_list' %}" class="btn btn-info btn-sm">Employee List</a>
-                <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+{% block content %}
+<div class="card p-3 p-md-4 compact-card-sm">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Edit Employee</h4>
+        <div>
+            <a href="{% url 'employee_list' %}" class="btn btn-secondary btn-sm">Back</a>
+        </div>
+    </div>
+
+    <div class="info-box mb-3">
+        <small class="text-muted">Employee No</small><br>
+        <strong>{{ employee.emp_no }}</strong>
+    </div>
+
+    <form method="POST">
+        {% csrf_token %}
+
+        <div class="mb-2">
+            <label class="form-label">Linked User</label>
+            <select name="user" class="form-select form-select-sm">
+                <option value="">Select User</option>
+                {% for user in users %}
+                <option value="{{ user.id }}" {% if employee.user and employee.user.id == user.id %}selected{% endif %}>
+                    {{ user.username }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="row g-2">
+            <div class="col-md-6">
+                <label class="form-label">Full Name</label>
+                <input type="text" name="full_name" class="form-control form-control-sm" value="{{ employee.full_name }}" required>
+            </div>
+
+            <div class="col-md-6">
+                <label class="form-label">Designation</label>
+                <input type="text" name="designation" class="form-control form-control-sm" value="{{ employee.designation }}">
             </div>
         </div>
 
-        <form method="POST">
-            {% csrf_token %}
+        <div class="mt-2">
+            <label class="form-label">Address</label>
+            <textarea name="address" class="form-control form-control-sm" rows="2">{{ employee.address }}</textarea>
+        </div>
 
-            <div class="mb-3">
-                <label class="form-label">Emp No</label>
-                <input type="text" class="form-control" value="{{ employee.emp_no }}" readonly>
+        <div class="row g-2 mt-1">
+            <div class="col-md-6">
+                <label class="form-label">Telephone</label>
+                <input type="text" name="tel" class="form-control form-control-sm" value="{{ employee.tel }}">
             </div>
 
-            <div class="mb-3">
-                <label class="form-label">Linked User (optional)</label>
-                <select name="user" class="form-select">
-                    <option value="">Select User</option>
-                    {% for u in users %}
-                        <option value="{{ u.id }}" {% if employee.user and employee.user.id == u.id %}selected{% endif %}>
-                            {{ u.username }}
-                        </option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Emp Name</label>
-                <input type="text" name="full_name" class="form-control" value="{{ employee.full_name }}" required>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Designation</label>
-                <input type="text" name="designation" class="form-control" value="{{ employee.designation }}">
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Address</label>
-                <textarea name="address" class="form-control" rows="3">{{ employee.address }}</textarea>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Tel</label>
-                <input type="text" name="tel" class="form-control" value="{{ employee.tel }}">
-            </div>
-
-            <div class="mb-3">
+            <div class="col-md-6">
                 <label class="form-label">Petty Cash Limit</label>
-                <input type="number" step="0.01" name="petty_cash_limit" class="form-control" value="{{ employee.petty_cash_limit }}">
+                <input type="number" step="0.01" name="petty_cash_limit" class="form-control form-control-sm text-money" value="{{ employee.petty_cash_limit }}">
             </div>
+        </div>
 
-            <div class="form-check mb-3">
-                <input class="form-check-input" type="checkbox" name="is_active" id="is_active"
-                       {% if employee.is_active %}checked{% endif %}>
-                <label class="form-check-label" for="is_active">Active</label>
+        <div class="mt-2">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="is_active" id="is_active" {% if employee.is_active %}checked{% endif %}>
+                <label class="form-check-label" for="is_active">
+                    Active
+                </label>
             </div>
+        </div>
 
-            <button class="btn btn-success w-100">Update Employee</button>
-        </form>
-    </div>
+        <div class="mt-3">
+            <button class="btn btn-primary btn-sm w-100">Update Employee</button>
+        </div>
+    </form>
 </div>
-
-</body>
-</html>
+{% endblock %}

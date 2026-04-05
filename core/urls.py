@@ -67,4 +67,7 @@ urlpatterns = [
     path('projects/edit/<int:project_id>/', views.edit_project, name='edit_project'),
     path('petty-cash/edit/<int:petty_cash_id>/', views.edit_petty_cash, name='edit_petty_cash'),
     path('project-expenses/edit/<int:expense_id>/', views.edit_project_expense, name='edit_project_expense'),
+    path('project-issues/approvals/', views.project_issue_approval_list, name='project_issue_approval_list'),
+    path('project-issues/<int:sale_id>/approve/', views.approve_project_issue, name='approve_project_issue'),
+    path('project-issues/<int:sale_id>/reject/', views.reject_project_issue, name='reject_project_issue'),
 ]

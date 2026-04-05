@@ -137,10 +137,37 @@ class Sale(models.Model):
         ("credit", "Credit"),
     ]
 
+    SALE_TYPE_CHOICES = [
+        ("retail", "Retail Sale"),
+        ("project_issue", "Project Issue"),
+    ]
+
+    APPROVAL_STATUS_CHOICES = [
+        ("na", "Not Applicable"),
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
     invoice_no = models.CharField(max_length=50, unique=True)
     total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     grand_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    sale_type = models.CharField(max_length=20, choices=SALE_TYPE_CHOICES, default="retail")
+    project = models.ForeignKey("Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="pos_sales")
+
+    approval_status = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, default="na")
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_sales"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    is_posted_to_project_expense = models.BooleanField(default=False)
+    approval_note = models.TextField(blank=True, null=True)
 
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default="cash")
     received_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
@@ -159,7 +186,6 @@ class Sale(models.Model):
 
     def __str__(self):
         return self.invoice_no
-
 
 class SaleItem(models.Model):
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="sale_items")
@@ -255,7 +281,6 @@ class ProjectExpense(models.Model):
     ]
 
     expense_no = models.CharField(max_length=20, unique=True, blank=True, null=True)
-
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="expenses")
     expense_type = models.CharField(max_length=20, choices=EXPENSE_TYPE_CHOICES, default="direct")
     expense_date = models.DateField(default=timezone.now)
@@ -269,11 +294,16 @@ class ProjectExpense(models.Model):
 
     gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True)
 
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    source_sale = models.ForeignKey(
+        "Sale",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="project_expense_rows"
+    )
 
     is_active = models.BooleanField(default=True)
-    inactive_at = models.DateTimeField(null=True, blank=True)
+    inactive_at = models.DateTimeField(blank=True, null=True)
     inactive_by = models.ForeignKey(
         User,
         on_delete=models.SET_NULL,
@@ -282,15 +312,16 @@ class ProjectExpense(models.Model):
         related_name="inactive_project_expenses"
     )
     inactive_reason = models.TextField(blank=True, null=True)
-    updated_at = models.DateTimeField(auto_now=True)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["-expense_date", "-id"]
 
     def __str__(self):
         return self.expense_no or f"{self.project.project_id} - {self.description}"
-
-
+    
 class Employee(models.Model):
     user = models.OneToOneField(
         User,

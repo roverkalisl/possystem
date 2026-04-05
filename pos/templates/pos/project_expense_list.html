@@ -1,106 +1,79 @@
+{% extends "base.html" %}
 {% load currency_filters %}
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Project Expenses</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background: #f4f6f9; }
-        .card { border-radius: 12px; }
-    </style>
-</head>
-<body class="p-4">
 
-{% if messages %}
-    {% for message in messages %}
-        <script>alert("{{ message|escapejs }}");</script>
-    {% endfor %}
-{% endif %}
+{% block title %}Project Expense List{% endblock %}
 
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>Project Expenses</h3>
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Project Expense List</h4>
         <div>
-            <a href="{% url 'add_project_expense' %}" class="btn btn-success btn-sm">+ Add Expense</a>
+            <a href="{% url 'add_project_expense' %}" class="btn btn-primary btn-sm">+ Add Expense</a>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
         </div>
     </div>
 
-    <div class="card shadow-sm p-3 mb-3">
-        <form method="GET">
-            <div class="row">
-                <div class="col-md-10">
-                   <select name="project" class="form-select" required>
-    <option value="">Select Project</option>
-    {% for p in projects %}
-        <option value="{{ p.id }}">
-            {{ p.project_id }} - {{ p.project_name }} - {{ p.client_name }}{% if p.location %} - {{ p.location }}{% endif %}
-        </option>
-    {% endfor %}
-</select>
-                </div>
-                <div class="col-md-2">
-                    <button class="btn btn-primary w-100">Filter</button>
-                </div>
-            </div>
-        </form>
-    </div>
-
-    <div class="card shadow-sm p-3">
-        <div class="table-responsive">
-            <table class="table table-bordered table-striped bg-white">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Expense No</th>
-                        <th>Date</th>
-                        <th>Project</th>
-                        <th>Type</th>
-                        <th>Description</th>
-                        <th>Qty</th>
-                        <th>Unit Price</th>
-                        <th>Amount</th>
-                        <th>GL</th>
-                        <th>Created By</th>
-                        {% if is_owner %}
-                        <th>Action</th>
-                        {% endif %}
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for e in expenses %}
-                    <tr>
-                        <td>{{ e.expense_no }}</td>
-                        <td>{{ e.expense_date|date:"Y-m-d" }}</td>
-                        <td>{{ e.project.project_id }} - {{ e.project.project_name }}</td>
-                        <td>{{ e.get_expense_type_display }}</td>
-                        <td>{{ e.description }}</td>
-                        <td>{{ e.qty }}</td>
-                        <td>Rs. {{ e.unit_price|money }}</td>
-                        <td>Rs. {{ e.amount|money }}</td>
-                        <td>{{ e.gl_account|default:"-" }}</td>
-                        <td>{{ e.created_by.username|default:"-" }}</td>
-                        {% if is_owner %}
-                        <td>
-			<a href="{% url 'edit_project_expense' e.id %}" class="btn btn-primary btn-sm mb-1">Edit</a>
-                            <a href="{% url 'delete_project_expense' e.id %}"
-                               class="btn btn-warning btn-sm"
-                               onclick="return confirm('Deactivate this expense?')">
-                               Deactivate
-                            </a>
-                        </td>
-                        {% endif %}
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="{% if is_owner %}11{% else %}10{% endif %}" class="text-center">No expenses found</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-8">
+            <select name="project" class="form-select form-select-sm">
+                <option value="">All Projects</option>
+                {% for p in projects %}
+                <option value="{{ p.id }}" {% if selected_project == p.id|stringformat:"s" %}selected{% endif %}>
+                    {{ p.project_id }} - {{ p.project_name }} - {{ p.client_name }}{% if p.location %} - {{ p.location }}{% endif %}
+                </option>
+                {% endfor %}
+            </select>
         </div>
-    </div>
+        <div class="col-md-4">
+            <button class="btn btn-dark btn-sm w-100">Filter</button>
+        </div>
+    </form>
 
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Expense No</th>
+                    <th>Date</th>
+                    <th>Project</th>
+                    <th>Type</th>
+                    <th>Description</th>
+                    <th>Qty</th>
+                    <th>Unit Price</th>
+                    <th>Amount</th>
+                    <th>Created By</th>
+                    {% if is_owner %}
+                    <th>Action</th>
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for expense in expenses %}
+                <tr>
+                    <td>{{ expense.expense_no }}</td>
+                    <td>{{ expense.expense_date|date:"Y-m-d" }}</td>
+                    <td>{{ expense.project.project_id }}</td>
+                    <td>{{ expense.get_expense_type_display }}</td>
+                    <td>{{ expense.description }}</td>
+                    <td>{{ expense.qty }}</td>
+                    <td class="text-money">Rs. {{ expense.unit_price|money }}</td>
+                    <td class="text-money">Rs. {{ expense.amount|money }}</td>
+                    <td>{% if expense.created_by %}{{ expense.created_by.username }}{% else %}-{% endif %}</td>
+                    {% if is_owner %}
+                    <td>
+                        <a href="{% url 'delete_project_expense' expense.id %}"
+                           class="btn btn-sm btn-outline-danger"
+                           onclick="return confirm('Deactivate this expense?')">Deactivate</a>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="{% if is_owner %}10{% else %}9{% endif %}" class="text-center">No expenses found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
-</body>
-</html>
+{% endblock %}

@@ -1,135 +1,118 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Dashboard</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+{% extends "base.html" %}
 
-    <style>
-        body {
-            background: #f4f6f9;
-        }
+{% block title %}Dashboard{% endblock %}
 
-        .dashboard-card {
-            border-radius: 15px;
-            cursor: pointer;
-            transition: 0.3s;
-            min-height: 160px;
-        }
-
-        .dashboard-card:hover {
-            transform: scale(1.03);
-        }
-
-        .dashboard-card h4 {
-            margin-bottom: 10px;
-        }
-    </style>
-</head>
-<body class="p-4">
-
-<div class="container">
-
-    <div class="d-flex justify-content-between align-items-center mb-4">
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Dashboard</h4>
         <div>
-            <h3 class="mb-1">Dashboard</h3>
-            <p class="mb-0">Welcome, {{ request.user.username }}</p>
+            <a href="{% url 'logout' %}" class="btn btn-danger btn-sm">Logout</a>
         </div>
-        <a href="{% url 'logout' %}" class="btn btn-danger btn-sm">Logout</a>
     </div>
 
-    <div class="row">
+    <div class="row g-3">
 
         {% if show_pos %}
-        <div class="col-md-4 mb-3">
-            <div class="card dashboard-card shadow-sm p-4 text-center"
-                 onclick="window.location.href='{% url 'pos' %}'">
-                <h4>POS</h4>
-                <p class="mb-0">Billing and Sales</p>
+        <div class="col-md-4 col-lg-3">
+            <div class="summary-box">
+                <h6>POS</h6>
+                <div class="d-grid gap-2 mt-3">
+                    <a href="{% url 'pos' %}" class="btn btn-primary btn-sm">Open POS</a>
+                    <a href="{% url 'sales_return' %}" class="btn btn-outline-primary btn-sm">Sales Return</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if show_items %}
+        <div class="col-md-4 col-lg-3">
+            <div class="summary-box">
+                <h6>Items</h6>
+                <div class="d-grid gap-2 mt-3">
+                    <a href="{% url 'item_list' %}" class="btn btn-primary btn-sm">Item List</a>
+                    <a href="{% url 'add_item' %}" class="btn btn-outline-primary btn-sm">Add Item</a>
+                    <a href="{% url 'stock_history' %}" class="btn btn-outline-dark btn-sm">Stock History</a>
+                </div>
             </div>
         </div>
         {% endif %}
 
         {% if show_project %}
-        <div class="col-md-4 mb-3">
-            <div class="card dashboard-card shadow-sm p-4 text-center"
-                 onclick="window.location.href='{% url 'project_list' %}'">
-                <h4>Projects</h4>
-                <p class="mb-0">Project Management</p>
+        <div class="col-md-4 col-lg-3">
+            <div class="summary-box">
+                <h6>Projects</h6>
+                <div class="d-grid gap-2 mt-3">
+                    <a href="{% url 'project_list' %}" class="btn btn-primary btn-sm">Project List</a>
+                    <a href="{% url 'project_expense_list' %}" class="btn btn-outline-danger btn-sm">Project Expenses</a>
+                    <a href="{% url 'petty_cash_list' %}" class="btn btn-outline-primary btn-sm">Petty Cash</a>
+                    <a href="{% url 'project_profit_dashboard' %}" class="btn btn-outline-success btn-sm">Profit Dashboard</a>
+                </div>
             </div>
         </div>
         {% endif %}
 
         {% if show_project %}
-        <div class="col-md-4 mb-3">
-            <div class="card dashboard-card shadow-sm p-4 text-center"
-                 onclick="window.location.href='{% url 'project_expense_list' %}'">
-                <h4>Project Expenses</h4>
-                <p class="mb-0">Expense Entries</p>
-            </div>
-        </div>
-        {% endif %}
-
-        {% if show_project %}
-        <div class="col-md-4 mb-3">
-            <div class="card dashboard-card shadow-sm p-4 text-center"
-                 onclick="window.location.href='{% url 'petty_cash_list' %}'">
-                <h4>Petty Cash</h4>
-                <p class="mb-0">Cash Issue and Tracking</p>
-            </div>
-        </div>
-        {% endif %}
-
-     <div class="col-md-4 mb-3">
-    <div class="card dashboard-card shadow-sm p-4 text-center"
-         onclick="window.location.href='{% url 'project_invoice_list' %}'">
-        <h4>Project Income</h4>
-        <p class="mb-0">Invoices & Payments</p>
-    </div>
-</div>
-
-        {% if show_project %}
-        <div class="col-md-4 mb-3">
-            <div class="card dashboard-card shadow-sm p-4 text-center"
-                 onclick="window.location.href='{% url 'project_profit_dashboard' %}'">
-                <h4>Profit Dashboard</h4>
-                <p class="mb-0">Income vs Expense</p>
+        <div class="col-md-4 col-lg-3">
+            <div class="summary-box">
+                <h6>Project Billing</h6>
+                <div class="d-grid gap-2 mt-3">
+                    <a href="{% url 'project_invoice_list' %}" class="btn btn-primary btn-sm">Project Invoices</a>
+                    <a href="{% url 'add_project_invoice' %}" class="btn btn-outline-primary btn-sm">Add Invoice</a>
+                    {% if is_owner_flag %}
+                    <a href="{% url 'project_issue_approval_list' %}" class="btn btn-outline-dark btn-sm">Issue Approvals</a>
+                    {% endif %}
+                </div>
             </div>
         </div>
         {% endif %}
 
         {% if show_gl %}
-        <div class="col-md-4 mb-3">
-            <div class="card dashboard-card shadow-sm p-4 text-center"
-                 onclick="window.location.href='{% url 'gl_list' %}'">
-                <h4>GL Master</h4>
-                <p class="mb-0">Accounts and Costing</p>
+        <div class="col-md-4 col-lg-3">
+            <div class="summary-box">
+                <h6>GL Accounts</h6>
+                <div class="d-grid gap-2 mt-3">
+                    <a href="{% url 'gl_list' %}" class="btn btn-primary btn-sm">GL List</a>
+                    <a href="{% url 'add_gl' %}" class="btn btn-outline-primary btn-sm">Add GL</a>
+                </div>
             </div>
         </div>
         {% endif %}
-{% if show_employees %}
-<div class="col-md-4 mb-3">
-    <div class="card dashboard-card shadow-sm p-4 text-center"
-         onclick="window.location.href='{% url 'employee_list' %}'">
-        <h4>Employees</h4>
-        <p class="mb-0">Employee Details & Limits</p>
-    </div>
-</div>
-{% endif %}
 
         {% if show_users %}
-        <div class="col-md-4 mb-3">
-            <div class="card dashboard-card shadow-sm p-4 text-center"
-                 onclick="window.location.href='{% url 'user_list' %}'">
-                <h4>Users</h4>
-                <p class="mb-0">Create and Manage Users</p>
+        <div class="col-md-4 col-lg-3">
+            <div class="summary-box">
+                <h6>Users</h6>
+                <div class="d-grid gap-2 mt-3">
+                    <a href="{% url 'user_list' %}" class="btn btn-primary btn-sm">User List</a>
+                    <a href="{% url 'create_user' %}" class="btn btn-outline-primary btn-sm">Create User</a>
+                </div>
             </div>
         </div>
         {% endif %}
 
+        {% if show_employees %}
+        <div class="col-md-4 col-lg-3">
+            <div class="summary-box">
+                <h6>Employees</h6>
+                <div class="d-grid gap-2 mt-3">
+                    <a href="{% url 'employee_list' %}" class="btn btn-primary btn-sm">Employee List</a>
+                    <a href="{% url 'add_employee' %}" class="btn btn-outline-primary btn-sm">Add Employee</a>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="col-md-4 col-lg-3">
+            <div class="summary-box">
+                <h6>Reports</h6>
+                <div class="d-grid gap-2 mt-3">
+                    <a href="{% url 'daily_report' %}" class="btn btn-primary btn-sm">Daily Report</a>
+                    <a href="{% url 'monthly_report' %}" class="btn btn-outline-primary btn-sm">Monthly Report</a>
+                </div>
+            </div>
+        </div>
+
     </div>
-
 </div>
-
-</body>
-</html>
+{% endblock %}

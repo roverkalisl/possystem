@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Project Issue Approvals{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Project Issue Approvals</h4>
+        <div>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+        </div>
+    </div>
+
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-4">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-select form-select-sm">
+                <option value="pending" {% if status_filter == "pending" %}selected{% endif %}>Pending</option>
+                <option value="approved" {% if status_filter == "approved" %}selected{% endif %}>Approved</option>
+                <option value="rejected" {% if status_filter == "rejected" %}selected{% endif %}>Rejected</option>
+            </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-dark btn-sm w-100">Filter</button>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Invoice No</th>
+                    <th>Date</th>
+                    <th>Project</th>
+                    <th>Customer</th>
+                    <th>Total</th>
+                    <th>Payment</th>
+                    <th>Created By</th>
+                    <th>Status</th>
+                    <th>Posted</th>
+                    <th>View</th>
+                    <th>Items</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sale in sales %}
+                <tr>
+                    <td>{{ sale.invoice_no }}</td>
+                    <td>{{ sale.created_at|date:"Y-m-d H:i" }}</td>
+                    <td>
+                        {% if sale.project %}
+                            {{ sale.project.project_id }} - {{ sale.project.project_name }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ sale.customer_name|default:"-" }}</td>
+                    <td class="text-money">Rs. {{ sale.grand_total|money }}</td>
+                    <td>{{ sale.get_payment_method_display }}</td>
+                    <td>{% if sale.created_by %}{{ sale.created_by.username }}{% else %}-{% endif %}</td>
+                    <td>
+                        {% if sale.approval_status == "approved" %}
+                            <span class="badge bg-success">Approved</span>
+                        {% elif sale.approval_status == "rejected" %}
+                            <span class="badge bg-danger">Rejected</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if sale.is_posted_to_project_expense %}
+                            <span class="badge bg-success">Yes</span>
+                        {% else %}
+                            <span class="badge bg-secondary">No</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'invoice_page' sale.id %}" class="btn btn-sm btn-outline-primary">Invoice</a>
+                    </td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-dark" type="button" data-bs-toggle="collapse" data-bs-target="#items{{ sale.id }}">
+                            Show
+                        </button>
+                    </td>
+                    <td>
+                        {% if sale.approval_status == "pending" and not sale.is_posted_to_project_expense %}
+                            <a href="{% url 'approve_project_issue' sale.id %}"
+                               class="btn btn-sm btn-outline-success mb-1"
+                               onclick="return confirm('Approve this project issue?')">
+                               Approve
+                            </a>
+                            <a href="{% url 'reject_project_issue' sale.id %}"
+                               class="btn btn-sm btn-outline-danger"
+                               onclick="return confirm('Reject this project issue?')">
+                               Reject
+                            </a>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                </tr>
+
+                <tr class="collapse" id="items{{ sale.id }}">
+                    <td colspan="12">
+                        <div class="p-2">
+                            <strong>Items</strong>
+                            <div class="table-responsive mt-2">
+                                <table class="table table-bordered table-sm mb-0">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th>Code</th>
+                                            <th>Item</th>
+                                            <th>Qty</th>
+                                            <th>Price</th>
+                                            <th>Amount</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {% for row in sale.sale_items.all %}
+                                        <tr>
+                                            <td>{{ row.item.item_code }}</td>
+                                            <td>{{ row.item.name }}</td>
+                                            <td>{{ row.qty }}</td>
+                                            <td class="text-money">Rs. {{ row.price|money }}</td>
+                                            <td class="text-money">Rs. {{ row.amount|money }}</td>
+                                        </tr>
+                                        {% empty %}
+                                        <tr>
+                                            <td colspan="5" class="text-center">No items found</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {% if sale.approved_by %}
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    Approved/Rejected By:
+                                    {{ sale.approved_by.username }} |
+                                    {{ sale.approved_at|date:"Y-m-d H:i" }}
+                                </small>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="12" class="text-center">No project issue records found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

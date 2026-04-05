@@ -160,8 +160,8 @@ def dashboard(request):
         "show_users": is_owner(request.user),
         "show_items": can_manage_items(request.user),
         "show_employees": is_owner(request.user),
+        "is_owner_flag": is_owner(request.user),
     })
-
 
 # =========================
 # USER MANAGEMENT
@@ -275,6 +275,7 @@ def edit_user(request, user_id):
 def pos_page(request):
     query = request.GET.get("q", "").strip()
     items = Item.objects.filter(is_active=True).select_related("category").order_by("name")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
 
     if query:
         items = items.filter(
@@ -285,10 +286,10 @@ def pos_page(request):
 
     return render(request, "pos/pos.html", {
         "items": items,
+        "projects": projects,
         "query": query,
         "show_items": can_manage_items(request.user),
     })
-
 
 @user_passes_test(can_use_pos)
 def save_sale(request):
@@ -297,32 +298,65 @@ def save_sale(request):
 
     try:
         data = json.loads(request.body)
-        items = data.get("items", [])
 
+        items = data.get("items", [])
         if not items:
             return JsonResponse({"status": "error", "message": "Cart empty"}, status=400)
 
         total = to_decimal(data.get("total"))
         discount = to_decimal(data.get("discount"))
         grand_total = to_decimal(data.get("grand_total"))
+
         payment_method = data.get("payment_method", "cash")
         received_amount = to_decimal(data.get("received"))
         balance = to_decimal(data.get("balance"))
         card_last4 = data.get("card_last4") or None
         cheque_number = data.get("cheque_number") or None
+
         customer_name = (data.get("customer_name") or "").strip() or None
         customer_phone = (data.get("customer_phone") or "").strip() or None
 
+        sale_type = (data.get("sale_type") or "retail").strip()
+        project_id = data.get("project_id") or None
+
+        if sale_type not in ["retail", "project_issue"]:
+            sale_type = "retail"
+
+        if sale_type == "project_issue" and not project_id:
+            return JsonResponse({
+                "status": "error",
+                "message": "Project is required for project issue sales."
+            }, status=400)
+
+        project = None
+        if project_id:
+            project = Project.objects.filter(id=project_id, is_active=True).first()
+            if not project and sale_type == "project_issue":
+                return JsonResponse({
+                    "status": "error",
+                    "message": "Selected project not found."
+                }, status=400)
+
         invoice_no = f"INV{Sale.objects.count() + 1:05d}"
+
+        if sale_type == "project_issue":
+            approval_status = "pending"
+            if not customer_name and project:
+                customer_name = f"Project - {project.project_id}"
+        else:
+            approval_status = "na"
 
         sale = Sale.objects.create(
             invoice_no=invoice_no,
             total=total,
             discount=discount,
             grand_total=grand_total,
+            sale_type=sale_type,
+            project=project if sale_type == "project_issue" else None,
+            approval_status=approval_status,
             payment_method=payment_method,
             received_amount=received_amount if payment_method == "cash" else None,
-            balance=balance if payment_method == "cash" else None,
+            balance=balance if payment_method in ["cash", "credit"] else None,
             card_last4=card_last4 if payment_method == "card" else None,
             cheque_number=cheque_number if payment_method == "credit" else None,
             customer_name=customer_name,
@@ -355,11 +389,25 @@ def save_sale(request):
                     qty=qty,
                 )
 
-        return JsonResponse({"status": "success", "sale_id": sale.id})
+        return JsonResponse({
+            "status": "success",
+            "sale_id": sale.id,
+            "invoice_no": sale.invoice_no,
+            "sale_type": sale.sale_type,
+            "approval_status": sale.approval_status,
+        })
+
+    except Item.DoesNotExist:
+        return JsonResponse({
+            "status": "error",
+            "message": "Selected item not found."
+        }, status=404)
 
     except Exception as e:
-        return JsonResponse({"status": "error", "message": str(e)}, status=500)
-
+        return JsonResponse({
+            "status": "error",
+            "message": str(e)
+        }, status=500)
 
 @user_passes_test(can_use_pos)
 def invoice_page(request, sale_id):
@@ -743,7 +791,6 @@ def project_expense_list(request):
         "selected_project": project_id,
         "is_owner": is_owner(request.user),
     })
-
 
 @user_passes_test(can_add_expenses)
 def add_project_expense(request):
@@ -1679,3 +1726,89 @@ def print_project_payment_receipt(request, payment_id):
         "invoice": invoice,
         "amount_in_words": amount_in_words,
     })
+
+@user_passes_test(is_owner)
+def project_issue_approval_list(request):
+    status_filter = request.GET.get("status", "pending").strip()
+
+    sales = Sale.objects.filter(
+        sale_type="project_issue"
+    ).select_related(
+        "project", "created_by", "approved_by"
+    ).prefetch_related(
+        "sale_items__item"
+    ).order_by("-created_at")
+
+    if status_filter in ["pending", "approved", "rejected"]:
+        sales = sales.filter(approval_status=status_filter)
+
+    return render(request, "pos/project_issue_approval_list.html", {
+        "sales": sales,
+        "status_filter": status_filter,
+    })
+
+@user_passes_test(is_owner)
+def approve_project_issue(request, sale_id):
+    sale = get_object_or_404(
+        Sale.objects.select_related("project", "created_by").prefetch_related("sale_items__item"),
+        id=sale_id,
+        sale_type="project_issue"
+    )
+
+    if not sale.project:
+        messages.error(request, "Project not found for this issue.")
+        return redirect("project_issue_approval_list")
+
+    if sale.is_posted_to_project_expense:
+        messages.warning(request, "This project issue is already posted.")
+        return redirect("project_issue_approval_list")
+
+    if sale.approval_status == "approved":
+        messages.warning(request, "This project issue is already approved.")
+        return redirect("project_issue_approval_list")
+
+    for row in sale.sale_items.all():
+        ProjectExpense.objects.create(
+            expense_no=generate_project_expense_no(),
+            project=sale.project,
+            expense_type="inventory",
+            expense_date=timezone.localdate(sale.created_at),
+            item=row.item,
+            description=f"POS Issue - {sale.invoice_no} - {row.item.name}",
+            qty=row.qty,
+            unit_price=row.price,
+            amount=row.amount,
+            gl_account=row.item.cost_gl_account if row.item and row.item.cost_gl_account else None,
+            created_by=sale.created_by,
+            source_sale=sale,
+        )
+
+    sale.approval_status = "approved"
+    sale.approved_by = request.user
+    sale.approved_at = timezone.now()
+    sale.is_posted_to_project_expense = True
+    sale.save()
+
+    messages.success(request, f"Project issue {sale.invoice_no} approved successfully.")
+    return redirect("project_issue_approval_list")
+
+@user_passes_test(is_owner)
+def reject_project_issue(request, sale_id):
+    sale = get_object_or_404(
+        Sale,
+        id=sale_id,
+        sale_type="project_issue"
+    )
+
+    if sale.approval_status == "approved":
+        messages.error(request, "Approved issue cannot be rejected.")
+        return redirect("project_issue_approval_list")
+
+    sale.approval_status = "rejected"
+    sale.approved_by = request.user
+    sale.approved_at = timezone.now()
+    sale.approval_note = "Rejected by owner"
+    sale.save()
+
+    messages.success(request, f"Project issue {sale.invoice_no} rejected.")
+    return redirect("project_issue_approval_list")

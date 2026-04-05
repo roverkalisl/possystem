@@ -1,101 +1,91 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Sales Return</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-</head>
-<body class="bg-light">
+{% extends "base.html" %}
+{% load currency_filters %}
 
-<div class="container mt-4">
-    <div class="card p-4 shadow-sm">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3>Sales Return</h3>
-            <a href="{% url 'pos' %}" class="btn btn-secondary">Back to POS</a>
+{% block title %}Sales Return{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4 compact-card">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Sales Return</h4>
+        <div>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+        </div>
+    </div>
+
+    <form method="POST" id="returnForm">
+        {% csrf_token %}
+
+        <div class="mb-2">
+            <label class="form-label">Sale Invoice</label>
+            <select name="sale" id="saleSelect" class="form-select form-select-sm" required>
+                <option value="">Select Invoice</option>
+                {% for sale in sales %}
+                <option value="{{ sale.id }}">{{ sale.invoice_no }} - Rs. {{ sale.grand_total|money }}</option>
+                {% endfor %}
+            </select>
         </div>
 
-        {% if messages %}
-            {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}success{% endif %}">
-                    {{ message }}
-                </div>
-            {% endfor %}
-        {% endif %}
+        <div class="mb-2">
+            <label class="form-label">Sale Item</label>
+            <select name="sale_item" id="saleItemSelect" class="form-select form-select-sm" required>
+                <option value="">Select Item</option>
+            </select>
+        </div>
 
-        <form method="POST">
-            {% csrf_token %}
-
-            <div class="mb-3">
-                <label class="form-label">Invoice</label>
-                <select name="sale" id="sale" class="form-select" onchange="loadSaleItems()" required>
-                    <option value="">Select Invoice</option>
-                    {% for sale in sales %}
-                        <option value="{{ sale.id }}">{{ sale.invoice_no }} - {{ sale.created_at|date:"Y-m-d H:i" }}</option>
-                    {% endfor %}
-                </select>
+        <div class="row g-2">
+            <div class="col-md-4">
+                <label class="form-label">Qty</label>
+                <input type="number" step="0.01" name="qty" class="form-control form-control-sm" required>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label">Item</label>
-                <select name="sale_item" id="sale_item" class="form-select" required>
-                    <option value="">Select Item</option>
-                </select>
-            </div>
-
-            <div class="mb-3">
-                <label class="form-label">Return Qty</label>
-                <input type="number" name="qty" class="form-control" min="1" required>
-            </div>
-
-            <div class="mb-3">
+            <div class="col-md-4">
                 <label class="form-label">Return Type</label>
-                <select name="return_type" class="form-select">
+                <select name="return_type" class="form-select form-select-sm">
                     <option value="refund">Refund</option>
                     <option value="replace">Replace</option>
                     <option value="repair">Repair</option>
                 </select>
             </div>
 
-            <div class="mb-3">
+            <div class="col-md-4">
                 <label class="form-label">Reason</label>
-                <textarea name="reason" class="form-control" rows="3"></textarea>
+                <input type="text" name="reason" class="form-control form-control-sm">
             </div>
+        </div>
 
-            <button type="submit" class="btn btn-warning">Process Return</button>
-        </form>
-    </div>
+        <div class="mt-3">
+            <button class="btn btn-primary btn-sm w-100">Save Return</button>
+        </div>
+    </form>
 </div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
-function loadSaleItems() {
-    const saleId = document.getElementById('sale').value;
-    const saleItemSelect = document.getElementById('sale_item');
-
-    saleItemSelect.innerHTML = '<option value="">Loading...</option>';
+document.getElementById("saleSelect").addEventListener("change", function() {
+    const saleId = this.value;
+    const itemSelect = document.getElementById("saleItemSelect");
+    itemSelect.innerHTML = '<option value="">Loading...</option>';
 
     if (!saleId) {
-        saleItemSelect.innerHTML = '<option value="">Select Item</option>';
+        itemSelect.innerHTML = '<option value="">Select Item</option>';
         return;
     }
 
     fetch(`/sale-items/${saleId}/`)
         .then(response => response.json())
         .then(data => {
-            saleItemSelect.innerHTML = '<option value="">Select Item</option>';
-
+            itemSelect.innerHTML = '<option value="">Select Item</option>';
             data.items.forEach(item => {
-                const option = document.createElement('option');
+                const option = document.createElement("option");
                 option.value = item.sale_item_id;
-                option.text = `${item.item_name} (${item.item_code}) | Qty: ${item.qty} | Price: ${item.price}`;
-                saleItemSelect.appendChild(option);
+                option.textContent = `${item.item_name} | Qty: ${item.qty} | Price: ${item.price}`;
+                itemSelect.appendChild(option);
             });
         })
-        .catch(error => {
-            saleItemSelect.innerHTML = '<option value="">Error loading items</option>';
-            console.error(error);
+        .catch(() => {
+            itemSelect.innerHTML = '<option value="">Failed to load items</option>';
         });
-}
+});
 </script>
-
-</body>
-</html>
+{% endblock %}

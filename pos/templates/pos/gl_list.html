@@ -1,60 +1,52 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>GL Master</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+{% extends "base.html" %}
 
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+{% block title %}GL List{% endblock %}
 
-    <style>
-        body { background: #f4f6f9; }
-        .card { border-radius: 12px; }
-    </style>
-</head>
-<body class="p-4">
-
-<div class="container-fluid">
-
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>📘 GL Master</h3>
-
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">GL Account List</h4>
         <div>
-            <a href="{% url 'add_gl' %}" class="btn btn-success btn-sm">+ Add GL</a>
+            <a href="{% url 'add_gl' %}" class="btn btn-primary btn-sm">+ Add GL</a>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
         </div>
     </div>
 
-    <div class="card shadow-sm p-3">
-        <div class="table-responsive">
-            <table class="table table-bordered table-striped bg-white">
-                <thead class="table-dark">
-                    <tr>
-                        <th>GL Code</th>
-                        <th>Name</th>
-                        <th>Type</th>
-                        <th>Parent</th>
-                    </tr>
-                </thead>
-
-                <tbody>
-                    {% for gl in gl_accounts %}
-                    <tr>
-                        <td>{{ gl.gl_code }}</td>
-                        <td>{{ gl.gl_name }}</td>
-                        <td>{{ gl.gl_type }}</td>
-                        <td>{{ gl.parent_group|default:"-" }}</td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="4" class="text-center">No GL accounts found</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>GL Code</th>
+                    <th>GL Name</th>
+                    <th>GL Type</th>
+                    <th>Parent Group</th>
+                    <th>Description</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for gl in gl_accounts %}
+                <tr>
+                    <td>{{ gl.gl_code }}</td>
+                    <td>{{ gl.gl_name }}</td>
+                    <td>{{ gl.get_gl_type_display }}</td>
+                    <td>{{ gl.parent_group|default:"-" }}</td>
+                    <td>{{ gl.description|default:"-" }}</td>
+                    <td>
+                        {% if gl.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-danger">Inactive</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center">No GL accounts found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-
 </div>
-
-</body>
-</html>
+{% endblock %}

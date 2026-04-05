@@ -1,79 +1,59 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Employee List</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background: #f4f6f9; }
-        .card { border-radius: 12px; }
-    </style>
-</head>
-<body class="p-4">
+{% extends "base.html" %}
 {% load currency_filters %}
-{% if messages %}
-    {% for message in messages %}
-        <script>alert("{{ message|escapejs }}");</script>
-    {% endfor %}
-{% endif %}
 
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>Employee List</h3>
+{% block title %}Employee List{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Employee List</h4>
         <div>
-            <a href="{% url 'add_employee' %}" class="btn btn-success btn-sm">+ Add Employee</a>
+            <a href="{% url 'add_employee' %}" class="btn btn-primary btn-sm">+ Add Employee</a>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
         </div>
     </div>
 
-    <div class="card shadow-sm p-3">
-        <div class="table-responsive">
-            <table class="table table-bordered table-striped bg-white">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Emp No</th>
-                        <th>Name</th>
-                        <th>Designation</th>
-                        <th>Address</th>
-                        <th>Tel</th>
-                        <th>Petty Cash Limit</th>
-                        <th>Active</th>
-                        <th>User</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for e in employees %}
-                    <tr>
-                        <td>{{ e.emp_no }}</td>
-                        <td>{{ e.full_name }}</td>
-                        <td>{{ e.designation|default:"-" }}</td>
-                        <td>{{ e.address|default:"-" }}</td>
-                        <td>{{ e.tel|default:"-" }}</td>
-                        <td>{{ e.petty_cash_limit }}</td>
-                        <td>{% if e.is_active %}Yes{% else %}No{% endif %}</td>
-                        <td>
-                            {% if e.user %}
-                                {{ e.user.username }}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                        <td>
-                            <a href="{% url 'edit_employee' e.id %}" class="btn btn-primary btn-sm">Edit</a>
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="9" class="text-center">No employees found</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Emp No</th>
+                    <th>Full Name</th>
+                    <th>Designation</th>
+                    <th>Telephone</th>
+                    <th>User</th>
+                    <th>Petty Cash Limit</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for employee in employees %}
+                <tr>
+                    <td>{{ employee.emp_no }}</td>
+                    <td>{{ employee.full_name }}</td>
+                    <td>{{ employee.designation|default:"-" }}</td>
+                    <td>{{ employee.tel|default:"-" }}</td>
+                    <td>{% if employee.user %}{{ employee.user.username }}{% else %}-{% endif %}</td>
+                    <td class="text-money">Rs. {{ employee.petty_cash_limit|money }}</td>
+                    <td>
+                        {% if employee.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-danger">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'edit_employee' employee.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center">No employees found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-
 </div>
-
-</body>
-</html>
+{% endblock %}
