@@ -61,6 +61,9 @@
                         <th>Status</th>
                         <th>Record</th>
                         <th>View</th>
+                        {% if is_owner %}
+                        <th>Action</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
@@ -92,10 +95,23 @@
                         <td>
                             <a href="{% url 'project_invoice_detail' invoice.id %}" class="btn btn-sm btn-outline-primary">View</a>
                         </td>
+                        {% if is_owner %}
+                        <td>
+                            {% if invoice.is_active %}
+                                <a href="{% url 'delete_project_invoice' invoice.id %}"
+                                   class="btn btn-sm btn-outline-danger"
+                                   onclick="return confirm('Deactivate this invoice?')">
+                                   Deactivate
+                                </a>
+                            {% else %}
+                                <span class="badge bg-danger">Deactivated</span>
+                            {% endif %}
+                        </td>
+                        {% endif %}
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="10" class="text-center">No invoices found</td>
+                        <td colspan="{% if is_owner %}11{% else %}10{% endif %}" class="text-center">No invoices found</td>
                     </tr>
                     {% endfor %}
                 </tbody>
