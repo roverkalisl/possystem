@@ -208,8 +208,8 @@
 
         .total-row.grand {
             background: #f4f7ff;
-            font-size: 22px;
-            font-weight: 800;
+            font-size: 12px;
+            font-weight: 700;
             color: #1e2a78;
         }
 
@@ -230,15 +230,15 @@
 
         .sign-line {
             border-top: 1px solid #444;
-            margin-top: 36px;
+            margin-top: 30px;
             padding-top: 6px;
         }
 
         .footer-note {
-            margin-top: 24px;
+            margin-top: 12px;
             text-align: center;
-            font-size: 16px;
-            font-weight: 700;
+            font-size: 2px;
+            font-weight: 200;
             color: #1e2a78;
         }
 
@@ -309,11 +309,7 @@
             <strong>Project No:</strong> {{ invoice.project.project_id }}<br>
             <strong>Project Name:</strong> {{ invoice.project.project_name }}<br>
             <strong>Client Name:</strong> {{ invoice.project.client_name }}<br>
-            {% if invoice.project.location %}
-            <strong>Location:</strong> {{ invoice.project.location }}<br>
-            {% endif %}
-            <strong>Project Type:</strong> {{ invoice.project.get_project_type_display }}
-        </div>
+               </div>
     </div>
 
     <table class="items-table">
@@ -386,10 +382,8 @@
             </div>
         </div>
 
-        <div class="footer-note">AT YOUR SERVICE EVERY TIME</div>
-    </div>
+        </div>
 </div>
-
 <script>
 function printAndBack() {
     window.print();
