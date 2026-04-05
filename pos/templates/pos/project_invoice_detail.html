@@ -15,7 +15,7 @@
                 {% if invoice.status == "paid" %}
                     <button class="btn btn-success btn-sm" disabled title="This invoice is already fully paid">Fully Paid</button>
                 {% else %}
-                    <a href="{% url 'add_project_invoice_payment' invoice.id %}" class="btn btn-success btn-sm">Add Payment</a>
+                    <a href="{% url 'add_project_invoice_payment' invoice.id %}" class="btn btn-success btn-sm">Issued Recipt</a>
                 {% endif %}
             {% endif %}
         </div>
