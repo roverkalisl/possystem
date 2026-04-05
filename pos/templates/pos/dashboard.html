@@ -46,6 +46,9 @@
                     <a href="{% url 'project_list' %}" class="btn btn-primary btn-sm">Project List</a>
                     <a href="{% url 'project_expense_list' %}" class="btn btn-outline-danger btn-sm">Project Expenses</a>
                     <a href="{% url 'petty_cash_list' %}" class="btn btn-outline-primary btn-sm">Petty Cash</a>
+					{% if is_owner_flag %}
+                    <a href="{% url 'project_issue_approval_list' %}" class="btn btn-outline-dark btn-sm">Issue Approvals</a>
+                    {% endif %}
                     <a href="{% url 'project_profit_dashboard' %}" class="btn btn-outline-success btn-sm">Profit Dashboard</a>
                 </div>
             </div>
@@ -59,9 +62,6 @@
                 <div class="d-grid gap-2 mt-3">
                     <a href="{% url 'project_invoice_list' %}" class="btn btn-primary btn-sm">Project Invoices</a>
                     <a href="{% url 'add_project_invoice' %}" class="btn btn-outline-primary btn-sm">Add Invoice</a>
-                    {% if is_owner_flag %}
-                    <a href="{% url 'project_issue_approval_list' %}" class="btn btn-outline-dark btn-sm">Issue Approvals</a>
-                    {% endif %}
                 </div>
             </div>
         </div>

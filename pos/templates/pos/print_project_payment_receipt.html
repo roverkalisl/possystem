@@ -143,7 +143,7 @@
         }
 
         .receipt-title {
-            font-size: 34px;
+            font-size: 12px;
             font-weight: 800;
             letter-spacing: 1px;
             margin-bottom: 6px;
@@ -151,7 +151,7 @@
         }
 
         .receipt-no {
-            font-size: 26px;
+            font-size: 12px;
             font-weight: 800;
             margin-bottom: 20px;
             color: #374151;
@@ -292,9 +292,8 @@
             </div>
 
             <div class="right-head">
-                <div class="receipt-title">RECEIPT</div>
-                <div class="receipt-no">No : {{ payment.receipt_no }}</div>
-				<div class="receipt-no">Ref No : {{ invoice.invoice_no }}</div>
+                <div class="receipt-no">Receipt No : {{ payment.receipt_no }}</div>
+				<div class="receipt-no">Invoice No : {{ invoice.invoice_no }}</div>
                 <div class="date-row">
                     <div><strong>Date :</strong></div>
                     <div class="date-line">{{ payment.payment_date|date:"d/m/Y" }}</div>
