@@ -6,20 +6,20 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User, Group
+from django.db import transaction
 from django.db.models import Q, Sum, F
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
-from django.db import transaction
 
 from .models import (
     Item, Category, Supplier, GLMaster,
-    Sale, SaleItem, SalesReturn, StockTransaction,
+    Sale, SaleItem, SalesReturn, StockTransaction, SaleRecovery,
     Project, ProjectExpense, ProjectPettyCash,
     ProjectPettyCashExpense, ProjectIncome, Employee,
-    ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem,
-    SaleRecovery
+    ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem
 )
+
 
 # =========================
 # HELPERS
@@ -71,7 +71,6 @@ def can_use_gl(user):
 
 def can_manage_items(user):
     return is_owner(user) or is_manager(user) or is_clerk(user)
-
 
 
 def generate_project_id(project_type):
@@ -142,6 +141,7 @@ def login_view(request):
         if user is not None:
             login(request, user)
             return redirect("dashboard")
+
         messages.error(request, "Invalid username or password")
 
     return render(request, "pos/login.html")
@@ -164,6 +164,7 @@ def dashboard(request):
         "show_employees": is_owner(request.user),
         "is_owner_flag": is_owner(request.user),
     })
+
 
 # =========================
 # USER MANAGEMENT
@@ -276,6 +277,7 @@ def edit_user(request, user_id):
 @user_passes_test(can_use_pos)
 def pos_page(request):
     query = request.GET.get("q", "").strip()
+
     items = Item.objects.filter(is_active=True).select_related("category").order_by("name")
     projects = Project.objects.filter(is_active=True).order_by("-id")
     categories = Category.objects.all().order_by("name")
@@ -297,9 +299,245 @@ def pos_page(request):
 
 
 @user_passes_test(can_use_pos)
+def save_sale(request):
+    if request.method != "POST":
+        return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
+
+    try:
+        with transaction.atomic():
+            data = json.loads(request.body)
+
+            items = data.get("items", [])
+            if not items:
+                return JsonResponse({"status": "error", "message": "Cart empty"}, status=400)
+
+            total = to_decimal(data.get("total"))
+            discount = to_decimal(data.get("discount"))
+            grand_total = to_decimal(data.get("grand_total"))
+
+            payment_method = data.get("payment_method", "cash")
+            received_amount = to_decimal(data.get("received"))
+            balance = to_decimal(data.get("balance"))
+            card_last4 = data.get("card_last4") or None
+            cheque_number = data.get("cheque_number") or None
+
+            customer_name = (data.get("customer_name") or "").strip() or None
+            customer_phone = (data.get("customer_phone") or "").strip() or None
+
+            sale_type = (data.get("sale_type") or "retail").strip()
+            project_id = data.get("project_id") or None
+
+            if sale_type not in ["retail", "project_issue"]:
+                sale_type = "retail"
+
+            if sale_type == "project_issue" and not project_id:
+                return JsonResponse({
+                    "status": "error",
+                    "message": "Project is required for project issue sales."
+                }, status=400)
+
+            project = None
+            if project_id:
+                project = Project.objects.filter(id=project_id, is_active=True).first()
+                if not project and sale_type == "project_issue":
+                    return JsonResponse({
+                        "status": "error",
+                        "message": "Selected project not found."
+                    }, status=400)
+
+            invoice_no = f"INV{Sale.objects.count() + 1:05d}"
+
+            approval_status = "pending" if sale_type == "project_issue" else "na"
+
+            if sale_type == "project_issue" and not customer_name and project:
+                customer_name = f"Project - {project.project_id}"
+
+            sale = Sale.objects.create(
+                invoice_no=invoice_no,
+                total=total,
+                discount=discount,
+                grand_total=grand_total,
+                sale_type=sale_type,
+                project=project if sale_type == "project_issue" else None,
+                approval_status=approval_status,
+                payment_method=payment_method,
+                received_amount=received_amount if payment_method == "cash" else None,
+                balance=balance if payment_method in ["cash", "credit"] else None,
+                card_last4=card_last4 if payment_method == "card" else None,
+                cheque_number=cheque_number if payment_method == "credit" else None,
+                customer_name=customer_name,
+                customer_phone=customer_phone,
+                created_by=request.user,
+            )
+
+            for i in items:
+                item = Item.objects.get(id=i["id"], is_active=True)
+                qty = to_decimal(i.get("qty"))
+                price = to_decimal(i.get("price"))
+                amount = qty * price
+
+                if qty <= 0:
+                    return JsonResponse({
+                        "status": "error",
+                        "message": f"Invalid qty for item: {item.name}"
+                    }, status=400)
+
+                if not item.is_service:
+                    current_stock = Decimal(str(item.stock or 0))
+
+                    if current_stock <= 0:
+                        return JsonResponse({
+                            "status": "error",
+                            "message": f"{item.name} is out of stock."
+                        }, status=400)
+
+                    if qty > current_stock:
+                        return JsonResponse({
+                            "status": "error",
+                            "message": f"Not enough stock for {item.name}. Available stock: {current_stock}"
+                        }, status=400)
+
+                SaleItem.objects.create(
+                    sale=sale,
+                    item=item,
+                    qty=qty,
+                    price=price,
+                    amount=amount,
+                )
+
+                if not item.is_service:
+                    item.stock = current_stock - qty
+                    item.updated_by = request.user
+                    item.save()
+
+                    StockTransaction.objects.create(
+                        item=item,
+                        transaction_type="sale",
+                        qty=qty,
+                    )
+
+            return JsonResponse({
+                "status": "success",
+                "sale_id": sale.id,
+                "invoice_no": sale.invoice_no,
+                "sale_type": sale.sale_type,
+                "approval_status": sale.approval_status,
+            })
+
+    except Item.DoesNotExist:
+        return JsonResponse({
+            "status": "error",
+            "message": "Selected item not found."
+        }, status=404)
+
+    except Exception as e:
+        return JsonResponse({
+            "status": "error",
+            "message": str(e)
+        }, status=500)
+
+
+@user_passes_test(can_use_pos)
 def invoice_page(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
     return render(request, "pos/invoice.html", {"sale": sale})
+
+
+# =========================
+# CREDIT RECOVERY
+# =========================
+@user_passes_test(can_use_pos)
+def credit_sales_list(request):
+    status_filter = request.GET.get("status", "unpaid").strip()
+    query = request.GET.get("q", "").strip()
+
+    sales = Sale.objects.filter(payment_method="credit").select_related(
+        "created_by", "project"
+    ).order_by("-created_at")
+
+    if query:
+        sales = sales.filter(
+            Q(invoice_no__icontains=query) |
+            Q(customer_name__icontains=query) |
+            Q(project__project_id__icontains=query) |
+            Q(project__project_name__icontains=query)
+        )
+
+    filtered_sales = []
+    for sale in sales:
+        status = sale.credit_status
+        if status_filter == "all" or status == status_filter:
+            filtered_sales.append(sale)
+
+    return render(request, "pos/credit_sales_list.html", {
+        "sales": filtered_sales,
+        "status_filter": status_filter,
+        "query": query,
+    })
+
+
+@user_passes_test(can_use_pos)
+def add_sale_recovery(request, sale_id):
+    sale = get_object_or_404(Sale, id=sale_id, payment_method="credit")
+
+    if sale.credit_status == "paid":
+        messages.warning(request, "This credit sale is already fully paid.")
+        return redirect("credit_sales_list")
+
+    if request.method == "POST":
+        recovery_date = request.POST.get("recovery_date") or timezone.localdate()
+        payment_method = request.POST.get("payment_method") or "cash"
+        amount = to_decimal(request.POST.get("amount"))
+        card_no = (request.POST.get("card_no") or "").strip()
+        cheque_no = (request.POST.get("cheque_no") or "").strip()
+        note = (request.POST.get("note") or "").strip()
+
+        if amount <= 0:
+            messages.error(request, "Amount must be greater than 0.")
+            return render(request, "pos/add_sale_recovery.html", {"sale": sale})
+
+        if amount > sale.credit_balance:
+            messages.error(request, "Recovery amount exceeds balance.")
+            return render(request, "pos/add_sale_recovery.html", {"sale": sale})
+
+        if payment_method == "card" and not card_no:
+            messages.error(request, "Card No is required for card payments.")
+            return render(request, "pos/add_sale_recovery.html", {"sale": sale})
+
+        if payment_method == "cheque" and not cheque_no:
+            messages.error(request, "Cheque No is required for cheque payments.")
+            return render(request, "pos/add_sale_recovery.html", {"sale": sale})
+
+        recovery = SaleRecovery.objects.create(
+            sale=sale,
+            recovery_date=recovery_date,
+            payment_method=payment_method,
+            amount=amount,
+            card_no=card_no if payment_method == "card" else None,
+            cheque_no=cheque_no if payment_method == "cheque" else None,
+            note=note,
+            created_by=request.user,
+        )
+
+        messages.success(request, "Recovery added successfully.")
+        return redirect("print_sale_recovery_receipt", recovery_id=recovery.id)
+
+    return render(request, "pos/add_sale_recovery.html", {
+        "sale": sale,
+    })
+
+
+@user_passes_test(can_use_pos)
+def print_sale_recovery_receipt(request, recovery_id):
+    recovery = get_object_or_404(
+        SaleRecovery.objects.select_related("sale", "sale__project", "created_by"),
+        id=recovery_id
+    )
+
+    return render(request, "pos/print_sale_recovery_receipt.html", {
+        "recovery": recovery,
+        "sale": recovery.sale,
+    })
 
 
 # =========================
@@ -340,7 +578,7 @@ def sales_return(request):
 
         item = sale_item.item
         if not item.is_service:
-            item.stock = Decimal(item.stock) + qty
+            item.stock = Decimal(str(item.stock or 0)) + qty
             item.updated_by = request.user
             item.save()
 
@@ -504,6 +742,23 @@ def edit_item(request, item_id):
 
 
 @user_passes_test(can_manage_items)
+def get_item_details(request, item_id):
+    item = get_object_or_404(Item, id=item_id, is_active=True)
+
+    return JsonResponse({
+        "id": item.id,
+        "item_code": item.item_code,
+        "name": item.name,
+        "cost_price": str(item.cost_price or 0),
+        "selling_price": str(item.selling_price or 0),
+        "stock": str(item.stock or 0),
+        "unit": item.unit or "",
+        "category": item.category.name if item.category else "",
+        "supplier": item.supplier.name if item.supplier else "",
+    })
+
+
+@user_passes_test(can_manage_items)
 def stock_history(request):
     rows = StockTransaction.objects.select_related("item").order_by("-created_at")
     return render(request, "pos/stock_history.html", {"rows": rows})
@@ -524,14 +779,14 @@ def daily_report(request):
     for sale in sales:
         sale_cost = Decimal("0")
         for row in sale.sale_items.all():
-            sale_cost += Decimal(str(row.item.cost_price)) * Decimal(str(row.qty))
+            sale_cost += Decimal(str(row.item.cost_price or 0)) * Decimal(str(row.qty or 0))
 
         sale.sale_cost = sale_cost
-        sale.sale_profit = Decimal(str(sale.grand_total)) - sale_cost
+        sale.sale_profit = Decimal(str(sale.grand_total or 0)) - sale_cost
 
-        total_sales += Decimal(str(sale.grand_total))
+        total_sales += Decimal(str(sale.grand_total or 0))
         total_cost += sale_cost
-        total_discount += Decimal(str(sale.discount))
+        total_discount += Decimal(str(sale.discount or 0))
 
     return render(request, "pos/daily_report.html", {
         "sales": sales,
@@ -569,7 +824,6 @@ def monthly_report(request):
 
     for sale in sales:
         sale_cost = Decimal("0")
-
         for row in sale.sale_items.all():
             item_cost = Decimal(str(row.item.cost_price or 0))
             qty = Decimal(str(row.qty or 0))
@@ -597,6 +851,7 @@ def monthly_report(request):
         "summary": summary,
     })
 
+
 # =========================
 # GL MASTER
 # =========================
@@ -623,7 +878,7 @@ def add_gl(request):
 
 
 # =========================
-# PROJECT
+# PROJECTS
 # =========================
 @user_passes_test(can_use_project)
 def project_list(request):
@@ -657,8 +912,32 @@ def create_project(request):
     return render(request, "pos/create_project.html")
 
 
+@user_passes_test(is_owner)
+def edit_project(request, project_id):
+    project = get_object_or_404(Project, id=project_id)
+    project_types = Project.PROJECT_TYPE_CHOICES
+
+    if request.method == "POST":
+        project.project_name = (request.POST.get("project_name") or "").strip()
+        project.project_type = request.POST.get("project_type") or project.project_type
+        project.client_name = (request.POST.get("client_name") or "").strip()
+        project.location = (request.POST.get("location") or "").strip()
+        project.estimated_value = to_decimal(request.POST.get("estimated_value"))
+        project.status = request.POST.get("status") or project.status
+        project.updated_by = request.user
+        project.save()
+
+        messages.success(request, "Project updated successfully.")
+        return redirect("project_list")
+
+    return render(request, "pos/edit_project.html", {
+        "project": project,
+        "project_types": project_types,
+    })
+
+
 # =========================
-# PROJECT EXPENSE
+# PROJECT EXPENSES
 # =========================
 @user_passes_test(can_use_project)
 def project_expense_list(request):
@@ -679,11 +958,11 @@ def project_expense_list(request):
         "is_owner": is_owner(request.user),
     })
 
+
 @user_passes_test(can_add_expenses)
 def add_project_expense(request):
     projects = Project.objects.filter(is_active=True).order_by("-id")
     expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
-    items = Item.objects.filter(is_active=True).order_by("name")
 
     if request.method == "POST":
         project_id = request.POST.get("project")
@@ -694,14 +973,12 @@ def add_project_expense(request):
         unit_price = to_decimal(request.POST.get("unit_price") or 0)
         amount = to_decimal(request.POST.get("amount") or 0)
         gl_account_id = request.POST.get("gl_account") or None
-        item_id = request.POST.get("item") or None
 
         if not project_id:
             messages.error(request, "Project is required.")
             return render(request, "pos/add_project_expense.html", {
                 "projects": projects,
                 "expense_gls": expense_gls,
-                "items": items,
             })
 
         if not description:
@@ -709,7 +986,6 @@ def add_project_expense(request):
             return render(request, "pos/add_project_expense.html", {
                 "projects": projects,
                 "expense_gls": expense_gls,
-                "items": items,
             })
 
         if amount <= 0:
@@ -717,7 +993,6 @@ def add_project_expense(request):
             return render(request, "pos/add_project_expense.html", {
                 "projects": projects,
                 "expense_gls": expense_gls,
-                "items": items,
             })
 
         expense = ProjectExpense.objects.create(
@@ -725,7 +1000,6 @@ def add_project_expense(request):
             project_id=project_id,
             expense_type=expense_type,
             expense_date=expense_date,
-            item_id=item_id,
             description=description,
             qty=qty,
             unit_price=unit_price,
@@ -734,22 +1008,66 @@ def add_project_expense(request):
             created_by=request.user,
         )
 
-        if expense_type == "inventory" and item_id:
-            item = Item.objects.get(id=item_id, is_active=True)
-            item.stock = Decimal(item.stock) - qty
-            item.updated_by = request.user
-            item.save()
-
-            StockTransaction.objects.create(
-                item=item,
-                transaction_type="project_issue",
-                qty=qty,
-            )
-
         messages.success(request, f"Saved successfully. Expense No: {expense.expense_no}")
         return redirect("project_expense_list")
 
     return render(request, "pos/add_project_expense.html", {
+        "projects": projects,
+        "expense_gls": expense_gls,
+    })
+
+
+@user_passes_test(is_owner)
+def edit_project_expense(request, expense_id):
+    expense = get_object_or_404(ProjectExpense, id=expense_id)
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+    expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
+    items = Item.objects.filter(is_active=True).order_by("name")
+
+    if request.method == "POST":
+        expense.project_id = request.POST.get("project") or expense.project_id
+        expense.expense_type = request.POST.get("expense_type") or expense.expense_type
+        expense.expense_date = request.POST.get("expense_date") or expense.expense_date
+        expense.description = (request.POST.get("description") or "").strip()
+        expense.qty = to_decimal(request.POST.get("qty") or 1)
+        expense.unit_price = to_decimal(request.POST.get("unit_price") or 0)
+        expense.amount = to_decimal(request.POST.get("amount") or 0)
+        expense.gl_account_id = request.POST.get("gl_account") or None
+        expense.item_id = request.POST.get("item") or None
+
+        if not expense.project_id:
+            messages.error(request, "Project is required.")
+            return render(request, "pos/edit_project_expense.html", {
+                "expense": expense,
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "items": items,
+            })
+
+        if not expense.description:
+            messages.error(request, "Description is required.")
+            return render(request, "pos/edit_project_expense.html", {
+                "expense": expense,
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "items": items,
+            })
+
+        if expense.amount <= 0:
+            messages.error(request, "Amount must be greater than 0.")
+            return render(request, "pos/edit_project_expense.html", {
+                "expense": expense,
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "items": items,
+            })
+
+        expense.save()
+        messages.success(request, "Project expense updated successfully.")
+        return redirect("project_expense_list")
+
+    return render(request, "pos/edit_project_expense.html", {
+        "expense": expense,
         "projects": projects,
         "expense_gls": expense_gls,
         "items": items,
@@ -832,6 +1150,7 @@ def add_petty_cash(request):
         "employees": employees,
     })
 
+
 @user_passes_test(can_use_project)
 def petty_cash_detail(request, petty_cash_id):
     petty_cash = get_object_or_404(
@@ -848,6 +1167,7 @@ def petty_cash_detail(request, petty_cash_id):
         "expenses": expenses,
         "is_owner": is_owner(request.user),
     })
+
 
 @user_passes_test(can_add_expenses)
 def add_petty_cash_expense(request, petty_cash_id):
@@ -929,6 +1249,62 @@ def add_petty_cash_expense(request, petty_cash_id):
         "expense_gls": expense_gls,
     })
 
+
+@user_passes_test(is_owner)
+def edit_petty_cash(request, petty_cash_id):
+    petty_cash = get_object_or_404(ProjectPettyCash, id=petty_cash_id)
+    employees = Employee.objects.filter(is_active=True).order_by("emp_no")
+
+    if request.method == "POST":
+        employee_id = request.POST.get("employee") or None
+        issue_date = request.POST.get("issue_date") or timezone.now().date()
+        amount_issued = to_decimal(request.POST.get("amount_issued"))
+        note = (request.POST.get("note") or "").strip()
+
+        if not employee_id:
+            messages.error(request, "Employee is required.")
+            return render(request, "pos/edit_petty_cash.html", {
+                "petty_cash": petty_cash,
+                "employees": employees,
+            })
+
+        if amount_issued <= 0:
+            messages.error(request, "Amount must be greater than 0.")
+            return render(request, "pos/edit_petty_cash.html", {
+                "petty_cash": petty_cash,
+                "employees": employees,
+            })
+
+        employee = get_object_or_404(Employee, id=employee_id, is_active=True)
+
+        petty_cash.employee = employee
+        petty_cash.user = employee.user if employee.user else petty_cash.user
+        petty_cash.issue_date = issue_date
+        petty_cash.amount_issued = amount_issued
+        petty_cash.note = note
+        petty_cash.save()
+
+        employee.refresh_from_db()
+        new_outstanding = employee.petty_cash_outstanding
+
+        if Decimal(str(new_outstanding)) > Decimal(str(employee.petty_cash_limit or 0)):
+            messages.warning(
+                request,
+                f"Petty cash updated successfully. "
+                f"Warning: Employee outstanding balance is over the limit. "
+                f"Limit: {employee.petty_cash_limit} | Outstanding: {new_outstanding}"
+            )
+        else:
+            messages.success(request, "Petty cash updated successfully.")
+
+        return redirect("petty_cash_list")
+
+    return render(request, "pos/edit_petty_cash.html", {
+        "petty_cash": petty_cash,
+        "employees": employees,
+    })
+
+
 @user_passes_test(is_owner)
 def delete_petty_cash(request, petty_cash_id):
     petty_cash = get_object_or_404(ProjectPettyCash, id=petty_cash_id)
@@ -944,6 +1320,63 @@ def delete_petty_cash_expense(request, expense_id):
     mark_inactive(expense, request.user, "Deactivated by owner")
     messages.success(request, "Petty cash expense deactivated successfully.")
     return redirect("petty_cash_detail", petty_cash_id=petty_cash_id)
+
+
+# =========================
+# PETTY CASH APPROVALS
+# =========================
+@user_passes_test(is_owner)
+def petty_cash_expense_approvals(request):
+    status_filter = request.GET.get("status", "pending").strip()
+
+    expenses = ProjectPettyCashExpense.objects.filter(
+        is_active=True
+    ).select_related(
+        "petty_cash", "project", "gl_account", "created_by", "approved_by"
+    ).order_by("-expense_date", "-id")
+
+    if status_filter in ["pending", "approved", "rejected"]:
+        expenses = expenses.filter(approval_status=status_filter)
+
+    return render(request, "pos/petty_cash_expense_approvals.html", {
+        "expenses": expenses,
+        "status_filter": status_filter,
+    })
+
+
+@user_passes_test(is_owner)
+def approve_petty_cash_expense(request, expense_id):
+    expense = get_object_or_404(ProjectPettyCashExpense, id=expense_id, is_active=True)
+
+    if expense.approval_status == "approved":
+        messages.warning(request, "This petty cash expense is already approved.")
+        return redirect("petty_cash_expense_approvals")
+
+    expense.approval_status = "approved"
+    expense.approved_by = request.user
+    expense.approved_at = timezone.now()
+    expense.save()
+
+    messages.success(request, f"Expense {expense.expense_no} approved successfully.")
+    return redirect("petty_cash_expense_approvals")
+
+
+@user_passes_test(is_owner)
+def reject_petty_cash_expense(request, expense_id):
+    expense = get_object_or_404(ProjectPettyCashExpense, id=expense_id, is_active=True)
+
+    if expense.approval_status == "approved":
+        messages.error(request, "Approved expense cannot be rejected.")
+        return redirect("petty_cash_expense_approvals")
+
+    expense.approval_status = "rejected"
+    expense.approved_by = request.user
+    expense.approved_at = timezone.now()
+    expense.approval_note = "Rejected by owner"
+    expense.save()
+
+    messages.success(request, f"Expense {expense.expense_no} rejected.")
+    return redirect("petty_cash_expense_approvals")
 
 
 # =========================
@@ -1051,6 +1484,7 @@ def project_profit_dashboard(request):
         "grand_profit": grand_profit,
     })
 
+
 # =========================
 # EMPLOYEES
 # =========================
@@ -1141,16 +1575,11 @@ def edit_employee(request, employee_id):
 # =========================
 @user_passes_test(can_use_income)
 def project_invoice_list(request):
-    project_id = request.GET.get("project")
-    show_inactive = request.GET.get("show_inactive") == "1"
-
-    invoices = ProjectInvoice.objects.select_related(
+    invoices = ProjectInvoice.objects.filter(is_active=True).select_related(
         "project", "created_by"
     ).order_by("-invoice_date", "-id")
 
-    if not show_inactive:
-        invoices = invoices.filter(is_active=True)
-
+    project_id = request.GET.get("project")
     if project_id:
         invoices = invoices.filter(project_id=project_id)
 
@@ -1160,9 +1589,9 @@ def project_invoice_list(request):
         "invoices": invoices,
         "projects": projects,
         "selected_project": project_id,
-        "show_inactive": show_inactive,
-        "is_owner": is_owner(request.user),
     })
+
+
 @user_passes_test(can_use_income)
 def add_project_invoice(request):
     projects = Project.objects.filter(is_active=True).order_by("-id")
@@ -1277,28 +1706,26 @@ def add_project_invoice(request):
         "items": items,
     })
 
+
 @user_passes_test(can_use_income)
 def project_invoice_detail(request, invoice_id):
     invoice = get_object_or_404(
         ProjectInvoice.objects.select_related("project", "created_by"),
-        id=invoice_id
+        id=invoice_id,
+        is_active=True
     )
 
-    show_inactive = request.GET.get("show_inactive") == "1"
-
     invoice_items = invoice.items.all()
-
-    payments = invoice.payments.select_related("created_by").order_by("-payment_date", "-id")
-    if not show_inactive:
-        payments = payments.filter(is_active=True)
+    payments = invoice.payments.filter(is_active=True).select_related("created_by").order_by("-payment_date", "-id")
 
     return render(request, "pos/project_invoice_detail.html", {
         "invoice": invoice,
         "invoice_items": invoice_items,
         "payments": payments,
-        "show_inactive": show_inactive,
         "is_owner": is_owner(request.user),
     })
+
+
 @user_passes_test(can_use_income)
 def add_project_invoice_payment(request, invoice_id):
     invoice = get_object_or_404(ProjectInvoice, id=invoice_id)
@@ -1364,6 +1791,7 @@ def add_project_invoice_payment(request, invoice_id):
         "invoice": invoice,
     })
 
+
 @user_passes_test(is_owner)
 def delete_project_invoice_payment(request, payment_id):
     payment = get_object_or_404(ProjectInvoicePayment, id=payment_id)
@@ -1396,150 +1824,102 @@ def print_project_invoice(request, invoice_id):
         "invoice_items": invoice_items,
     })
 
+
+# =========================
+# PROJECT ISSUE APPROVALS
+# =========================
 @user_passes_test(is_owner)
-def edit_xxx(request, id):
-    obj = get_object_or_404(Model, id=id)
-    if request.method == "POST":
-        # fields update
-        # updated_by = request.user  (if model has it)
-        obj.save()
-        messages.success(request, "Updated successfully.")
-        return redirect("list_page")
-    return render(request, "pos/edit_xxx.html", {"obj": obj})
+def project_issue_approval_list(request):
+    status_filter = request.GET.get("status", "pending").strip()
 
-@user_passes_test(is_owner)
-def edit_project(request, project_id):
-    project = get_object_or_404(Project, id=project_id)
-    project_types = Project.PROJECT_TYPE_CHOICES
+    sales = Sale.objects.filter(
+        sale_type="project_issue"
+    ).select_related(
+        "project", "created_by", "approved_by"
+    ).prefetch_related(
+        "sale_items__item"
+    ).order_by("-created_at")
 
-    if request.method == "POST":
-        project.project_name = (request.POST.get("project_name") or "").strip()
-        project.project_type = request.POST.get("project_type") or project.project_type
-        project.client_name = (request.POST.get("client_name") or "").strip()
-        project.location = (request.POST.get("location") or "").strip()
-        project.estimated_value = to_decimal(request.POST.get("estimated_value"))
-        project.status = request.POST.get("status") or project.status
-        project.updated_by = request.user
-        project.save()
+    if status_filter in ["pending", "approved", "rejected"]:
+        sales = sales.filter(approval_status=status_filter)
 
-        messages.success(request, "Project updated successfully.")
-        return redirect("project_list")
-
-    return render(request, "pos/edit_project.html", {
-        "project": project,
-        "project_types": project_types,
+    return render(request, "pos/project_issue_approval_list.html", {
+        "sales": sales,
+        "status_filter": status_filter,
     })
 
 
 @user_passes_test(is_owner)
-def edit_petty_cash(request, petty_cash_id):
-    petty_cash = get_object_or_404(ProjectPettyCash, id=petty_cash_id)
-    employees = Employee.objects.filter(is_active=True).order_by("emp_no")
+def approve_project_issue(request, sale_id):
+    sale = get_object_or_404(
+        Sale.objects.select_related("project", "created_by").prefetch_related("sale_items__item"),
+        id=sale_id,
+        sale_type="project_issue"
+    )
 
-    if request.method == "POST":
-        employee_id = request.POST.get("employee") or None
-        issue_date = request.POST.get("issue_date") or timezone.now().date()
-        amount_issued = to_decimal(request.POST.get("amount_issued"))
-        note = (request.POST.get("note") or "").strip()
+    if not sale.project:
+        messages.error(request, "Project not found for this issue.")
+        return redirect("project_issue_approval_list")
 
-        if not employee_id:
-            messages.error(request, "Employee is required.")
-            return render(request, "pos/edit_petty_cash.html", {
-                "petty_cash": petty_cash,
-                "employees": employees,
-            })
+    if sale.is_posted_to_project_expense:
+        messages.warning(request, "This project issue is already posted.")
+        return redirect("project_issue_approval_list")
 
-        if amount_issued <= 0:
-            messages.error(request, "Amount must be greater than 0.")
-            return render(request, "pos/edit_petty_cash.html", {
-                "petty_cash": petty_cash,
-                "employees": employees,
-            })
+    if sale.approval_status == "approved":
+        messages.warning(request, "This project issue is already approved.")
+        return redirect("project_issue_approval_list")
 
-        employee = get_object_or_404(Employee, id=employee_id, is_active=True)
+    for row in sale.sale_items.all():
+        ProjectExpense.objects.create(
+            expense_no=generate_project_expense_no(),
+            project=sale.project,
+            expense_type="inventory",
+            expense_date=timezone.localdate(sale.created_at),
+            item=row.item,
+            description=f"POS Issue - {sale.invoice_no} - {row.item.name}",
+            qty=row.qty,
+            unit_price=row.price,
+            amount=row.amount,
+            gl_account=row.item.cost_gl_account if row.item and row.item.cost_gl_account else None,
+            created_by=sale.created_by,
+            source_sale=sale,
+        )
 
-        petty_cash.employee = employee
-        petty_cash.user = employee.user if employee.user else petty_cash.user
-        petty_cash.issue_date = issue_date
-        petty_cash.amount_issued = amount_issued
-        petty_cash.note = note
-        petty_cash.save()
+    sale.approval_status = "approved"
+    sale.approved_by = request.user
+    sale.approved_at = timezone.now()
+    sale.is_posted_to_project_expense = True
+    sale.save()
 
-        employee.refresh_from_db()
-        new_outstanding = employee.petty_cash_outstanding
+    messages.success(request, f"Project issue {sale.invoice_no} approved successfully.")
+    return redirect("project_issue_approval_list")
 
-        if Decimal(str(new_outstanding)) > Decimal(str(employee.petty_cash_limit or 0)):
-            messages.warning(
-                request,
-                f"Petty cash updated successfully. "
-                f"Warning: Employee outstanding balance is over the limit. "
-                f"Limit: {employee.petty_cash_limit} | Outstanding: {new_outstanding}"
-            )
-        else:
-            messages.success(request, "Petty cash updated successfully.")
-
-        return redirect("petty_cash_list")
-
-    return render(request, "pos/edit_petty_cash.html", {
-        "petty_cash": petty_cash,
-        "employees": employees,
-    })
 
 @user_passes_test(is_owner)
-def edit_project_expense(request, expense_id):
-    expense = get_object_or_404(ProjectExpense, id=expense_id)
-    projects = Project.objects.filter(is_active=True).order_by("-id")
-    expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
-    items = Item.objects.filter(is_active=True).order_by("name")
+def reject_project_issue(request, sale_id):
+    sale = get_object_or_404(
+        Sale,
+        id=sale_id,
+        sale_type="project_issue"
+    )
 
-    if request.method == "POST":
-        expense.project_id = request.POST.get("project") or expense.project_id
-        expense.expense_type = request.POST.get("expense_type") or expense.expense_type
-        expense.expense_date = request.POST.get("expense_date") or expense.expense_date
-        expense.description = (request.POST.get("description") or "").strip()
-        expense.qty = to_decimal(request.POST.get("qty") or 1)
-        expense.unit_price = to_decimal(request.POST.get("unit_price") or 0)
-        expense.amount = to_decimal(request.POST.get("amount") or 0)
-        expense.gl_account_id = request.POST.get("gl_account") or None
-        expense.item_id = request.POST.get("item") or None
+    if sale.approval_status == "approved":
+        messages.error(request, "Approved issue cannot be rejected.")
+        return redirect("project_issue_approval_list")
 
-        if not expense.project_id:
-            messages.error(request, "Project is required.")
-            return render(request, "pos/edit_project_expense.html", {
-                "expense": expense,
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "items": items,
-            })
+    sale.approval_status = "rejected"
+    sale.approved_by = request.user
+    sale.approved_at = timezone.now()
+    sale.approval_note = "Rejected by owner"
+    sale.save()
 
-        if not expense.description:
-            messages.error(request, "Description is required.")
-            return render(request, "pos/edit_project_expense.html", {
-                "expense": expense,
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "items": items,
-            })
+    messages.success(request, f"Project issue {sale.invoice_no} rejected.")
+    return redirect("project_issue_approval_list")
 
-        if expense.amount <= 0:
-            messages.error(request, "Amount must be greater than 0.")
-            return render(request, "pos/edit_project_expense.html", {
-                "expense": expense,
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "items": items,
-            })
 
-        expense.save()
-        messages.success(request, "Project expense updated successfully.")
-        return redirect("project_expense_list")
-
-    return render(request, "pos/edit_project_expense.html", {
-        "expense": expense,
-        "projects": projects,
-        "expense_gls": expense_gls,
-        "items": items,
-    })
+# =========================
+# AMOUNT IN WORDS / PRINT RECEIPT
+# =========================
 def number_to_words(n):
     ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine"]
     teens = ["Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen",
@@ -1602,6 +1982,7 @@ def amount_to_words(amount):
 
     return words
 
+
 @user_passes_test(can_use_income)
 def print_project_payment_receipt(request, payment_id):
     payment = get_object_or_404(
@@ -1621,369 +2002,3 @@ def print_project_payment_receipt(request, payment_id):
         "invoice": invoice,
         "amount_in_words": amount_in_words,
     })
-
-@user_passes_test(is_owner)
-def project_issue_approval_list(request):
-    status_filter = request.GET.get("status", "pending").strip()
-
-    sales = Sale.objects.filter(
-        sale_type="project_issue"
-    ).select_related(
-        "project", "created_by", "approved_by"
-    ).prefetch_related(
-        "sale_items__item"
-    ).order_by("-created_at")
-
-    if status_filter in ["pending", "approved", "rejected"]:
-        sales = sales.filter(approval_status=status_filter)
-
-    return render(request, "pos/project_issue_approval_list.html", {
-        "sales": sales,
-        "status_filter": status_filter,
-    })
-
-@user_passes_test(is_owner)
-def approve_project_issue(request, sale_id):
-    sale = get_object_or_404(
-        Sale.objects.select_related("project", "created_by").prefetch_related("sale_items__item"),
-        id=sale_id,
-        sale_type="project_issue"
-    )
-
-    if not sale.project:
-        messages.error(request, "Project not found for this issue.")
-        return redirect("project_issue_approval_list")
-
-    if sale.is_posted_to_project_expense:
-        messages.warning(request, "This project issue is already posted.")
-        return redirect("project_issue_approval_list")
-
-    if sale.approval_status == "approved":
-        messages.warning(request, "This project issue is already approved.")
-        return redirect("project_issue_approval_list")
-
-    for row in sale.sale_items.all():
-        ProjectExpense.objects.create(
-            expense_no=generate_project_expense_no(),
-            project=sale.project,
-            expense_type="inventory",
-            expense_date=timezone.localdate(sale.created_at),
-            item=row.item,
-            description=f"POS Issue - {sale.invoice_no} - {row.item.name}",
-            qty=row.qty,
-            unit_price=row.price,
-            amount=row.amount,
-            gl_account=row.item.cost_gl_account if row.item and row.item.cost_gl_account else None,
-            created_by=sale.created_by,
-            source_sale=sale,
-        )
-
-    sale.approval_status = "approved"
-    sale.approved_by = request.user
-    sale.approved_at = timezone.now()
-    sale.is_posted_to_project_expense = True
-    sale.save()
-
-    messages.success(request, f"Project issue {sale.invoice_no} approved successfully.")
-    return redirect("project_issue_approval_list")
-
-@user_passes_test(is_owner)
-def reject_project_issue(request, sale_id):
-    sale = get_object_or_404(
-        Sale,
-        id=sale_id,
-        sale_type="project_issue"
-    )
-
-    if sale.approval_status == "approved":
-        messages.error(request, "Approved issue cannot be rejected.")
-        return redirect("project_issue_approval_list")
-
-    sale.approval_status = "rejected"
-    sale.approved_by = request.user
-    sale.approved_at = timezone.now()
-    sale.approval_note = "Rejected by owner"
-    sale.save()
-
-    messages.success(request, f"Project issue {sale.invoice_no} rejected.")
-    return redirect("project_issue_approval_list")
-
-@user_passes_test(can_use_pos)
-def credit_sales_list(request):
-    status_filter = request.GET.get("status", "unpaid").strip()
-    query = request.GET.get("q", "").strip()
-
-    sales = Sale.objects.filter(payment_method="credit").select_related(
-        "created_by", "project"
-    ).order_by("-created_at")
-
-    if query:
-        sales = sales.filter(
-            Q(invoice_no__icontains=query) |
-            Q(customer_name__icontains=query) |
-            Q(project__project_id__icontains=query) |
-            Q(project__project_name__icontains=query)
-        )
-
-    filtered_sales = []
-    for sale in sales:
-        status = sale.credit_status
-        if status_filter == "all" or status == status_filter:
-            filtered_sales.append(sale)
-
-    return render(request, "pos/credit_sales_list.html", {
-        "sales": filtered_sales,
-        "status_filter": status_filter,
-        "query": query,
-    })
-
-@user_passes_test(can_use_pos)
-def add_sale_recovery(request, sale_id):
-    sale = get_object_or_404(Sale, id=sale_id, payment_method="credit")
-
-    if sale.credit_status == "paid":
-        messages.warning(request, "This credit sale is already fully paid.")
-        return redirect("credit_sales_list")
-
-    if request.method == "POST":
-        recovery_date = request.POST.get("recovery_date") or timezone.localdate()
-        payment_method = request.POST.get("payment_method") or "cash"
-        amount = to_decimal(request.POST.get("amount"))
-        card_no = (request.POST.get("card_no") or "").strip()
-        cheque_no = (request.POST.get("cheque_no") or "").strip()
-        note = (request.POST.get("note") or "").strip()
-
-        if amount <= 0:
-            messages.error(request, "Amount must be greater than 0.")
-            return render(request, "pos/add_sale_recovery.html", {"sale": sale})
-
-        if amount > sale.credit_balance:
-            messages.error(request, "Recovery amount exceeds balance.")
-            return render(request, "pos/add_sale_recovery.html", {"sale": sale})
-
-        if payment_method == "card" and not card_no:
-            messages.error(request, "Card No is required for card payments.")
-            return render(request, "pos/add_sale_recovery.html", {"sale": sale})
-
-        if payment_method == "cheque" and not cheque_no:
-            messages.error(request, "Cheque No is required for cheque payments.")
-            return render(request, "pos/add_sale_recovery.html", {"sale": sale})
-
-        recovery = SaleRecovery.objects.create(
-            sale=sale,
-            recovery_date=recovery_date,
-            payment_method=payment_method,
-            amount=amount,
-            card_no=card_no if payment_method == "card" else None,
-            cheque_no=cheque_no if payment_method == "cheque" else None,
-            note=note,
-            created_by=request.user,
-        )
-
-        messages.success(request, "Recovery added successfully.")
-        return redirect("print_sale_recovery_receipt", recovery_id=recovery.id)
-
-    return render(request, "pos/add_sale_recovery.html", {
-        "sale": sale,
-    })
-
-@user_passes_test(can_use_pos)
-def print_sale_recovery_receipt(request, recovery_id):
-    recovery = get_object_or_404(
-        SaleRecovery.objects.select_related("sale", "sale__project", "created_by"),
-        id=recovery_id
-    )
-
-    return render(request, "pos/print_sale_recovery_receipt.html", {
-        "recovery": recovery,
-        "sale": recovery.sale,
-    })
-
-@user_passes_test(can_use_pos)
-def save_sale(request):
-    if request.method != "POST":
-        return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
-
-    try:
-        with transaction.atomic():
-            data = json.loads(request.body)
-
-            items = data.get("items", [])
-            if not items:
-                return JsonResponse({"status": "error", "message": "Cart empty"}, status=400)
-
-            total = to_decimal(data.get("total"))
-            discount = to_decimal(data.get("discount"))
-            grand_total = to_decimal(data.get("grand_total"))
-
-            payment_method = data.get("payment_method", "cash")
-            received_amount = to_decimal(data.get("received"))
-            balance = to_decimal(data.get("balance"))
-            card_last4 = data.get("card_last4") or None
-            cheque_number = data.get("cheque_number") or None
-
-            customer_name = (data.get("customer_name") or "").strip() or None
-            customer_phone = (data.get("customer_phone") or "").strip() or None
-
-            sale_type = (data.get("sale_type") or "retail").strip()
-            project_id = data.get("project_id") or None
-
-            if sale_type not in ["retail", "project_issue"]:
-                sale_type = "retail"
-
-            if sale_type == "project_issue" and not project_id:
-                return JsonResponse({
-                    "status": "error",
-                    "message": "Project is required for project issue sales."
-                }, status=400)
-
-            project = None
-            if project_id:
-                project = Project.objects.filter(id=project_id, is_active=True).first()
-                if not project and sale_type == "project_issue":
-                    return JsonResponse({
-                        "status": "error",
-                        "message": "Selected project not found."
-                    }, status=400)
-
-            invoice_no = f"INV{Sale.objects.count() + 1:05d}"
-
-            approval_status = "pending" if sale_type == "project_issue" else "na"
-
-            if sale_type == "project_issue" and not customer_name and project:
-                customer_name = f"Project - {project.project_id}"
-
-            sale = Sale.objects.create(
-                invoice_no=invoice_no,
-                total=total,
-                discount=discount,
-                grand_total=grand_total,
-                sale_type=sale_type,
-                project=project if sale_type == "project_issue" else None,
-                approval_status=approval_status,
-                payment_method=payment_method,
-                received_amount=received_amount if payment_method == "cash" else None,
-                balance=balance if payment_method in ["cash", "credit"] else None,
-                card_last4=card_last4 if payment_method == "card" else None,
-                cheque_number=cheque_number if payment_method == "credit" else None,
-                customer_name=customer_name,
-                customer_phone=customer_phone,
-                created_by=request.user,
-            )
-
-            for i in items:
-                item = Item.objects.get(id=i["id"], is_active=True)
-                qty = to_decimal(i.get("qty"))
-                price = to_decimal(i.get("price"))
-                amount = qty * price
-
-                if qty <= 0:
-                    return JsonResponse({
-                        "status": "error",
-                        "message": f"Invalid qty for item: {item.name}"
-                    }, status=400)
-
-                if not item.is_service:
-                    current_stock = Decimal(str(item.stock or 0))
-
-                    if current_stock <= 0:
-                        return JsonResponse({
-                            "status": "error",
-                            "message": f"{item.name} is out of stock."
-                        }, status=400)
-
-                    if qty > current_stock:
-                        return JsonResponse({
-                            "status": "error",
-                            "message": f"Not enough stock for {item.name}. Available stock: {current_stock}"
-                        }, status=400)
-
-                SaleItem.objects.create(
-                    sale=sale,
-                    item=item,
-                    qty=qty,
-                    price=price,
-                    amount=amount,
-                )
-
-                if not item.is_service:
-                    item.stock = current_stock - qty
-                    item.updated_by = request.user
-                    item.save()
-
-                    StockTransaction.objects.create(
-                        item=item,
-                        transaction_type="sale",
-                        qty=qty,
-                    )
-
-            return JsonResponse({
-                "status": "success",
-                "sale_id": sale.id,
-                "invoice_no": sale.invoice_no,
-                "sale_type": sale.sale_type,
-                "approval_status": sale.approval_status,
-            })
-
-    except Item.DoesNotExist:
-        return JsonResponse({
-            "status": "error",
-            "message": "Selected item not found."
-        }, status=404)
-
-    except Exception as e:
-        return JsonResponse({
-            "status": "error",
-            "message": str(e)
-        }, status=500)
-    
-@user_passes_test(is_owner)
-def petty_cash_expense_approvals(request):
-    status_filter = request.GET.get("status", "pending").strip()
-
-    expenses = ProjectPettyCashExpense.objects.filter(
-        is_active=True
-    ).select_related(
-        "petty_cash", "project", "gl_account", "created_by", "approved_by"
-    ).order_by("-expense_date", "-id")
-
-    if status_filter in ["pending", "approved", "rejected"]:
-        expenses = expenses.filter(approval_status=status_filter)
-
-    return render(request, "pos/petty_cash_expense_approvals.html", {
-        "expenses": expenses,
-        "status_filter": status_filter,
-    })
-
-@user_passes_test(is_owner)
-def reject_petty_cash_expense(request, expense_id):
-    expense = get_object_or_404(ProjectPettyCashExpense, id=expense_id, is_active=True)
-
-    if expense.approval_status == "approved":
-        messages.error(request, "Approved expense cannot be rejected.")
-        return redirect("petty_cash_expense_approvals")
-
-    expense.approval_status = "rejected"
-    expense.approved_by = request.user
-    expense.approved_at = timezone.now()
-    expense.approval_note = "Rejected by owner"
-    expense.save()
-
-    messages.success(request, f"Expense {expense.expense_no} rejected.")
-    return redirect("petty_cash_expense_approvals")
-
-@user_passes_test(is_owner)
-def approve_petty_cash_expense(request, expense_id):
-    expense = get_object_or_404(ProjectPettyCashExpense, id=expense_id, is_active=True)
-
-    if expense.approval_status == "approved":
-        messages.warning(request, "This petty cash expense is already approved.")
-        return redirect("petty_cash_expense_approvals")
-
-    expense.approval_status = "approved"
-    expense.approved_by = request.user
-    expense.approved_at = timezone.now()
-    expense.save()
-
-    messages.success(request, f"Expense {expense.expense_no} approved successfully.")
-    return redirect("petty_cash_expense_approvals")
