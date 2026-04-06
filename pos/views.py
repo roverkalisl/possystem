@@ -840,7 +840,7 @@ def petty_cash_detail(request, petty_cash_id):
         is_active=True
     )
     expenses = petty_cash.expenses.filter(is_active=True).select_related(
-        "project", "gl_account", "created_by"
+        "project", "gl_account", "created_by", "approved_by"
     ).order_by("-expense_date", "-id")
 
     return render(request, "pos/petty_cash_detail.html", {
@@ -848,7 +848,6 @@ def petty_cash_detail(request, petty_cash_id):
         "expenses": expenses,
         "is_owner": is_owner(request.user),
     })
-
 
 @user_passes_test(can_add_expenses)
 def add_petty_cash_expense(request, petty_cash_id):
@@ -898,6 +897,8 @@ def add_petty_cash_expense(request, petty_cash_id):
                 "expense_gls": expense_gls,
             })
 
+        approval_status = "approved" if is_owner(request.user) else "pending"
+
         expense = ProjectPettyCashExpense.objects.create(
             expense_no=generate_petty_cash_expense_no(),
             petty_cash=petty_cash,
@@ -909,10 +910,17 @@ def add_petty_cash_expense(request, petty_cash_id):
             bill_date=bill_date or None,
             amount=amount,
             note=note,
+            approval_status=approval_status,
+            approved_by=request.user if approval_status == "approved" else None,
+            approved_at=timezone.now() if approval_status == "approved" else None,
             created_by=request.user,
         )
 
-        messages.success(request, f"Saved successfully. Expense No: {expense.expense_no}")
+        if approval_status == "approved":
+            messages.success(request, f"Saved and approved successfully. Expense No: {expense.expense_no}")
+        else:
+            messages.success(request, f"Saved successfully and waiting for owner approval. Expense No: {expense.expense_no}")
+
         return redirect("petty_cash_detail", petty_cash_id=petty_cash.id)
 
     return render(request, "pos/add_petty_cash_expense.html", {
@@ -920,7 +928,6 @@ def add_petty_cash_expense(request, petty_cash_id):
         "projects": projects,
         "expense_gls": expense_gls,
     })
-
 
 @user_passes_test(is_owner)
 def delete_petty_cash(request, petty_cash_id):
@@ -1007,7 +1014,8 @@ def project_profit_dashboard(request):
 
         petty_cash_expense = ProjectPettyCashExpense.objects.filter(
             project=project,
-            is_active=True
+            is_active=True,
+            approval_status="approved"
         ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
         total_income = ProjectInvoicePayment.objects.filter(
@@ -1928,3 +1936,54 @@ def save_sale(request):
             "status": "error",
             "message": str(e)
         }, status=500)
+    
+@user_passes_test(is_owner)
+def petty_cash_expense_approvals(request):
+    status_filter = request.GET.get("status", "pending").strip()
+
+    expenses = ProjectPettyCashExpense.objects.filter(
+        is_active=True
+    ).select_related(
+        "petty_cash", "project", "gl_account", "created_by", "approved_by"
+    ).order_by("-expense_date", "-id")
+
+    if status_filter in ["pending", "approved", "rejected"]:
+        expenses = expenses.filter(approval_status=status_filter)
+
+    return render(request, "pos/petty_cash_expense_approvals.html", {
+        "expenses": expenses,
+        "status_filter": status_filter,
+    })
+
+@user_passes_test(is_owner)
+def reject_petty_cash_expense(request, expense_id):
+    expense = get_object_or_404(ProjectPettyCashExpense, id=expense_id, is_active=True)
+
+    if expense.approval_status == "approved":
+        messages.error(request, "Approved expense cannot be rejected.")
+        return redirect("petty_cash_expense_approvals")
+
+    expense.approval_status = "rejected"
+    expense.approved_by = request.user
+    expense.approved_at = timezone.now()
+    expense.approval_note = "Rejected by owner"
+    expense.save()
+
+    messages.success(request, f"Expense {expense.expense_no} rejected.")
+    return redirect("petty_cash_expense_approvals")
+
+@user_passes_test(is_owner)
+def approve_petty_cash_expense(request, expense_id):
+    expense = get_object_or_404(ProjectPettyCashExpense, id=expense_id, is_active=True)
+
+    if expense.approval_status == "approved":
+        messages.warning(request, "This petty cash expense is already approved.")
+        return redirect("petty_cash_expense_approvals")
+
+    expense.approval_status = "approved"
+    expense.approved_by = request.user
+    expense.approved_at = timezone.now()
+    expense.save()
+
+    messages.success(request, f"Expense {expense.expense_no} approved successfully.")
+    return redirect("petty_cash_expense_approvals")

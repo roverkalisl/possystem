@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Petty Cash Expense Approvals{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Petty Cash Expense Approvals</h4>
+        <div>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+        </div>
+    </div>
+
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-4">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-select form-select-sm">
+                <option value="pending" {% if status_filter == "pending" %}selected{% endif %}>Pending</option>
+                <option value="approved" {% if status_filter == "approved" %}selected{% endif %}>Approved</option>
+                <option value="rejected" {% if status_filter == "rejected" %}selected{% endif %}>Rejected</option>
+            </select>
+        </div>
+        <div class="col-md-2 d-flex align-items-end">
+            <button class="btn btn-dark btn-sm w-100">Filter</button>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Expense No</th>
+                    <th>Date</th>
+                    <th>Petty Cash No</th>
+                    <th>Project</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Created By</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for expense in expenses %}
+                <tr>
+                    <td>{{ expense.expense_no }}</td>
+                    <td>{{ expense.expense_date|date:"Y-m-d" }}</td>
+                    <td>{{ expense.petty_cash.petty_cash_no }}</td>
+                    <td>{{ expense.project.project_id }}</td>
+                    <td>{{ expense.description }}</td>
+                    <td class="text-money">Rs. {{ expense.amount|money }}</td>
+                    <td>{% if expense.created_by %}{{ expense.created_by.username }}{% else %}-{% endif %}</td>
+                    <td>
+                        {% if expense.approval_status == "approved" %}
+                            <span class="badge bg-success">Approved</span>
+                        {% elif expense.approval_status == "rejected" %}
+                            <span class="badge bg-danger">Rejected</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if expense.approval_status == "pending" %}
+                            <a href="{% url 'approve_petty_cash_expense' expense.id %}"
+                               class="btn btn-sm btn-outline-success mb-1"
+                               onclick="return confirm('Approve this petty cash expense?')">
+                               Approve
+                            </a>
+                            <a href="{% url 'reject_petty_cash_expense' expense.id %}"
+                               class="btn btn-sm btn-outline-danger"
+                               onclick="return confirm('Reject this petty cash expense?')">
+                               Reject
+                            </a>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center">No petty cash expenses found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
