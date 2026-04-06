@@ -113,8 +113,8 @@
         color: var(--text-muted);
         margin-bottom: 6px;
     }
-
-    .pos-item-price {
+	
+	.pos-item-price {
         font-size: 18px;
         font-weight: 800;
         color: var(--brand);
@@ -314,6 +314,7 @@
                      data-category="{% if item.category %}{{ item.category.name|lower }}{% else %}uncategorized{% endif %}">
                     <div class="pos-item-name">{{ item.name }}</div>
                     <div class="pos-item-meta">Code: {{ item.item_code }}</div>
+					<div class="pos-item-stock">Stock: {{ item.stock }}</div>
                     <div class="pos-item-price">Rs. {{ item.selling_price|money }}</div>
                     <button type="button"
                             class="btn btn-outline-primary btn-sm mt-2 w-100"

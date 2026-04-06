@@ -70,4 +70,7 @@ urlpatterns = [
     path('project-issues/approvals/', views.project_issue_approval_list, name='project_issue_approval_list'),
     path('project-issues/<int:sale_id>/approve/', views.approve_project_issue, name='approve_project_issue'),
     path('project-issues/<int:sale_id>/reject/', views.reject_project_issue, name='reject_project_issue'),
+    path("credit-sales/", views.credit_sales_list, name="credit_sales_list"),
+    path("credit-sales/<int:sale_id>/recover/", views.add_sale_recovery, name="add_sale_recovery"),
+    path("credit-sales/recovery/<int:recovery_id>/print/", views.print_sale_recovery_receipt, name="print_sale_recovery_receipt"),
 ]

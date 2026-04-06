@@ -2,6 +2,7 @@ from decimal import Decimal
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.db.models import Sum
 
 
 class Category(models.Model):
@@ -155,7 +156,13 @@ class Sale(models.Model):
     grand_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     sale_type = models.CharField(max_length=20, choices=SALE_TYPE_CHOICES, default="retail")
-    project = models.ForeignKey("Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="pos_sales")
+    project = models.ForeignKey(
+        "Project",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pos_sales"
+    )
 
     approval_status = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, default="na")
     approved_by = models.ForeignKey(
@@ -187,6 +194,32 @@ class Sale(models.Model):
     def __str__(self):
         return self.invoice_no
 
+    @property
+    def recovered_amount(self):
+        return self.recoveries.filter(is_active=True).aggregate(
+            total=Sum("amount")
+        )["total"] or Decimal("0")
+
+    @property
+    def credit_balance(self):
+        if self.payment_method != "credit":
+            return Decimal("0")
+        return Decimal(str(self.grand_total or 0)) - Decimal(str(self.recovered_amount or 0))
+
+    @property
+    def credit_status(self):
+        if self.payment_method != "credit":
+            return "na"
+
+        recovered = Decimal(str(self.recovered_amount or 0))
+        total = Decimal(str(self.grand_total or 0))
+
+        if recovered <= 0:
+            return "unpaid"
+        elif recovered < total:
+            return "partial"
+        return "paid"
+    
 class SaleItem(models.Model):
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="sale_items")
     item = models.ForeignKey(Item, on_delete=models.CASCADE)
@@ -640,3 +673,58 @@ class ProjectInvoicePayment(models.Model):
 
         super().save(*args, **kwargs)
         self.invoice.save()
+        
+class SaleRecovery(models.Model):
+    PAYMENT_METHODS = [
+        ("cash", "Cash"),
+        ("card", "Card"),
+        ("cheque", "Cheque"),
+        ("bank", "Bank Transfer"),
+        ("other", "Other"),
+    ]
+
+    receipt_no = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    sale = models.ForeignKey("Sale", on_delete=models.CASCADE, related_name="recoveries")
+    recovery_date = models.DateField(default=timezone.now)
+
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default="cash")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    card_no = models.CharField(max_length=50, blank=True, null=True)
+    cheque_no = models.CharField(max_length=50, blank=True, null=True)
+    note = models.TextField(blank=True, null=True)
+
+    is_active = models.BooleanField(default=True)
+    inactive_at = models.DateTimeField(blank=True, null=True)
+    inactive_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="inactive_sale_recoveries"
+    )
+    inactive_reason = models.TextField(blank=True, null=True)
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="created_sale_recoveries"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-recovery_date", "-id"]
+
+    def save(self, *args, **kwargs):
+        if not self.receipt_no:
+            last = SaleRecovery.objects.exclude(receipt_no__isnull=True).order_by("-id").first()
+            if last and last.receipt_no and str(last.receipt_no).replace("RCV", "").isdigit():
+                next_no = int(str(last.receipt_no).replace("RCV", "")) + 1
+                self.receipt_no = f"RCV{next_no:06d}"
+            else:
+                self.receipt_no = "RCV000001"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.receipt_no or f"Recovery - {self.sale.invoice_no}"

@@ -1,0 +1,41 @@
+{% load currency_filters %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Credit Recovery Receipt</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body { font-family: Arial, sans-serif; margin: 24px; }
+        .print-btn { margin-bottom: 16px; padding: 10px 16px; }
+        .box { border: 1px solid #ccc; padding: 16px; border-radius: 8px; }
+        .title { font-size: 28px; font-weight: 700; margin-bottom: 16px; }
+        .row { margin-bottom: 10px; }
+        @media print { .print-btn { display: none; } }
+    </style>
+</head>
+<body>
+<button class="print-btn" onclick="window.print()">Print Receipt</button>
+
+<div class="box">
+    <div class="title">Credit Recovery Receipt</div>
+
+    <div class="row"><strong>Receipt No:</strong> {{ recovery.receipt_no }}</div>
+    <div class="row"><strong>Date:</strong> {{ recovery.recovery_date|date:"Y-m-d" }}</div>
+    <div class="row"><strong>Invoice No:</strong> {{ sale.invoice_no }}</div>
+    <div class="row"><strong>Customer:</strong> {{ sale.customer_name|default:"-" }}</div>
+    <div class="row"><strong>Recovery Amount:</strong> Rs. {{ recovery.amount|money }}</div>
+    <div class="row"><strong>Payment Method:</strong> {{ recovery.get_payment_method_display }}</div>
+
+    {% if recovery.card_no %}
+    <div class="row"><strong>Card No:</strong> {{ recovery.card_no }}</div>
+    {% endif %}
+
+    {% if recovery.cheque_no %}
+    <div class="row"><strong>Cheque No:</strong> {{ recovery.cheque_no }}</div>
+    {% endif %}
+
+    <div class="row"><strong>Remaining Balance:</strong> Rs. {{ sale.credit_balance|money }}</div>
+    <div class="row"><strong>Note:</strong> {{ recovery.note|default:"-" }}</div>
+</div>
+</body>
+</html>

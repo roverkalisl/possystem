@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Credit Sales{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Credit Sales Recovery</h4>
+        <div>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+        </div>
+    </div>
+
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-6">
+            <input type="text" name="q" value="{{ query }}" class="form-control form-control-sm" placeholder="Search invoice / customer / project">
+        </div>
+        <div class="col-md-3">
+            <select name="status" class="form-select form-select-sm">
+                <option value="unpaid" {% if status_filter == "unpaid" %}selected{% endif %}>Unpaid</option>
+                <option value="partial" {% if status_filter == "partial" %}selected{% endif %}>Partial</option>
+                <option value="paid" {% if status_filter == "paid" %}selected{% endif %}>Paid</option>
+                <option value="all" {% if status_filter == "all" %}selected{% endif %}>All</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <button class="btn btn-dark btn-sm w-100">Filter</button>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Invoice No</th>
+                    <th>Date</th>
+                    <th>Customer / Project</th>
+                    <th>Total</th>
+                    <th>Recovered</th>
+                    <th>Balance</th>
+                    <th>Status</th>
+                    <th>Recover</th>
+                    <th>Invoice</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for sale in sales %}
+                <tr>
+                    <td>{{ sale.invoice_no }}</td>
+                    <td>{{ sale.created_at|date:"Y-m-d H:i" }}</td>
+                    <td>
+                        {{ sale.customer_name|default:"-" }}
+                        {% if sale.project %}
+                        <br><small class="text-muted">{{ sale.project.project_id }} - {{ sale.project.project_name }}</small>
+                        {% endif %}
+                    </td>
+                    <td class="text-money">Rs. {{ sale.grand_total|money }}</td>
+                    <td class="text-money">Rs. {{ sale.recovered_amount|money }}</td>
+                    <td class="text-money">Rs. {{ sale.credit_balance|money }}</td>
+                    <td>
+                        {% if sale.credit_status == "paid" %}
+                            <span class="badge bg-success">Paid</span>
+                        {% elif sale.credit_status == "partial" %}
+                            <span class="badge bg-warning text-dark">Partial</span>
+                        {% else %}
+                            <span class="badge bg-danger">Unpaid</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if sale.credit_status != "paid" %}
+                        <a href="{% url 'add_sale_recovery' sale.id %}" class="btn btn-sm btn-outline-primary">Recover</a>
+                        {% else %}
+                        <button class="btn btn-sm btn-success" disabled>Done</button>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'invoice_page' sale.id %}" class="btn btn-sm btn-outline-dark">Invoice</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center">No credit sales found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
