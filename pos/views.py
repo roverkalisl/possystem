@@ -276,6 +276,7 @@ def pos_page(request):
     query = request.GET.get("q", "").strip()
     items = Item.objects.filter(is_active=True).select_related("category").order_by("name")
     projects = Project.objects.filter(is_active=True).order_by("-id")
+    categories = Category.objects.all().order_by("name")
 
     if query:
         items = items.filter(
@@ -287,10 +288,10 @@ def pos_page(request):
     return render(request, "pos/pos.html", {
         "items": items,
         "projects": projects,
+        "categories": categories,
         "query": query,
         "show_items": can_manage_items(request.user),
     })
-
 @user_passes_test(can_use_pos)
 def save_sale(request):
     if request.method != "POST":

@@ -95,6 +95,7 @@
                         <td>
                             <a href="{% url 'project_invoice_detail' invoice.id %}" class="btn btn-sm btn-outline-primary">View</a>
                         </td>
+
                         {% if is_owner %}
                         <td>
                             {% if invoice.is_active %}
@@ -104,7 +105,7 @@
                                    Deactivate
                                 </a>
                             {% else %}
-                                <span class="badge bg-danger">Deactivated</span>
+                                -
                             {% endif %}
                         </td>
                         {% endif %}
