@@ -10,6 +10,7 @@ from django.db.models import Q, Sum, F
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
+from django.db import transaction
 
 from .models import (
     Item, Category, Supplier, GLMaster,
@@ -1796,105 +1797,125 @@ def save_sale(request):
         return JsonResponse({"status": "error", "message": "Invalid request"}, status=400)
 
     try:
-        data = json.loads(request.body)
+        with transaction.atomic():
+            data = json.loads(request.body)
 
-        items = data.get("items", [])
-        if not items:
-            return JsonResponse({"status": "error", "message": "Cart empty"}, status=400)
+            items = data.get("items", [])
+            if not items:
+                return JsonResponse({"status": "error", "message": "Cart empty"}, status=400)
 
-        total = to_decimal(data.get("total"))
-        discount = to_decimal(data.get("discount"))
-        grand_total = to_decimal(data.get("grand_total"))
+            total = to_decimal(data.get("total"))
+            discount = to_decimal(data.get("discount"))
+            grand_total = to_decimal(data.get("grand_total"))
 
-        payment_method = data.get("payment_method", "cash")
-        received_amount = to_decimal(data.get("received"))
-        balance = to_decimal(data.get("balance"))
-        card_last4 = data.get("card_last4") or None
-        cheque_number = data.get("cheque_number") or None
+            payment_method = data.get("payment_method", "cash")
+            received_amount = to_decimal(data.get("received"))
+            balance = to_decimal(data.get("balance"))
+            card_last4 = data.get("card_last4") or None
+            cheque_number = data.get("cheque_number") or None
 
-        customer_name = (data.get("customer_name") or "").strip() or None
-        customer_phone = (data.get("customer_phone") or "").strip() or None
+            customer_name = (data.get("customer_name") or "").strip() or None
+            customer_phone = (data.get("customer_phone") or "").strip() or None
 
-        sale_type = (data.get("sale_type") or "retail").strip()
-        project_id = data.get("project_id") or None
+            sale_type = (data.get("sale_type") or "retail").strip()
+            project_id = data.get("project_id") or None
 
-        if sale_type not in ["retail", "project_issue"]:
-            sale_type = "retail"
+            if sale_type not in ["retail", "project_issue"]:
+                sale_type = "retail"
 
-        if sale_type == "project_issue" and not project_id:
-            return JsonResponse({
-                "status": "error",
-                "message": "Project is required for project issue sales."
-            }, status=400)
-
-        project = None
-        if project_id:
-            project = Project.objects.filter(id=project_id, is_active=True).first()
-            if not project and sale_type == "project_issue":
+            if sale_type == "project_issue" and not project_id:
                 return JsonResponse({
                     "status": "error",
-                    "message": "Selected project not found."
+                    "message": "Project is required for project issue sales."
                 }, status=400)
 
-        invoice_no = f"INV{Sale.objects.count() + 1:05d}"
+            project = None
+            if project_id:
+                project = Project.objects.filter(id=project_id, is_active=True).first()
+                if not project and sale_type == "project_issue":
+                    return JsonResponse({
+                        "status": "error",
+                        "message": "Selected project not found."
+                    }, status=400)
 
-        if sale_type == "project_issue":
-            approval_status = "pending"
-            if not customer_name and project:
+            invoice_no = f"INV{Sale.objects.count() + 1:05d}"
+
+            approval_status = "pending" if sale_type == "project_issue" else "na"
+
+            if sale_type == "project_issue" and not customer_name and project:
                 customer_name = f"Project - {project.project_id}"
-        else:
-            approval_status = "na"
 
-        sale = Sale.objects.create(
-            invoice_no=invoice_no,
-            total=total,
-            discount=discount,
-            grand_total=grand_total,
-            sale_type=sale_type,
-            project=project if sale_type == "project_issue" else None,
-            approval_status=approval_status,
-            payment_method=payment_method,
-            received_amount=received_amount if payment_method == "cash" else None,
-            balance=balance if payment_method in ["cash", "credit"] else None,
-            card_last4=card_last4 if payment_method == "card" else None,
-            cheque_number=cheque_number if payment_method == "credit" else None,
-            customer_name=customer_name,
-            customer_phone=customer_phone,
-            created_by=request.user,
-        )
-
-        for i in items:
-            item = Item.objects.get(id=i["id"], is_active=True)
-            qty = to_decimal(i.get("qty"))
-            price = to_decimal(i.get("price"))
-            amount = qty * price
-
-            SaleItem.objects.create(
-                sale=sale,
-                item=item,
-                qty=qty,
-                price=price,
-                amount=amount,
+            sale = Sale.objects.create(
+                invoice_no=invoice_no,
+                total=total,
+                discount=discount,
+                grand_total=grand_total,
+                sale_type=sale_type,
+                project=project if sale_type == "project_issue" else None,
+                approval_status=approval_status,
+                payment_method=payment_method,
+                received_amount=received_amount if payment_method == "cash" else None,
+                balance=balance if payment_method in ["cash", "credit"] else None,
+                card_last4=card_last4 if payment_method == "card" else None,
+                cheque_number=cheque_number if payment_method == "credit" else None,
+                customer_name=customer_name,
+                customer_phone=customer_phone,
+                created_by=request.user,
             )
 
-            if not item.is_service:
-                item.stock = Decimal(item.stock) - qty
-                item.updated_by = request.user
-                item.save()
+            for i in items:
+                item = Item.objects.get(id=i["id"], is_active=True)
+                qty = to_decimal(i.get("qty"))
+                price = to_decimal(i.get("price"))
+                amount = qty * price
 
-                StockTransaction.objects.create(
+                if qty <= 0:
+                    return JsonResponse({
+                        "status": "error",
+                        "message": f"Invalid qty for item: {item.name}"
+                    }, status=400)
+
+                if not item.is_service:
+                    current_stock = Decimal(str(item.stock or 0))
+
+                    if current_stock <= 0:
+                        return JsonResponse({
+                            "status": "error",
+                            "message": f"{item.name} is out of stock."
+                        }, status=400)
+
+                    if qty > current_stock:
+                        return JsonResponse({
+                            "status": "error",
+                            "message": f"Not enough stock for {item.name}. Available stock: {current_stock}"
+                        }, status=400)
+
+                SaleItem.objects.create(
+                    sale=sale,
                     item=item,
-                    transaction_type="sale",
                     qty=qty,
+                    price=price,
+                    amount=amount,
                 )
 
-        return JsonResponse({
-            "status": "success",
-            "sale_id": sale.id,
-            "invoice_no": sale.invoice_no,
-            "sale_type": sale.sale_type,
-            "approval_status": sale.approval_status,
-        })
+                if not item.is_service:
+                    item.stock = current_stock - qty
+                    item.updated_by = request.user
+                    item.save()
+
+                    StockTransaction.objects.create(
+                        item=item,
+                        transaction_type="sale",
+                        qty=qty,
+                    )
+
+            return JsonResponse({
+                "status": "success",
+                "sale_id": sale.id,
+                "invoice_no": sale.invoice_no,
+                "sale_type": sale.sale_type,
+                "approval_status": sale.approval_status,
+            })
 
     except Item.DoesNotExist:
         return JsonResponse({

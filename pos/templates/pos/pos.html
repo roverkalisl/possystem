@@ -316,11 +316,13 @@
                     <div class="pos-item-meta">Code: {{ item.item_code }}</div>
 					<div class="pos-item-stock">Stock: {{ item.stock }}</div>
                     <div class="pos-item-price">Rs. {{ item.selling_price|money }}</div>
-                    <button type="button"
-                            class="btn btn-outline-primary btn-sm mt-2 w-100"
-                            onclick="addToCart('{{ item.id }}', '{{ item.item_code|escapejs }}', '{{ item.name|escapejs }}', '{{ item.selling_price }}')">
-                        Add
-                    </button>
+                   <button type="button"
+						class="btn btn-outline-primary btn-sm mt-2 w-100"
+							{% if not item.is_service and item.stock <= 0 %}disabled{% endif %}
+        onclick="addToCart('{{ item.id }}', '{{ item.item_code|escapejs }}', '{{ item.name|escapejs }}', '{{ item.selling_price }}')">
+    {% if not item.is_service and item.stock <= 0 %}Out of Stock{% else %}Add{% endif %}
+</button>
+
                 </div>
                 {% empty %}
                 <div class="text-muted">No items found.</div>
