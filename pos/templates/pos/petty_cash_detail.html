@@ -17,7 +17,7 @@
     </div>
 
     <div class="info-box mb-3">
-        <div class="row g-2">
+        <div class="row g-3">
             <div class="col-md-3">
                 <small class="text-muted">Petty Cash No</small><br>
                 <strong>{{ petty_cash.petty_cash_no }}</strong>
@@ -27,18 +27,58 @@
                 <strong>{{ petty_cash.issue_date|date:"Y-m-d" }}</strong>
             </div>
             <div class="col-md-3">
-                <small class="text-muted">Employee</small><br>
+                <small class="text-muted">Created By</small><br>
+                <strong>{% if petty_cash.created_by %}{{ petty_cash.created_by.username }}{% else %}-{% endif %}</strong>
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted">User</small><br>
+                <strong>{% if petty_cash.user %}{{ petty_cash.user.username }}{% else %}-{% endif %}</strong>
+            </div>
+        </div>
+    </div>
+
+    <div class="info-box mb-4">
+        <h6 class="mb-3">Employee Details</h6>
+        <div class="row g-3">
+            <div class="col-md-3">
+                <small class="text-muted">Employee No</small><br>
+                <strong>{% if petty_cash.employee %}{{ petty_cash.employee.emp_no }}{% else %}-{% endif %}</strong>
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted">Employee Name</small><br>
+                <strong>{% if petty_cash.employee %}{{ petty_cash.employee.full_name }}{% else %}-{% endif %}</strong>
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted">Designation</small><br>
+                <strong>{% if petty_cash.employee and petty_cash.employee.designation %}{{ petty_cash.employee.designation }}{% else %}-{% endif %}</strong>
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted">Telephone</small><br>
+                <strong>{% if petty_cash.employee and petty_cash.employee.tel %}{{ petty_cash.employee.tel }}{% else %}-{% endif %}</strong>
+            </div>
+            <div class="col-md-6">
+                <small class="text-muted">Address</small><br>
+                <strong>{% if petty_cash.employee and petty_cash.employee.address %}{{ petty_cash.employee.address }}{% else %}-{% endif %}</strong>
+            </div>
+            <div class="col-md-3">
+                <small class="text-muted">Petty Cash Limit</small><br>
                 <strong>
                     {% if petty_cash.employee %}
-                        {{ petty_cash.employee.emp_no }} - {{ petty_cash.employee.full_name }}
+                        Rs. {{ petty_cash.employee.petty_cash_limit|money }}
                     {% else %}
-                        -
+                        Rs. 0.00
                     {% endif %}
                 </strong>
             </div>
             <div class="col-md-3">
-                <small class="text-muted">Created By</small><br>
-                <strong>{% if petty_cash.created_by %}{{ petty_cash.created_by.username }}{% else %}-{% endif %}</strong>
+                <small class="text-muted">Outstanding</small><br>
+                <strong>
+                    {% if petty_cash.employee %}
+                        Rs. {{ petty_cash.employee.petty_cash_outstanding|money }}
+                    {% else %}
+                        Rs. 0.00
+                    {% endif %}
+                </strong>
             </div>
         </div>
     </div>
@@ -93,7 +133,7 @@
                 <tr>
                     <td>{{ expense.expense_no }}</td>
                     <td>{{ expense.expense_date|date:"Y-m-d" }}</td>
-                    <td>{{ expense.project.project_id }}</td>
+                    <td>{% if expense.project %}{{ expense.project.project_id }}{% else %}-{% endif %}</td>
                     <td>{{ expense.description }}</td>
                     <td>{{ expense.bill_no|default:"-" }}</td>
                     <td class="text-money">Rs. {{ expense.amount|money }}</td>
