@@ -2180,3 +2180,43 @@ def add_petty_cash_expense_entry(request):
         "petty_cash": petty_cash,
         "summary": summary,
     })
+@user_passes_test(can_use_project)
+def petty_cash_expense_list(request):
+    employee_id = request.GET.get("employee")
+    project_id = request.GET.get("project")
+    status_filter = request.GET.get("status", "").strip()
+
+    expenses = ProjectPettyCashExpense.objects.filter(
+        is_active=True
+    ).select_related(
+        "petty_cash",
+        "petty_cash__employee",
+        "project",
+        "gl_account",
+        "created_by",
+        "approved_by"
+    ).order_by("-expense_date", "-id")
+
+    if employee_id:
+        expenses = expenses.filter(petty_cash__employee_id=employee_id)
+
+    if project_id:
+        expenses = expenses.filter(project_id=project_id)
+
+    if status_filter in ["pending", "approved", "rejected"]:
+        expenses = expenses.filter(approval_status=status_filter)
+
+    employees = Employee.objects.filter(is_active=True).order_by("emp_no")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+    total_amount = expenses.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    return render(request, "pos/petty_cash_expense_list.html", {
+        "expenses": expenses,
+        "employees": employees,
+        "projects": projects,
+        "selected_employee": employee_id,
+        "selected_project": project_id,
+        "status_filter": status_filter,
+        "total_amount": total_amount,
+        "is_owner": is_owner(request.user),
+    })

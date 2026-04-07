@@ -86,7 +86,7 @@ urlpatterns = [
     path('petty-cash/edit/<int:petty_cash_id>/', views.edit_petty_cash, name='edit_petty_cash'),
     path('petty-cash/delete/<int:petty_cash_id>/', views.delete_petty_cash, name='delete_petty_cash'),
     path('petty-cash-expense/delete/<int:expense_id>/', views.delete_petty_cash_expense, name='delete_petty_cash_expense'),
-
+    path('petty-cash-expenses/', views.petty_cash_expense_list, name='petty_cash_expense_list'),
     # =========================
     # PETTY CASH APPROVALS
     # =========================
@@ -131,4 +131,4 @@ urlpatterns = [
     path('project-issues/<int:sale_id>/approve/', views.approve_project_issue, name='approve_project_issue'),
     path('project-issues/<int:sale_id>/reject/', views.reject_project_issue, name='reject_project_issue'),
     path('petty-cash-expenses/add/', views.add_petty_cash_expense_entry, name='add_petty_cash_expense_entry'),
-]
+    ]

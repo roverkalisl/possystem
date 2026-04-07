@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Petty Cash Expenses{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Petty Cash Expenses</h4>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'add_petty_cash' %}" class="btn btn-primary btn-sm">+ Add Petty Cash</a>
+            <a href="{% url 'add_petty_cash_expense_entry' %}" class="btn btn-outline-primary btn-sm">+ Petty Cash Expenses</a>
+            {% if is_owner %}
+            <a href="{% url 'petty_cash_expense_approvals' %}" class="btn btn-outline-dark btn-sm">Approvals</a>
+            {% endif %}
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+        </div>
+    </div>
+
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-4">
+            <label class="form-label">Employee</label>
+            <select name="employee" class="form-select form-select-sm">
+                <option value="">All Employees</option>
+                {% for emp in employees %}
+                <option value="{{ emp.id }}" {% if selected_employee == emp.id|stringformat:"s" %}selected{% endif %}>
+                    {{ emp.emp_no }} - {{ emp.full_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-4">
+            <label class="form-label">Project</label>
+            <select name="project" class="form-select form-select-sm">
+                <option value="">All Projects</option>
+                {% for p in projects %}
+                <option value="{{ p.id }}" {% if selected_project == p.id|stringformat:"s" %}selected{% endif %}>
+                    {{ p.project_id }} - {{ p.project_name }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-md-2">
+            <label class="form-label">Status</label>
+            <select name="status" class="form-select form-select-sm">
+                <option value="" {% if not status_filter %}selected{% endif %}>All</option>
+                <option value="pending" {% if status_filter == "pending" %}selected{% endif %}>Pending</option>
+                <option value="approved" {% if status_filter == "approved" %}selected{% endif %}>Approved</option>
+                <option value="rejected" {% if status_filter == "rejected" %}selected{% endif %}>Rejected</option>
+            </select>
+        </div>
+
+        <div class="col-md-1 d-flex align-items-end">
+            <button class="btn btn-dark btn-sm w-100">Filter</button>
+        </div>
+
+        <div class="col-md-1 d-flex align-items-end">
+            <div class="summary-box w-100 text-center">
+                <h6>Total</h6>
+                <p class="summary-value">Rs. {{ total_amount|money }}</p>
+            </div>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Expense No</th>
+                    <th>Date</th>
+                    <th>Petty Cash No</th>
+                    <th>Employee</th>
+                    <th>Project</th>
+                    <th>Description</th>
+                    <th>Bill No</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Created By</th>
+                    <th>Approved By</th>
+                    <th>Approved Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for expense in expenses %}
+                <tr>
+                    <td>{{ expense.expense_no }}</td>
+                    <td>{{ expense.expense_date|date:"Y-m-d" }}</td>
+                    <td>
+                        <a href="{% url 'petty_cash_detail' expense.petty_cash.id %}" class="text-decoration-none">
+                            {{ expense.petty_cash.petty_cash_no }}
+                        </a>
+                    </td>
+                    <td>
+                        {% if expense.petty_cash.employee %}
+                            {{ expense.petty_cash.employee.emp_no }} - {{ expense.petty_cash.employee.full_name }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if expense.project %}
+                            {{ expense.project.project_id }} - {{ expense.project.project_name }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>{{ expense.description }}</td>
+                    <td>{{ expense.bill_no|default:"-" }}</td>
+                    <td class="text-money">Rs. {{ expense.amount|money }}</td>
+                    <td>
+                        {% if expense.approval_status == "approved" %}
+                            <span class="badge bg-success">Approved</span>
+                        {% elif expense.approval_status == "rejected" %}
+                            <span class="badge bg-danger">Rejected</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>{% if expense.created_by %}{{ expense.created_by.username }}{% else %}-{% endif %}</td>
+                    <td>{% if expense.approved_by %}{{ expense.approved_by.username }}{% else %}-{% endif %}</td>
+                    <td>{% if expense.approved_at %}{{ expense.approved_at|date:"Y-m-d H:i" }}{% else %}-{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="12" class="text-center">No petty cash expenses found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

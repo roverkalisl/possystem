@@ -46,12 +46,12 @@
                 <div class="d-grid gap-2 mt-3">
                     <a href="{% url 'project_list' %}" class="btn btn-primary btn-sm">Project List</a>
                     <a href="{% url 'project_expense_list' %}" class="btn btn-outline-danger btn-sm">Project Expenses</a>
-                    <a href="{% url 'petty_cash_list' %}" class="btn btn-outline-primary btn-sm">Petty Cash</a>
+                    <a href="{% url 'petty_cash_expense_list' %}" class="btn btn-outline-primary btn-sm">Petty Cash Expenses</a>
 					{% if is_owner_flag %}
-{% if is_owner_flag %}
-<a href="{% url 'petty_cash_expense_approvals' %}" class="btn btn-outline-dark btn-sm">Petty Cash Approvals</a>
-{% endif %}
-                    <a href="{% url 'project_issue_approval_list' %}" class="btn btn-outline-dark btn-sm">Issue Approvals</a>
+					{% if is_owner_flag %}
+					<a href="{% url 'petty_cash_expense_approvals' %}" class="btn btn-outline-dark btn-sm">Petty Cash Approvals</a>
+					{% endif %}
+                    <a href="{% url 'project_issue_approval_list' %}" class="btn btn-outline-dark btn-sm">Project Issue Approvals (Retail Shop)</a>
                     {% endif %}
                     <a href="{% url 'project_profit_dashboard' %}" class="btn btn-outline-success btn-sm">Profit Dashboard</a>
                 </div>
