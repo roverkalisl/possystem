@@ -1231,13 +1231,13 @@ def add_petty_cash_expense(request, petty_cash_id):
                 "expense_gls": expense_gls,
             })
 
-        if amount > petty_cash.balance:
-            messages.error(request, "Expense exceeds petty cash balance.")
-            return render(request, "pos/add_petty_cash_expense.html", {
-                "petty_cash": petty_cash,
-                "projects": projects,
-                "expense_gls": expense_gls,
-            })
+        #if amount > petty_cash.balance:
+         #   messages.error(request, "Expense exceeds petty cash balance.")
+         #   return render(request, "pos/add_petty_cash_expense.html", {
+           #     "petty_cash": petty_cash,
+            #    "projects": projects,
+             #   "expense_gls": expense_gls,
+           # })
 
         approval_status = "approved" if is_owner(request.user) else "pending"
 
@@ -2135,16 +2135,16 @@ def add_petty_cash_expense_entry(request):
                 "summary": summary,
             })
 
-        if amount > petty_cash.balance:
-            messages.error(request, "Expense exceeds petty cash balance.")
-            return render(request, "pos/add_petty_cash_expense_entry.html", {
-                "employees": employees,
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "selected_employee": selected_employee,
-                "petty_cash": petty_cash,
-                "summary": summary,
-            })
+        #if amount > petty_cash.balance:
+           # messages.error(request, "Expense exceeds petty cash balance.")
+            #return render(request, "pos/add_petty_cash_expense_entry.html", {
+               # "employees": employees,
+               # "projects": projects,
+               # "expense_gls": expense_gls,
+               # "selected_employee": selected_employee,
+              #  "petty_cash": petty_cash,
+              #  "summary": summary,
+           # })
 
         approval_status = "approved" if is_owner(request.user) else "pending"
 
