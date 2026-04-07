@@ -72,12 +72,12 @@
                     <td class="text-money">Rs. {{ invoice.paid_amount|money }}</td>
                     <td class="text-money">Rs. {{ invoice.balance_amount|money }}</td>
                     <td>
-                        {% if invoice.status == "paid" %}
+                        {% if invoice.payment_status == "paid" %}
                             <span class="badge status-paid">Paid</span>
-                        {% elif invoice.status == "partial" %}
+                        {% elif invoice.payment_status == "partial" %}
                             <span class="badge status-partial">Partial</span>
                         {% else %}
-                            <span class="badge status-unpaid">Not Paid</span>
+                            <span class="badge status-unpaid">Unpaid</span>
                         {% endif %}
                     </td>
                     <td>
