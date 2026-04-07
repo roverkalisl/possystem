@@ -4,107 +4,98 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
-<div class="dashboard-container">
+<div class="simple-dashboard-wrap">
 
-    <div class="dashboard-topbar">
-        <div class="dashboard-top-left">
-            <img src="{% static 'logo.png' %}" alt="P&I Constructions" class="dashboard-logo">
-            <div>
-                <h2 class="dashboard-main-title">P&I Constructions Dashboard</h2>
-                <p class="dashboard-main-subtitle">Your reliable construction partner</p>
-            </div>
-        </div>
-    </div>
+    <div class="simple-dashboard-grid">
 
-    <div class="dashboard-grid">
-
-       <div class="dashboard-card">
-    <h5 class="dashboard-card-title">POS</h5>
-    <div class="dashboard-links">
-        <a href="{% url 'pos' %}" class="dashboard-link-btn">POS</a>
-        <a href="{% url 'sales_return' %}" class="dashboard-link-btn">Sales Return</a>
-        <a href="{% url 'credit_sales_list' %}" class="dashboard-link-btn">Credit Recovery</a>
-        <a href="{% url 'project_issue_approval_list' %}" class="dashboard-link-btn">Project Issue Approvals</a>
-    </div>
-</div>
-
-        <div class="dashboard-card">
-            <h5 class="dashboard-card-title">Project Expenses</h5>
-            <div class="dashboard-links">
-                <a href="{% url 'project_expense_list' %}" class="dashboard-link-btn">Project Expenses</a>
-                <a href="{% url 'add_project_expense' %}" class="dashboard-link-btn">Add Project Expense</a>
-                <a href="{% url 'project_expense_list' %}?type=direct" class="dashboard-link-btn">Direct Project Expenses</a>
+        <div class="simple-dashboard-card">
+            <h5 class="simple-dashboard-title">POS</h5>
+            <div class="simple-dashboard-links">
+                <a href="{% url 'pos' %}" class="simple-dashboard-btn primary">Open POS</a>
+                <a href="{% url 'sales_return' %}" class="simple-dashboard-btn">Sales Return</a>
+                <a href="{% url 'credit_sales_list' %}" class="simple-dashboard-btn">Credit Recovery</a>
+                <a href="{% url 'project_issue_approval_list' %}" class="simple-dashboard-btn">Project Issue Approvals</a>
             </div>
         </div>
 
-        <div class="dashboard-card">
-            <h5 class="dashboard-card-title">Petty Cash</h5>
-            <div class="dashboard-links">
-                <a href="{% url 'petty_cash_expense_list' %}" class="dashboard-link-btn">Petty Cash Expenses</a>
-                <a href="{% url 'add_petty_cash' %}" class="dashboard-link-btn">Add Petty Cash</a>
-                <a href="{% url 'petty_cash_expense_approvals' %}" class="dashboard-link-btn">Petty Cash Approvals</a>
+        <div class="simple-dashboard-card">
+            <h5 class="simple-dashboard-title">Stock Managment</h5>
+            <div class="simple-dashboard-links">
+                <a href="{% url 'item_list' %}" class="simple-dashboard-btn primary">Inventry List</a>
+                <a href="{% url 'add_item' %}" class="simple-dashboard-btn">Add Stock</a>
+                <a href="{% url 'stock_history' %}" class="simple-dashboard-btn">Stock History</a>
             </div>
         </div>
 
-        <div class="dashboard-card">
-            <h5 class="dashboard-card-title">Project Create</h5>
-            <div class="dashboard-links">
-                <a href="{% url 'project_list' %}" class="dashboard-link-btn">Project List</a>
-                <a href="{% url 'create_project' %}" class="dashboard-link-btn">Add Project</a>
+        <div class="simple-dashboard-card">
+            <h5 class="simple-dashboard-title">PROJECTS</h5>
+            <div class="simple-dashboard-links">
+                <a href="{% url 'project_list' %}" class="simple-dashboard-btn primary">Project List</a>
+                <a href="{% url 'project_expense_list' %}" class="simple-dashboard-btn">Project Expenses</a>
+                </a>
+                <a href="{% url 'project_issue_approval_list' %}" class="simple-dashboard-btn">Project Issue Approvals (Retail Shop)</a>
+                <a href="{% url 'project_profit_dashboard' %}" class="simple-dashboard-btn">Profit Dashboard</a>
+            </div>
+        </div>
+		<div class="simple-dashboard-card">
+            <h5 class="simple-dashboard-title">PETTY CASH</h5>
+            <div class="simple-dashboard-links">
+                <a href="{% url 'add_petty_cash' %}" class="simple-dashboard-btn primary">Add Petty Cash</a>
+                <a href="{% url 'add_petty_cash_expense_entry' %}" class="simple-dashboard-btn">Petty Cash Expenses</a>
+				<a href="{% url 'petty_cash_expense_approvals' %}" class="simple-dashboard-btn">Petty Cash Approvals
+                <a href="{% url 'petty_cash_list' %}" class="simple-dashboard-btn">Petty Cash Summary</a>
             </div>
         </div>
 
-        <div class="dashboard-card">
-            <h5 class="dashboard-card-title">Project Invoice</h5>
-            <div class="dashboard-links">
-                <a href="{% url 'project_invoice_list' %}" class="dashboard-link-btn">Project Invoice List</a>
-                <a href="{% url 'add_project_invoice' %}" class="dashboard-link-btn">Add Project Invoice</a>
+        <div class="simple-dashboard-card">
+            <h5 class="simple-dashboard-title">PROJECT BILLING</h5>
+            <div class="simple-dashboard-links">
+                <a href="{% url 'project_invoice_list' %}" class="simple-dashboard-btn primary">Project Invoice List</a>
+                <a href="{% url 'add_project_invoice' %}" class="simple-dashboard-btn">Create Project Invoice</a>
+                <a href="{% url 'add_project_income' %}" class="simple-dashboard-btn">Create Project Income</a>
             </div>
         </div>
 
-        <div class="dashboard-card">
-            <h5 class="dashboard-card-title">Reports</h5>
-            <div class="dashboard-links">
-                <a href="{% url 'daily_report' %}" class="dashboard-link-btn">Daily Report</a>
-                <a href="{% url 'monthly_report' %}" class="dashboard-link-btn">Monthly Report</a>
-                <a href="{% url 'project_profit_dashboard' %}" class="dashboard-link-btn">Project Profit</a>
-            </div>
-        </div>
-
-        <div class="dashboard-card">
-            <h5 class="dashboard-card-title">Items</h5>
-            <div class="dashboard-links">
-                <a href="{% url 'item_list' %}" class="dashboard-link-btn">Item List</a>
-                <a href="{% url 'add_item' %}" class="dashboard-link-btn">Add Item</a>
-                <a href="{% url 'stock_history' %}" class="dashboard-link-btn">Stock History</a>
-            </div>
-        </div>
-
-        <div class="dashboard-card">
-            <h5 class="dashboard-card-title">GL Master</h5>
-            <div class="dashboard-links">
-                <a href="{% url 'gl_list' %}" class="dashboard-link-btn">GL List</a>
-                <a href="{% url 'add_gl' %}" class="dashboard-link-btn">Add GL</a>
-            </div>
-        </div>
-
-        <div class="dashboard-card">
-            <h5 class="dashboard-card-title">Employees</h5>
-            <div class="dashboard-links">
-                <a href="{% url 'employee_list' %}" class="dashboard-link-btn">Employee List</a>
-                <a href="{% url 'add_employee' %}" class="dashboard-link-btn">Add Employee</a>
+        <div class="simple-dashboard-card">
+            <h5 class="simple-dashboard-title">GL ACCOUNTS</h5>
+            <div class="simple-dashboard-links">
+                <a href="{% url 'gl_list' %}" class="simple-dashboard-btn primary">GL List</a>
+                <a href="{% url 'add_gl' %}" class="simple-dashboard-btn">Add GL</a>
             </div>
         </div>
 
         {% if is_owner_flag %}
-        <div class="dashboard-card">
-            <h5 class="dashboard-card-title">Users</h5>
-            <div class="dashboard-links">
-                <a href="{% url 'user_list' %}" class="dashboard-link-btn">User List</a>
-                <a href="{% url 'create_user' %}" class="dashboard-link-btn">Add User</a>
+        <div class="simple-dashboard-card">
+            <h5 class="simple-dashboard-title">USERS</h5>
+            <div class="simple-dashboard-links">
+                <a href="{% url 'user_list' %}" class="simple-dashboard-btn primary">User List</a>
+                <a href="{% url 'create_user' %}" class="simple-dashboard-btn">Create User</a>
             </div>
         </div>
         {% endif %}
+
+        <div class="simple-dashboard-card">
+            <h5 class="simple-dashboard-title">EMPLOYEES</h5>
+            <div class="simple-dashboard-links">
+                <a href="{% url 'employee_list' %}" class="simple-dashboard-btn primary">Employee List</a>
+                <a href="{% url 'add_employee' %}" class="simple-dashboard-btn">Add Employee</a>
+            </div>
+        </div>
+
+        <div class="simple-dashboard-card">
+            <h5 class="simple-dashboard-title">REPORTS</h5>
+            <div class="simple-dashboard-links">
+                <a href="{% url 'daily_report' %}" class="simple-dashboard-btn primary">Daily Report</a>
+                <a href="{% url 'monthly_report' %}" class="simple-dashboard-btn">Monthly Report</a>
+            </div>
+        </div>
+
+       <div class="simple-dashboard-card">
+            <h5 class="simple-dashboard-title">PROJECTS</h5>
+            <div class="simple-dashboard-links">
+                <a href="{% url 'project_list' %}" class="simple-dashboard-btn primary">Project List</a>
+                <a href="{% url 'create_project' %}" class="simple-dashboard-btn">Create Project</a>		
+            </div>
 
     </div>
 </div>
