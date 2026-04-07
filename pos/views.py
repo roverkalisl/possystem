@@ -1087,13 +1087,35 @@ def delete_project_expense(request, expense_id):
 # =========================
 @user_passes_test(can_use_project)
 def petty_cash_list(request):
-    petty_cashes = ProjectPettyCash.objects.filter(is_active=True).order_by("-issue_date", "-id")
+    petty_cash_qs = ProjectPettyCash.objects.filter(is_active=True).select_related(
+        "employee", "user", "created_by"
+    ).order_by("-issue_date", "-id")
+
+    petty_cashes = []
+
+    for row in petty_cash_qs:
+        approved_limit = Decimal(str(row.employee.petty_cash_limit or 0)) if row.employee else Decimal("0")
+        total_issued = Decimal(str(row.amount_issued or 0))
+        total_spent = Decimal(str(row.total_spent or 0))
+        total_balance = Decimal(str(row.balance or 0))
+
+        reimbursement_required = approved_limit - total_balance
+        if reimbursement_required < 0:
+            reimbursement_required = Decimal("0")
+
+        petty_cashes.append({
+            "obj": row,
+            "approved_limit": approved_limit,
+            "total_issued": total_issued,
+            "total_spent": total_spent,
+            "total_balance": total_balance,
+            "reimbursement_required": reimbursement_required,
+        })
 
     return render(request, "pos/petty_cash_list.html", {
         "petty_cashes": petty_cashes,
         "is_owner": is_owner(request.user),
     })
-
 
 @user_passes_test(can_use_project)
 def add_petty_cash(request):
@@ -2001,4 +2023,160 @@ def print_project_payment_receipt(request, payment_id):
         "payment": payment,
         "invoice": invoice,
         "amount_in_words": amount_in_words,
+    })
+
+@user_passes_test(can_add_expenses)
+def add_petty_cash_expense_entry(request):
+    employees = Employee.objects.filter(is_active=True).order_by("emp_no")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+    expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
+
+    selected_employee_id = request.GET.get("employee") or request.POST.get("employee")
+    selected_employee = None
+    petty_cash = None
+    summary = None
+
+    if selected_employee_id:
+        selected_employee = get_object_or_404(Employee, id=selected_employee_id, is_active=True)
+
+        petty_cash = ProjectPettyCash.objects.filter(
+            employee=selected_employee,
+            is_active=True
+        ).order_by("-issue_date", "-id").first()
+
+        total_issued = ProjectPettyCash.objects.filter(
+            employee=selected_employee,
+            is_active=True
+        ).aggregate(total=Sum("amount_issued"))["total"] or Decimal("0")
+
+        total_spent = ProjectPettyCashExpense.objects.filter(
+            petty_cash__employee=selected_employee,
+            petty_cash__is_active=True,
+            is_active=True,
+            approval_status__in=["pending", "approved"]
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+        total_balance = Decimal(str(total_issued)) - Decimal(str(total_spent))
+        approved_limit = Decimal(str(selected_employee.petty_cash_limit or 0))
+        reimbursement_required = approved_limit - total_balance
+        if reimbursement_required < 0:
+            reimbursement_required = Decimal("0")
+
+        summary = {
+            "approved_limit": approved_limit,
+            "total_issued": Decimal(str(total_issued)),
+            "total_spent": Decimal(str(total_spent)),
+            "total_balance": total_balance,
+            "reimbursement_required": reimbursement_required,
+        }
+
+    if request.method == "POST":
+        if not selected_employee:
+            messages.error(request, "Employee is required.")
+            return render(request, "pos/add_petty_cash_expense_entry.html", {
+                "employees": employees,
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "selected_employee": selected_employee,
+                "petty_cash": petty_cash,
+                "summary": summary,
+            })
+
+        if not petty_cash:
+            messages.error(request, "No active petty cash record found for this employee.")
+            return render(request, "pos/add_petty_cash_expense_entry.html", {
+                "employees": employees,
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "selected_employee": selected_employee,
+                "petty_cash": petty_cash,
+                "summary": summary,
+            })
+
+        project_id = request.POST.get("project")
+        expense_date = request.POST.get("expense_date") or timezone.now().date()
+        description = (request.POST.get("description") or "").strip()
+        gl_account_id = request.POST.get("gl_account") or None
+        bill_no = (request.POST.get("bill_no") or "").strip()
+        bill_date = request.POST.get("bill_date") or None
+        amount = to_decimal(request.POST.get("amount"))
+        note = (request.POST.get("note") or "").strip()
+
+        if not project_id:
+            messages.error(request, "Project is required.")
+            return render(request, "pos/add_petty_cash_expense_entry.html", {
+                "employees": employees,
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "selected_employee": selected_employee,
+                "petty_cash": petty_cash,
+                "summary": summary,
+            })
+
+        if not description:
+            messages.error(request, "Description is required.")
+            return render(request, "pos/add_petty_cash_expense_entry.html", {
+                "employees": employees,
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "selected_employee": selected_employee,
+                "petty_cash": petty_cash,
+                "summary": summary,
+            })
+
+        if amount <= 0:
+            messages.error(request, "Amount must be greater than 0.")
+            return render(request, "pos/add_petty_cash_expense_entry.html", {
+                "employees": employees,
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "selected_employee": selected_employee,
+                "petty_cash": petty_cash,
+                "summary": summary,
+            })
+
+        if amount > petty_cash.balance:
+            messages.error(request, "Expense exceeds petty cash balance.")
+            return render(request, "pos/add_petty_cash_expense_entry.html", {
+                "employees": employees,
+                "projects": projects,
+                "expense_gls": expense_gls,
+                "selected_employee": selected_employee,
+                "petty_cash": petty_cash,
+                "summary": summary,
+            })
+
+        approval_status = "approved" if is_owner(request.user) else "pending"
+
+        expense = ProjectPettyCashExpense.objects.create(
+            expense_no=generate_petty_cash_expense_no(),
+            petty_cash=petty_cash,
+            project_id=project_id,
+            expense_date=expense_date,
+            description=description,
+            gl_account_id=gl_account_id,
+            bill_no=bill_no,
+            bill_date=bill_date or None,
+            amount=amount,
+            note=note,
+            approval_status=approval_status,
+            approved_by=request.user if approval_status == "approved" else None,
+            approved_at=timezone.now() if approval_status == "approved" else None,
+            created_by=request.user,
+        )
+
+        if approval_status == "approved":
+            messages.success(request, f"Saved and approved successfully. Expense No: {expense.expense_no}")
+        else:
+            messages.success(request, f"Saved successfully and waiting for owner approval. Expense No: {expense.expense_no}")
+
+        return redirect("petty_cash_list")
+
+    return render(request, "pos/add_petty_cash_expense_entry.html", {
+        "employees": employees,
+        "projects": projects,
+        "expense_gls": expense_gls,
+        "selected_employee": selected_employee,
+        "petty_cash": petty_cash,
+        "summary": summary,
     })

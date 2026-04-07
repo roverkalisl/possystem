@@ -130,4 +130,5 @@ urlpatterns = [
     path('project-issues/approvals/', views.project_issue_approval_list, name='project_issue_approval_list'),
     path('project-issues/<int:sale_id>/approve/', views.approve_project_issue, name='approve_project_issue'),
     path('project-issues/<int:sale_id>/reject/', views.reject_project_issue, name='reject_project_issue'),
+    path('petty-cash-expenses/add/', views.add_petty_cash_expense_entry, name='add_petty_cash_expense_entry'),
 ]

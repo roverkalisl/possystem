@@ -1,91 +1,100 @@
+{% extends "base.html" %}
 {% load currency_filters %}
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Petty Cash List</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background: #f4f6f9; }
-        .card { border-radius: 12px; }
-    </style>
-</head>
-<body class="p-4">
 
-{% if messages %}
-    {% for message in messages %}
-        <script>alert("{{ message|escapejs }}");</script>
-    {% endfor %}
-{% endif %}
+{% block title %}Petty Cash List{% endblock %}
 
-<div class="container-fluid">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h3>Petty Cash List</h3>
-        <div>
-            <a href="{% url 'add_petty_cash' %}" class="btn btn-success btn-sm">+ Add Petty Cash</a>
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Petty Cash List</h4>
+        <div class="d-flex gap-2 flex-wrap">
+            <a href="{% url 'add_petty_cash' %}" class="btn btn-primary btn-sm">+ Add Petty Cash</a>
+            <a href="{% url 'add_petty_cash_expense_entry' %}" class="btn btn-outline-primary btn-sm">+ Petty Cash Expenses</a>
+            {% if is_owner %}
+            <a href="{% url 'petty_cash_expense_approvals' %}" class="btn btn-outline-dark btn-sm">Approvals</a>
+            {% endif %}
             <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
         </div>
     </div>
 
-    <div class="card shadow-sm p-3">
-        <div class="table-responsive">
-            <table class="table table-bordered table-striped bg-white">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Petty Cash No</th>
-                        <th>Date</th>
-                        <th>Employee</th>
-                        <th>User</th>
-                        <th>Amount Issued</th>
-                        <th>Total Spent</th>
-                        <th>Balance</th>
-                        <th>Note</th>
-                        <th>Created By</th>
-                        <th>Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for pc in petty_cashes %}
-                    <tr>
-                        <td>{{ pc.petty_cash_no }}</td>
-                        <td>{{ pc.issue_date|date:"Y-m-d" }}</td>
-                        <td>
-                            {% if pc.employee %}
-                                {{ pc.employee.emp_no }} - {{ pc.employee.full_name }}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                        <td>{{ pc.user.username|default:"-" }}</td>
-                        <td>Rs. {{ pc.amount_issued|money }}</td>
-                        <td>Rs. {{ pc.total_spent|money }}</td>
-                        <td>Rs. {{ pc.balance|money }}</td>
-                        <td>{{ pc.note|default:"-" }}</td>
-                        <td>{{ pc.created_by.username|default:"-" }}</td>
-                        <td>
-                            <a href="{% url 'petty_cash_detail' pc.id %}" class="btn btn-primary btn-sm mb-1">View</a>
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Petty Cash No</th>
+                    <th>Date</th>
+                    <th>Employee</th>
+                    <th>User</th>
+                    <th>Approved Petty Cash Amount</th>
+                    <th>Total Issued</th>
+                    <th>Total Spent</th>
+                    <th>Total Balance</th>
+                    <th>Need To Be Reimbursement</th>
+                    <th>Note</th>
+                    <th>Created By</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in petty_cashes %}
+                <tr>
+                    <td>{{ row.obj.petty_cash_no }}</td>
+                    <td>{{ row.obj.issue_date|date:"Y-m-d" }}</td>
+
+                    <td>
+                        {% if row.obj.employee %}
+                            {{ row.obj.employee.emp_no }} - {{ row.obj.employee.full_name }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        {% if row.obj.user %}
+                            {{ row.obj.user.username }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+
+                    <td class="text-money">Rs. {{ row.approved_limit|money }}</td>
+                    <td class="text-money">Rs. {{ row.total_issued|money }}</td>
+                    <td class="text-money">Rs. {{ row.total_spent|money }}</td>
+                    <td class="text-money">Rs. {{ row.total_balance|money }}</td>
+                    <td class="text-money">Rs. {{ row.reimbursement_required|money }}</td>
+
+                    <td>{{ row.obj.note|default:"-"|truncatechars:30 }}</td>
+
+                    <td>
+                        {% if row.obj.created_by %}
+                            {{ row.obj.created_by.username }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+
+                    <td>
+                        <div class="d-flex gap-1 flex-wrap">
+                            <a href="{% url 'petty_cash_detail' row.obj.id %}" class="btn btn-sm btn-outline-primary">View</a>
+
                             {% if is_owner %}
-                            <a href="{% url 'delete_petty_cash' pc.id %}"
-                               class="btn btn-warning btn-sm"
+                            <a href="{% url 'edit_petty_cash' row.obj.id %}" class="btn btn-sm btn-outline-success">Edit</a>
+                            <a href="{% url 'delete_petty_cash' row.obj.id %}"
+                               class="btn btn-sm btn-outline-danger"
                                onclick="return confirm('Deactivate this petty cash record?')">
                                Deactivate
-				{% if is_owner %}
-				<a href="{% url 'edit_petty_cash' pc.id %}" class="btn btn-primary btn-sm mb-1">Edit</a>
-				{% endif %}
                             </a>
                             {% endif %}
-                        </td>
-                    </tr>
-                    {% empty %}
-                    <tr>
-                        <td colspan="10" class="text-center">No petty cash records found</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="12" class="text-center">No petty cash records found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-
 </div>
-</body>
-</html>
+{% endblock %}
