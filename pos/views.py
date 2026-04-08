@@ -312,14 +312,14 @@ def save_sale(request):
                 return JsonResponse({"status": "error", "message": "Cart empty"}, status=400)
 
             total = to_decimal(data.get("total"))
-            discount = to_decimal(data.get("discount"))
+            extra_discount = to_decimal(data.get("discount"))
             grand_total = to_decimal(data.get("grand_total"))
 
             payment_method = data.get("payment_method", "cash")
             received_amount = to_decimal(data.get("received"))
             balance = to_decimal(data.get("balance"))
-            card_last4 = data.get("card_last4") or None
-            cheque_number = data.get("cheque_number") or None
+            card_last4 = (data.get("card_last4") or "").strip() or None
+            cheque_number = (data.get("cheque_number") or "").strip() or None
 
             customer_name = (data.get("customer_name") or "").strip() or None
             customer_phone = (data.get("customer_phone") or "").strip() or None
@@ -345,8 +345,25 @@ def save_sale(request):
                         "message": "Selected project not found."
                     }, status=400)
 
-            invoice_no = f"INV{Sale.objects.count() + 1:05d}"
+            if payment_method not in ["cash", "card", "credit"]:
+                return JsonResponse({
+                    "status": "error",
+                    "message": "Invalid payment method."
+                }, status=400)
 
+            if payment_method == "card" and not card_last4:
+                return JsonResponse({
+                    "status": "error",
+                    "message": "Card last 4 digits required for card payment."
+                }, status=400)
+
+            if payment_method == "credit" and not cheque_number:
+                return JsonResponse({
+                    "status": "error",
+                    "message": "Cheque / Ref No required for credit sale."
+                }, status=400)
+
+            invoice_no = f"INV{Sale.objects.count() + 1:05d}"
             approval_status = "pending" if sale_type == "project_issue" else "na"
 
             if sale_type == "project_issue" and not customer_name and project:
@@ -355,7 +372,7 @@ def save_sale(request):
             sale = Sale.objects.create(
                 invoice_no=invoice_no,
                 total=total,
-                discount=discount,
+                discount=extra_discount,
                 grand_total=grand_total,
                 sale_type=sale_type,
                 project=project if sale_type == "project_issue" else None,
@@ -370,16 +387,53 @@ def save_sale(request):
                 created_by=request.user,
             )
 
+            calculated_total = Decimal("0")
+
             for i in items:
                 item = Item.objects.get(id=i["id"], is_active=True)
+
                 qty = to_decimal(i.get("qty"))
                 price = to_decimal(i.get("price"))
-                amount = qty * price
+                discount = to_decimal(i.get("discount") or 0)
 
                 if qty <= 0:
                     return JsonResponse({
                         "status": "error",
                         "message": f"Invalid qty for item: {item.name}"
+                    }, status=400)
+
+                if price < 0:
+                    return JsonResponse({
+                        "status": "error",
+                        "message": f"Invalid price for item: {item.name}"
+                    }, status=400)
+
+                if discount < 0:
+                    return JsonResponse({
+                        "status": "error",
+                        "message": f"Invalid discount for item: {item.name}"
+                    }, status=400)
+
+                if not item.allow_discount and discount > 0:
+                    return JsonResponse({
+                        "status": "error",
+                        "message": f"Discount not allowed for item: {item.name}"
+                    }, status=400)
+
+                allowed_discount = Decimal(str(item.max_discount_value or 0)) * qty
+                if discount > allowed_discount:
+                    return JsonResponse({
+                        "status": "error",
+                        "message": f"Discount exceeded for item: {item.name}. Max allowed for {qty} qty is Rs. {allowed_discount}"
+                    }, status=400)
+
+                gross_amount = qty * price
+                net_amount = gross_amount - discount
+
+                if net_amount < 0:
+                    return JsonResponse({
+                        "status": "error",
+                        "message": f"Net amount cannot be negative for item: {item.name}"
                     }, status=400)
 
                 if not item.is_service:
@@ -402,8 +456,12 @@ def save_sale(request):
                     item=item,
                     qty=qty,
                     price=price,
-                    amount=amount,
+                    discount=discount,
+                    amount=gross_amount,
+                    net_amount=net_amount,
                 )
+
+                calculated_total += net_amount
 
                 if not item.is_service:
                     item.stock = current_stock - qty
@@ -415,6 +473,29 @@ def save_sale(request):
                         transaction_type="sale",
                         qty=qty,
                     )
+
+            final_total = calculated_total
+            final_grand_total = final_total - extra_discount
+
+            if final_grand_total < 0:
+                transaction.set_rollback(True)
+                return JsonResponse({
+                    "status": "error",
+                    "message": "Grand total cannot be negative."
+                }, status=400)
+
+            sale.total = final_total
+            sale.grand_total = final_grand_total
+
+            if payment_method == "cash":
+                sale.received_amount = received_amount
+                sale.balance = received_amount - final_grand_total
+            elif payment_method == "credit":
+                sale.balance = final_grand_total
+            else:
+                sale.balance = Decimal("0")
+
+            sale.save()
 
             return JsonResponse({
                 "status": "success",
@@ -435,7 +516,6 @@ def save_sale(request):
             "status": "error",
             "message": str(e)
         }, status=500)
-
 
 @user_passes_test(can_use_pos)
 def invoice_page(request, sale_id):

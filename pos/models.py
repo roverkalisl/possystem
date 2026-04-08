@@ -74,8 +74,18 @@ class Item(models.Model):
     item_code = models.CharField(max_length=50, unique=True)
     name = models.CharField(max_length=255)
 
-    category = models.ForeignKey(Category, on_delete=models.SET_NULL, null=True, blank=True)
-    supplier = models.ForeignKey(Supplier, on_delete=models.SET_NULL, null=True, blank=True)
+    category = models.ForeignKey(
+        Category,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+    supplier = models.ForeignKey(
+        Supplier,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
 
     unit = models.CharField(max_length=30, default="pcs")
     cost_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -85,6 +95,9 @@ class Item(models.Model):
     purchase_date = models.DateField(blank=True, null=True)
     item_type = models.CharField(max_length=20, choices=ITEM_TYPE_CHOICES, default="retail")
     is_service = models.BooleanField(default=False)
+
+    allow_discount = models.BooleanField(default=True)
+    max_discount_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     reorder_level = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     warranty_days = models.PositiveIntegerField(default=0)
@@ -119,7 +132,6 @@ class Item(models.Model):
 
     def __str__(self):
         return f"{self.item_code} - {self.name}"
-
 
 class StockTransaction(models.Model):
     TRANSACTION_TYPES = [
@@ -237,40 +249,27 @@ class Sale(models.Model):
 
 
 class SaleItem(models.Model):
-    sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="sale_items")
-    item = models.ForeignKey(Item, on_delete=models.PROTECT)
+    sale = models.ForeignKey(
+        Sale,
+        on_delete=models.CASCADE,
+        related_name="sale_items"
+    )
+    item = models.ForeignKey(
+        Item,
+        on_delete=models.PROTECT
+    )
+
     qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    net_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     class Meta:
         ordering = ["id"]
 
     def __str__(self):
         return f"{self.sale.invoice_no} - {self.item.name}"
-
-
-class SalesReturn(models.Model):
-    RETURN_TYPE_CHOICES = [
-        ("refund", "Refund"),
-        ("exchange", "Exchange"),
-    ]
-
-    return_no = models.CharField(max_length=50, unique=True)
-    sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="returns")
-    sale_item = models.ForeignKey(SaleItem, on_delete=models.CASCADE, related_name="returns")
-    qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    return_type = models.CharField(max_length=20, choices=RETURN_TYPE_CHOICES, default="refund")
-    reason = models.TextField(blank=True, null=True)
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created_at", "-id"]
-
-    def __str__(self):
-        return self.return_no
-
 
 class SaleRecovery(models.Model):
     PAYMENT_METHODS = [
@@ -327,7 +326,27 @@ class SaleRecovery(models.Model):
     def __str__(self):
         return self.receipt_no or f"Recovery - {self.sale.invoice_no}"
 
+class SalesReturn(models.Model):
+    RETURN_TYPE_CHOICES = [
+        ("refund", "Refund"),
+        ("exchange", "Exchange"),
+    ]
 
+    return_no = models.CharField(max_length=50, unique=True)
+    sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="returns")
+    sale_item = models.ForeignKey(SaleItem, on_delete=models.CASCADE, related_name="returns")
+    qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    return_type = models.CharField(max_length=20, choices=RETURN_TYPE_CHOICES, default="refund")
+    reason = models.TextField(blank=True, null=True)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return self.return_no
 # =========================
 # PROJECTS
 # =========================
