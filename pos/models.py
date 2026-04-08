@@ -708,8 +708,6 @@ class ProjectInvoiceItem(models.Model):
 
     def __str__(self):
         return f"{self.invoice.invoice_no} - {self.description}"
-
-
 class ProjectInvoicePayment(models.Model):
     PAYMENT_METHOD_CHOICES = [
         ("cash", "Cash"),
