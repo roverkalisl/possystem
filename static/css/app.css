@@ -486,6 +486,14 @@ textarea.form-control {
 .pos-cart-box table {
     min-width: 100%;
 }
+.pos-cart-box-top {
+    margin-top: 0;
+    margin-bottom: 16px;
+}
+
+.pos-cart-box-top .pos-cart-scroll {
+    max-height: 250px;
+}
 
 .pos-cart-box th,
 .pos-cart-box td {

@@ -111,6 +111,29 @@
                 </div>
             </div>
 
+            <div class="pos-cart-box pos-cart-box-top">
+                <div class="pos-cart-title">Cart Items</div>
+                <div class="pos-cart-scroll">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th style="min-width:180px;">Item Name</th>
+                                <th style="width:80px;">Qty</th>
+                                <th style="width:95px;">Price</th>
+                                <th style="width:95px;">Discount</th>
+                                <th style="width:95px;">Amt</th>
+                                <th style="width:50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="cartBody">
+                            <tr id="emptyCartRow">
+                                <td colspan="6" class="text-center text-muted">Cart is empty</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <div class="pos-category-bar mb-3">
                 <button type="button" class="btn btn-primary btn-sm category-btn active" onclick="filterByCategory('all', this)">All</button>
                 {% for category in categories %}
@@ -163,30 +186,6 @@
                 <div class="text-muted">No items found.</div>
                 {% endfor %}
             </div>
-
-            <div class="pos-cart-box">
-                <div class="pos-cart-title">Cart Items</div>
-                <div class="pos-cart-scroll">
-                    <table class="table table-sm align-middle mb-0">
-                        <thead>
-                            <tr>
-                                <th style="min-width:180px;">Item Name</th>
-                                <th style="width:80px;">Qty</th>
-                                <th style="width:95px;">Price</th>
-                                <th style="width:95px;">Discount</th>
-                                <th style="width:95px;">Amt</th>
-                                <th style="width:50px;"></th>
-                            </tr>
-                        </thead>
-                        <tbody id="cartBody">
-                            <tr id="emptyCartRow">
-                                <td colspan="6" class="text-center text-muted">Cart is empty</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
         </div>
     </div>
 
