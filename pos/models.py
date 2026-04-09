@@ -75,13 +75,13 @@ class Item(models.Model):
     name = models.CharField(max_length=255)
 
     category = models.ForeignKey(
-        Category,
+        "Category",
         on_delete=models.SET_NULL,
         null=True,
         blank=True
     )
     supplier = models.ForeignKey(
-        Supplier,
+        "Supplier",
         on_delete=models.SET_NULL,
         null=True,
         blank=True
@@ -103,14 +103,14 @@ class Item(models.Model):
     warranty_days = models.PositiveIntegerField(default=0)
 
     retail_gl_account = models.ForeignKey(
-        GLMaster,
+        "GLMaster",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
         related_name="retail_items"
     )
     cost_gl_account = models.ForeignKey(
-        GLMaster,
+        "GLMaster",
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -132,7 +132,7 @@ class Item(models.Model):
 
     def __str__(self):
         return f"{self.item_code} - {self.name}"
-
+    
 class StockTransaction(models.Model):
     TRANSACTION_TYPES = [
         ("sale", "Sale"),
@@ -143,7 +143,11 @@ class StockTransaction(models.Model):
         ("adjustment_out", "Adjustment Out"),
     ]
 
-    item = models.ForeignKey(Item, on_delete=models.CASCADE, related_name="stock_transactions")
+    item = models.ForeignKey(
+        "Item",
+        on_delete=models.CASCADE,
+        related_name="stock_transactions"
+    )
     transaction_type = models.CharField(max_length=30, choices=TRANSACTION_TYPES)
     qty = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -153,7 +157,6 @@ class StockTransaction(models.Model):
 
     def __str__(self):
         return f"{self.item.name} - {self.transaction_type} - {self.qty}"
-
 
 # =========================
 # POS SALES
@@ -211,6 +214,13 @@ class Sale(models.Model):
 
     customer_name = models.CharField(max_length=150, blank=True, null=True)
     customer_phone = models.CharField(max_length=20, blank=True, null=True)
+    customer = models.ForeignKey(
+        "Customer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sales"
+    )
 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -763,3 +773,32 @@ class ProjectInvoicePayment(models.Model):
 
     def __str__(self):
         return self.receipt_no
+    
+class Customer(models.Model):
+    customer_code = models.CharField(max_length=30, unique=True)
+    name = models.CharField(max_length=150)
+    phone = models.CharField(max_length=30, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    credit_limit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    receivable_gl_account = models.ForeignKey(
+        GLMaster,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="customer_receivable_accounts"
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return f"{self.customer_code} - {self.name}"
+    
+
+
+
+    
+    

@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Customer List{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="page-title mb-0">Customer Master</h3>
+    <a href="{% url 'add_customer' %}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Add Customer
+    </a>
+</div>
+
+<div class="card card-soft mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2">
+            <div class="col-md-10">
+                <input type="text" name="q" value="{{ query }}" class="form-control"
+                       placeholder="Search by code / name / phone / email">
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">Search</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card card-soft">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th style="width: 110px;">Code</th>
+                        <th>Name</th>
+                        <th style="width: 140px;">Phone</th>
+                        <th>Email</th>
+                        <th>Receivable GL</th>
+                        <th style="width: 130px;" class="text-end">Credit Limit</th>
+                        <th style="width: 90px;" class="text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in customers %}
+                    <tr>
+                        <td>{{ c.customer_code }}</td>
+                        <td>{{ c.name }}</td>
+                        <td>{{ c.phone|default:"-" }}</td>
+                        <td>{{ c.email|default:"-" }}</td>
+                        <td>
+                            {% if c.receivable_gl_account %}
+                                {{ c.receivable_gl_account.gl_code }} - {{ c.receivable_gl_account.gl_name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="text-end">{{ c.credit_limit }}</td>
+                        <td class="text-center">
+                            <a href="{% url 'edit_customer' c.id %}" class="btn btn-sm btn-outline-primary">
+                                Edit
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">
+                            No customers found.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

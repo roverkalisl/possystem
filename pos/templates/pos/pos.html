@@ -35,6 +35,20 @@
                 </div>
 
                 <div class="mb-2">
+                    <label class="form-label">Customer</label>
+                    <select id="customer_id" class="form-select form-select-sm">
+                        <option value="">Select Customer</option>
+                        {% for c in customers %}
+                        <option value="{{ c.id }}"
+                                data-name="{{ c.name|escapejs }}"
+                                data-phone="{{ c.phone|default:''|escapejs }}">
+                            {{ c.customer_code }} - {{ c.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-2">
                     <label class="form-label">Customer Name</label>
                     <input type="text" id="customer_name" class="form-control form-control-sm">
                 </div>
@@ -197,6 +211,21 @@
 let cart = [];
 let currentCategory = "all";
 
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== "") {
+        const cookies = document.cookie.split(";");
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + "=")) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
 function toggleProjectField() {
     const saleType = document.getElementById("sale_type").value;
     document.getElementById("project_box").style.display =
@@ -209,6 +238,26 @@ function togglePaymentFields() {
     document.getElementById("card_field").style.display = method === "card" ? "block" : "none";
     document.getElementById("credit_field").style.display = method === "credit" ? "block" : "none";
     updateBalance();
+}
+
+function bindCustomerSelect() {
+    const customerSelect = document.getElementById("customer_id");
+    const customerName = document.getElementById("customer_name");
+    const customerPhone = document.getElementById("customer_phone");
+
+    if (!customerSelect) return;
+
+    customerSelect.addEventListener("change", function () {
+        const selected = customerSelect.options[customerSelect.selectedIndex];
+        if (!selected.value) {
+            customerName.value = "";
+            customerPhone.value = "";
+            return;
+        }
+
+        customerName.value = selected.getAttribute("data-name") || "";
+        customerPhone.value = selected.getAttribute("data-phone") || "";
+    });
 }
 
 document.addEventListener("click", function (e) {
@@ -468,6 +517,7 @@ function saveSale() {
         balance: document.getElementById("balance").value,
         card_last4: document.getElementById("card_last4").value,
         cheque_number: document.getElementById("cheque_number").value,
+        customer_id: document.getElementById("customer_id").value || "",
         customer_name: document.getElementById("customer_name").value,
         customer_phone: document.getElementById("customer_phone").value,
         sale_type: saleType,
@@ -478,14 +528,14 @@ function saveSale() {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            "X-CSRFToken": "{{ csrf_token }}"
+            "X-CSRFToken": getCookie("csrftoken")
         },
         body: JSON.stringify(payload)
     })
     .then(response => response.json())
     .then(data => {
         if (data.status === "success") {
-            window.location.href = "/invoice/" + data.sale_id + "/";
+            window.location.href = "{% url 'invoice_page' 0 %}".replace("/0/", "/" + data.sale_id + "/");
         } else {
             alert(data.message || "Error saving sale");
         }
@@ -496,6 +546,7 @@ function saveSale() {
     });
 }
 
+bindCustomerSelect();
 toggleProjectField();
 togglePaymentFields();
 updateTotals();

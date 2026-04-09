@@ -131,4 +131,14 @@ urlpatterns = [
     path('project-issues/<int:sale_id>/approve/', views.approve_project_issue, name='approve_project_issue'),
     path('project-issues/<int:sale_id>/reject/', views.reject_project_issue, name='reject_project_issue'),
     path('petty-cash-expenses/add/', views.add_petty_cash_expense_entry, name='add_petty_cash_expense_entry'),
+    
+    path("customers/", views.customer_list, name="customer_list"),
+    path("customers/add/", views.add_customer, name="add_customer"),
+    path("customers/<int:customer_id>/edit/", views.edit_customer, name="edit_customer"),
+    path("customers/", views.customer_list, name="customer_list"),
+    path("customers/add/", views.add_customer, name="add_customer"),
+    path("customers/<int:customer_id>/edit/", views.edit_customer, name="edit_customer"),    
+    path("suppliers/", views.supplier_list, name="supplier_list"),
+    path("suppliers/add/", views.add_supplier, name="add_supplier"),
+    path("suppliers/<int:supplier_id>/edit/", views.edit_supplier, name="edit_supplier"),
     ]

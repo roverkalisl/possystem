@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}Supplier List{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="page-title mb-0">Supplier Master</h3>
+    <a href="{% url 'add_supplier' %}" class="btn btn-primary">
+        <i class="bi bi-plus-circle"></i> Add Supplier
+    </a>
+</div>
+
+<div class="card card-soft mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2">
+            <div class="col-md-10">
+                <input type="text" name="q" value="{{ query }}" class="form-control"
+                       placeholder="Search by supplier / phone / email / contact person">
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">Search</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card card-soft">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Contact Person</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                        <th>Address</th>
+                        <th style="width: 90px;" class="text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in suppliers %}
+                    <tr>
+                        <td>{{ s.name }}</td>
+                        <td>{{ s.contact_person|default:"-" }}</td>
+                        <td>{{ s.phone|default:"-" }}</td>
+                        <td>{{ s.email|default:"-" }}</td>
+                        <td>{{ s.address|default:"-" }}</td>
+                        <td class="text-center">
+                            <a href="{% url 'edit_supplier' s.id %}" class="btn btn-sm btn-outline-primary">
+                                Edit
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6" class="text-center text-muted py-4">
+                            No suppliers found.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

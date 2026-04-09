@@ -13,7 +13,7 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
 
 from .models import (
-    Item, Category, Supplier, GLMaster,
+    Item, Category, Supplier, GLMaster, Customer,
     Sale, SaleItem, SalesReturn, StockTransaction, SaleRecovery,
     Project, ProjectExpense, ProjectPettyCash,
     ProjectPettyCashExpense, ProjectIncome, Employee,
@@ -24,6 +24,39 @@ from .models import (
 # =========================
 # HELPERS
 # =========================
+def generate_customer_code():
+    last = Customer.objects.order_by("-id").first()
+    if not last or not last.customer_code:
+        return "CUS0001"
+    try:
+        return f"CUS{int(last.customer_code.replace('CUS', '')) + 1:04d}"
+    except Exception:
+        return "CUS0001"
+
+def validate_item_gl_or_message(item):
+    if not item.retail_gl_account:
+        return f"Retail GL Account missing for item: {item.name}"
+
+    if not item.is_service and not item.cost_gl_account:
+        return f"Cost GL Account missing for non-service item: {item.name}"
+
+    return None
+
+
+def build_item_context(user):
+    categories = Category.objects.filter(is_active=True).order_by("name")
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+    gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
+    last_item = Item.objects.order_by("-id").first()
+    next_item_code = f"ITM{((last_item.id + 1) if last_item else 1):05d}"
+
+    return {
+        "categories": categories,
+        "suppliers": suppliers,
+        "gl_list": gl_list,
+        "next_item_code": next_item_code,
+    }
+
 def to_decimal(val):
     try:
         if val is None:
@@ -281,6 +314,7 @@ def pos_page(request):
     items = Item.objects.filter(is_active=True).select_related("category").order_by("name")
     projects = Project.objects.filter(is_active=True).order_by("-id")
     categories = Category.objects.all().order_by("name")
+    customers = Customer.objects.filter(is_active=True).order_by("name")
 
     if query:
         items = items.filter(
@@ -293,10 +327,10 @@ def pos_page(request):
         "items": items,
         "projects": projects,
         "categories": categories,
+        "customers": customers,
         "query": query,
         "show_items": can_manage_items(request.user),
     })
-
 
 @user_passes_test(can_use_pos)
 def save_sale(request):
@@ -311,18 +345,15 @@ def save_sale(request):
             if not items:
                 return JsonResponse({"status": "error", "message": "Cart empty"}, status=400)
 
-            total = to_decimal(data.get("total"))
             extra_discount = to_decimal(data.get("discount"))
-            grand_total = to_decimal(data.get("grand_total"))
-
-            payment_method = data.get("payment_method", "cash")
+            payment_method = (data.get("payment_method") or "cash").strip()
             received_amount = to_decimal(data.get("received"))
-            balance = to_decimal(data.get("balance"))
             card_last4 = (data.get("card_last4") or "").strip() or None
             cheque_number = (data.get("cheque_number") or "").strip() or None
 
             customer_name = (data.get("customer_name") or "").strip() or None
             customer_phone = (data.get("customer_phone") or "").strip() or None
+            customer_id = data.get("customer_id") or None
 
             sale_type = (data.get("sale_type") or "retail").strip()
             project_id = data.get("project_id") or None
@@ -345,6 +376,20 @@ def save_sale(request):
                         "message": "Selected project not found."
                     }, status=400)
 
+            customer = None
+            if customer_id:
+                customer = Customer.objects.filter(id=customer_id, is_active=True).first()
+                if not customer:
+                    return JsonResponse({
+                        "status": "error",
+                        "message": "Selected customer not found."
+                    }, status=400)
+
+                if not customer_name:
+                    customer_name = customer.name
+                if not customer_phone:
+                    customer_phone = customer.phone
+
             if payment_method not in ["cash", "card", "credit"]:
                 return JsonResponse({
                     "status": "error",
@@ -363,25 +408,26 @@ def save_sale(request):
                     "message": "Cheque / Ref No required for credit sale."
                 }, status=400)
 
-            invoice_no = f"INV{Sale.objects.count() + 1:05d}"
-            approval_status = "pending" if sale_type == "project_issue" else "na"
-
             if sale_type == "project_issue" and not customer_name and project:
                 customer_name = f"Project - {project.project_id}"
 
+            invoice_no = f"INV{Sale.objects.count() + 1:05d}"
+            approval_status = "pending" if sale_type == "project_issue" else "na"
+
             sale = Sale.objects.create(
                 invoice_no=invoice_no,
-                total=total,
+                total=Decimal("0"),
                 discount=extra_discount,
-                grand_total=grand_total,
+                grand_total=Decimal("0"),
                 sale_type=sale_type,
                 project=project if sale_type == "project_issue" else None,
                 approval_status=approval_status,
                 payment_method=payment_method,
                 received_amount=received_amount if payment_method == "cash" else None,
-                balance=balance if payment_method in ["cash", "credit"] else None,
+                balance=Decimal("0"),
                 card_last4=card_last4 if payment_method == "card" else None,
                 cheque_number=cheque_number if payment_method == "credit" else None,
+                customer=customer,
                 customer_name=customer_name,
                 customer_phone=customer_phone,
                 created_by=request.user,
@@ -391,6 +437,14 @@ def save_sale(request):
 
             for i in items:
                 item = Item.objects.get(id=i["id"], is_active=True)
+
+                gl_error = validate_item_gl_or_message(item)
+                if gl_error:
+                    transaction.set_rollback(True)
+                    return JsonResponse({
+                        "status": "error",
+                        "message": gl_error
+                    }, status=400)
 
                 qty = to_decimal(i.get("qty"))
                 price = to_decimal(i.get("price"))
@@ -470,7 +524,7 @@ def save_sale(request):
 
                     StockTransaction.objects.create(
                         item=item,
-                        transaction_type="sale",
+                        transaction_type="project_issue" if sale_type == "project_issue" else "sale",
                         qty=qty,
                     )
 
@@ -516,7 +570,7 @@ def save_sale(request):
             "status": "error",
             "message": str(e)
         }, status=500)
-
+    
 @user_passes_test(can_use_pos)
 def invoice_page(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
@@ -700,35 +754,21 @@ def return_receipt(request, return_id):
 # =========================
 @user_passes_test(can_manage_items)
 def add_item(request):
-    categories = Category.objects.filter(is_active=True).order_by("name")
-    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
-    gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
-
-    last_item = Item.objects.order_by("-id").first()
-    next_item_code = f"ITM{((last_item.id + 1) if last_item else 1):05d}"
-
-    context = {
-        "categories": categories,
-        "suppliers": suppliers,
-        "gl_list": gl_list,
-        "next_item_code": next_item_code,
-    }
+    context = build_item_context(request.user)
 
     if request.method == "POST":
         purchase_date = request.POST.get("purchase_date") or None
-        parsed_purchase_date = purchase_date if purchase_date else None
-
         retail_gl_account_id = request.POST.get("retail_gl_account") or None
         cost_gl_account_id = request.POST.get("cost_gl_account") or None
         is_service = request.POST.get("is_service") == "on"
 
         if not retail_gl_account_id:
             messages.error(request, "Retail GL Account is required.")
-            return render(request, "items/add_item.html", context)
+            return render(request, "pos/add_item.html", context)
 
         if not is_service and not cost_gl_account_id:
             messages.error(request, "Cost GL Account is required for non-service items.")
-            return render(request, "items/add_item.html", context)
+            return render(request, "pos/add_item.html", context)
 
         Item.objects.create(
             item_code=request.POST.get("item_code"),
@@ -739,7 +779,7 @@ def add_item(request):
             cost_price=request.POST.get("cost_price") or 0,
             selling_price=request.POST.get("selling_price") or 0,
             stock=request.POST.get("stock") or 0,
-            purchase_date=parsed_purchase_date,
+            purchase_date=purchase_date,
             item_type=request.POST.get("item_type") or "retail",
             is_service=is_service,
             allow_discount=request.POST.get("allow_discount") == "on",
@@ -753,7 +793,7 @@ def add_item(request):
         messages.success(request, "Item added successfully.")
         return redirect("item_list")
 
-    return render(request, "items/add_item.html", context)
+    return render(request, "pos/add_item.html", context)
 
 
 @user_passes_test(can_manage_items)
@@ -770,7 +810,10 @@ def item_list(request):
             Q(item_code__icontains=query)
         )
 
-    low_stock_items = Item.objects.filter(is_active=True, stock__lte=F("reorder_level")).order_by("name")
+    low_stock_items = Item.objects.filter(
+        is_active=True,
+        stock__lte=F("reorder_level")
+    ).order_by("name")
 
     return render(request, "pos/item_list.html", {
         "items": items,
@@ -778,20 +821,11 @@ def item_list(request):
         "low_stock_items": low_stock_items,
     })
 
-
 @user_passes_test(can_manage_items)
 def edit_item(request, item_id):
     item = get_object_or_404(Item, id=item_id)
-    categories = Category.objects.filter(is_active=True).order_by("name")
-    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
-    gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
-
-    context = {
-        "item": item,
-        "categories": categories,
-        "suppliers": suppliers,
-        "gl_list": gl_list,
-    }
+    context = build_item_context(request.user)
+    context["item"] = item
 
     if request.method == "POST":
         retail_gl_account_id = request.POST.get("retail_gl_account") or None
@@ -800,11 +834,11 @@ def edit_item(request, item_id):
 
         if not retail_gl_account_id:
             messages.error(request, "Retail GL Account is required.")
-            return render(request, "items/edit_item.html", context)
+            return render(request, "pos/edit_item.html", context)
 
         if not is_service and not cost_gl_account_id:
             messages.error(request, "Cost GL Account is required for non-service items.")
-            return render(request, "items/edit_item.html", context)
+            return render(request, "pos/edit_item.html", context)
 
         item.item_code = request.POST.get("item_code")
         item.name = request.POST.get("name")
@@ -829,8 +863,8 @@ def edit_item(request, item_id):
         messages.success(request, "Item updated successfully.")
         return redirect("item_list")
 
-    return render(request, "items/edit_item.html", context)
-
+    return render(request, "pos/edit_item.html", context)
+    
 @user_passes_test(can_manage_items)
 def get_item_details(request, item_id):
     item = get_object_or_404(Item, id=item_id, is_active=True)
@@ -1063,33 +1097,35 @@ def add_project_expense(request):
         unit_price = to_decimal(request.POST.get("unit_price") or 0)
         amount = to_decimal(request.POST.get("amount") or 0)
         gl_account_id = request.POST.get("gl_account") or None
+        item_id = request.POST.get("item") or None
+
+        context = {
+            "projects": projects,
+            "expense_gls": expense_gls,
+        }
 
         if not project_id:
             messages.error(request, "Project is required.")
-            return render(request, "pos/add_project_expense.html", {
-                "projects": projects,
-                "expense_gls": expense_gls,
-            })
+            return render(request, "pos/add_project_expense.html", context)
 
         if not description:
             messages.error(request, "Description is required.")
-            return render(request, "pos/add_project_expense.html", {
-                "projects": projects,
-                "expense_gls": expense_gls,
-            })
+            return render(request, "pos/add_project_expense.html", context)
+
+        if not gl_account_id:
+            messages.error(request, "GL Account is required.")
+            return render(request, "pos/add_project_expense.html", context)
 
         if amount <= 0:
             messages.error(request, "Amount must be greater than 0.")
-            return render(request, "pos/add_project_expense.html", {
-                "projects": projects,
-                "expense_gls": expense_gls,
-            })
+            return render(request, "pos/add_project_expense.html", context)
 
         expense = ProjectExpense.objects.create(
             expense_no=generate_project_expense_no(),
             project_id=project_id,
             expense_type=expense_type,
             expense_date=expense_date,
+            item_id=item_id,
             description=description,
             qty=qty,
             unit_price=unit_price,
@@ -1106,13 +1142,19 @@ def add_project_expense(request):
         "expense_gls": expense_gls,
     })
 
-
 @user_passes_test(is_owner)
 def edit_project_expense(request, expense_id):
     expense = get_object_or_404(ProjectExpense, id=expense_id)
     projects = Project.objects.filter(is_active=True).order_by("-id")
     expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
     items = Item.objects.filter(is_active=True).order_by("name")
+
+    context = {
+        "expense": expense,
+        "projects": projects,
+        "expense_gls": expense_gls,
+        "items": items,
+    }
 
     if request.method == "POST":
         expense.project_id = request.POST.get("project") or expense.project_id
@@ -1127,41 +1169,25 @@ def edit_project_expense(request, expense_id):
 
         if not expense.project_id:
             messages.error(request, "Project is required.")
-            return render(request, "pos/edit_project_expense.html", {
-                "expense": expense,
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "items": items,
-            })
+            return render(request, "pos/edit_project_expense.html", context)
 
         if not expense.description:
             messages.error(request, "Description is required.")
-            return render(request, "pos/edit_project_expense.html", {
-                "expense": expense,
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "items": items,
-            })
+            return render(request, "pos/edit_project_expense.html", context)
+
+        if not expense.gl_account_id:
+            messages.error(request, "GL Account is required.")
+            return render(request, "pos/edit_project_expense.html", context)
 
         if expense.amount <= 0:
             messages.error(request, "Amount must be greater than 0.")
-            return render(request, "pos/edit_project_expense.html", {
-                "expense": expense,
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "items": items,
-            })
+            return render(request, "pos/edit_project_expense.html", context)
 
         expense.save()
         messages.success(request, "Project expense updated successfully.")
         return redirect("project_expense_list")
 
-    return render(request, "pos/edit_project_expense.html", {
-        "expense": expense,
-        "projects": projects,
-        "expense_gls": expense_gls,
-        "items": items,
-    })
+    return render(request, "pos/edit_project_expense.html", context)
 
 
 @user_passes_test(is_owner)
@@ -2256,4 +2282,181 @@ def petty_cash_expense_list(request):
         "status_filter": status_filter,
         "total_amount": total_amount,
         "is_owner": is_owner(request.user),
+    })
+@user_passes_test(can_use_pos)
+def customer_list(request):
+    query = request.GET.get("q", "").strip()
+
+    customers = Customer.objects.filter(is_active=True).select_related(
+        "receivable_gl_account"
+    ).order_by("name")
+
+    if query:
+        customers = customers.filter(
+            Q(name__icontains=query) |
+            Q(customer_code__icontains=query) |
+            Q(phone__icontains=query) |
+            Q(email__icontains=query)
+        )
+
+    return render(request, "pos/customer_list.html", {
+        "customers": customers,
+        "query": query,
+    })
+
+
+@user_passes_test(can_use_pos)
+def add_customer(request):
+    gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
+    next_customer_code = generate_customer_code()
+
+    if request.method == "POST":
+        name = (request.POST.get("name") or "").strip()
+        phone = (request.POST.get("phone") or "").strip()
+        email = (request.POST.get("email") or "").strip()
+        address = (request.POST.get("address") or "").strip()
+        credit_limit = to_decimal(request.POST.get("credit_limit") or 0)
+        receivable_gl_account_id = request.POST.get("receivable_gl_account") or None
+
+        if not name:
+            messages.error(request, "Customer name is required.")
+            return render(request, "pos/add_customer.html", {
+                "gl_list": gl_list,
+                "next_customer_code": next_customer_code,
+            })
+
+        Customer.objects.create(
+            customer_code=next_customer_code,
+            name=name,
+            phone=phone or None,
+            email=email or None,
+            address=address or None,
+            credit_limit=credit_limit,
+            receivable_gl_account_id=receivable_gl_account_id,
+            is_active=True,
+        )
+
+        messages.success(request, "Customer added successfully.")
+        return redirect("customer_list")
+
+    return render(request, "pos/add_customer.html", {
+        "gl_list": gl_list,
+        "next_customer_code": next_customer_code,
+    })
+
+
+@user_passes_test(can_use_pos)
+def edit_customer(request, customer_id):
+    customer = get_object_or_404(Customer, id=customer_id)
+    gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
+
+    if request.method == "POST":
+        customer.name = (request.POST.get("name") or "").strip()
+        customer.phone = (request.POST.get("phone") or "").strip() or None
+        customer.email = (request.POST.get("email") or "").strip() or None
+        customer.address = (request.POST.get("address") or "").strip() or None
+        customer.credit_limit = to_decimal(request.POST.get("credit_limit") or 0)
+        customer.receivable_gl_account_id = request.POST.get("receivable_gl_account") or None
+
+        if not customer.name:
+            messages.error(request, "Customer name is required.")
+            return render(request, "pos/edit_customer.html", {
+                "customer": customer,
+                "gl_list": gl_list,
+            })
+
+        customer.save()
+        messages.success(request, "Customer updated successfully.")
+        return redirect("customer_list")
+
+    return render(request, "pos/edit_customer.html", {
+        "customer": customer,
+        "gl_list": gl_list,
+    })
+
+@user_passes_test(can_manage_items)
+def supplier_list(request):
+    query = request.GET.get("q", "").strip()
+
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+
+    if query:
+        suppliers = suppliers.filter(
+            Q(name__icontains=query) |
+            Q(phone__icontains=query) |
+            Q(email__icontains=query) |
+            Q(contact_person__icontains=query)
+        )
+
+    return render(request, "pos/supplier_list.html", {
+        "suppliers": suppliers,
+        "query": query,
+    })
+
+
+@user_passes_test(can_manage_items)
+def add_supplier(request):
+    if request.method == "POST":
+        name = (request.POST.get("name") or "").strip()
+        address = (request.POST.get("address") or "").strip()
+        phone = (request.POST.get("phone") or "").strip()
+        email = (request.POST.get("email") or "").strip()
+        contact_person = (request.POST.get("contact_person") or "").strip()
+
+        if not name:
+            messages.error(request, "Supplier name is required.")
+            return render(request, "pos/add_supplier.html")
+
+        if Supplier.objects.filter(name__iexact=name).exists():
+            messages.error(request, "Supplier already exists.")
+            return render(request, "pos/add_supplier.html")
+
+        Supplier.objects.create(
+            name=name,
+            address=address or None,
+            phone=phone or None,
+            email=email or None,
+            contact_person=contact_person or None,
+            is_active=True,
+        )
+
+        messages.success(request, "Supplier added successfully.")
+        return redirect("supplier_list")
+
+    return render(request, "pos/add_supplier.html")
+
+
+@user_passes_test(can_manage_items)
+def edit_supplier(request, supplier_id):
+    supplier = get_object_or_404(Supplier, id=supplier_id)
+
+    if request.method == "POST":
+        name = (request.POST.get("name") or "").strip()
+        address = (request.POST.get("address") or "").strip()
+        phone = (request.POST.get("phone") or "").strip()
+        email = (request.POST.get("email") or "").strip()
+        contact_person = (request.POST.get("contact_person") or "").strip()
+        is_active = request.POST.get("is_active") == "on"
+
+        if not name:
+            messages.error(request, "Supplier name is required.")
+            return render(request, "pos/edit_supplier.html", {"supplier": supplier})
+
+        if Supplier.objects.filter(name__iexact=name).exclude(id=supplier.id).exists():
+            messages.error(request, "Another supplier with this name already exists.")
+            return render(request, "pos/edit_supplier.html", {"supplier": supplier})
+
+        supplier.name = name
+        supplier.address = address or None
+        supplier.phone = phone or None
+        supplier.email = email or None
+        supplier.contact_person = contact_person or None
+        supplier.is_active = is_active
+        supplier.save()
+
+        messages.success(request, "Supplier updated successfully.")
+        return redirect("supplier_list")
+
+    return render(request, "pos/edit_supplier.html", {
+        "supplier": supplier,
     })
