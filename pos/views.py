@@ -700,56 +700,60 @@ def return_receipt(request, return_id):
 # =========================
 @user_passes_test(can_manage_items)
 def add_item(request):
-    categories = Category.objects.all().order_by("name")
-    suppliers = Supplier.objects.all().order_by("name")
+    categories = Category.objects.filter(is_active=True).order_by("name")
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
     gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
 
-    if request.method == "POST":
-        purchase_date = request.POST.get("purchase_date") or None
-        parsed_purchase_date = None
+    last_item = Item.objects.order_by("-id").first()
+    next_item_code = f"ITM{((last_item.id + 1) if last_item else 1):05d}"
 
-        if purchase_date:
-            try:
-                parsed_purchase_date = datetime.strptime(purchase_date, "%Y-%m-%d").date()
-            except ValueError:
-                messages.error(request, "Invalid purchase date")
-                return render(request, "pos/add_item.html", {
-                    "categories": categories,
-                    "suppliers": suppliers,
-                    "gl_list": gl_list,
-                    "next_item_code": generate_next_item_code(),
-                })
-
-        try:
-            Item.objects.create(
-                item_code=request.POST.get("item_code"),
-                name=request.POST.get("name"),
-                category_id=request.POST.get("category") or None,
-                supplier_id=request.POST.get("supplier") or None,
-                unit=request.POST.get("unit") or "pcs",
-                cost_price=request.POST.get("cost_price") or 0,
-                selling_price=request.POST.get("selling_price") or 0,
-                stock=request.POST.get("stock") or 0,
-                purchase_date=parsed_purchase_date,
-                item_type=request.POST.get("item_type") or "retail",
-                is_service=request.POST.get("is_service") == "on",
-                reorder_level=request.POST.get("reorder_level") or 0,
-                warranty_days=request.POST.get("warranty_days") or 0,
-                retail_gl_account_id=request.POST.get("retail_gl_account") or None,
-                cost_gl_account_id=request.POST.get("cost_gl_account") or None,
-                updated_by=request.user,
-            )
-            messages.success(request, "Item added successfully")
-            return redirect("add_item")
-        except Exception as e:
-            messages.error(request, f"Error saving item: {str(e)}")
-
-    return render(request, "pos/add_item.html", {
+    context = {
         "categories": categories,
         "suppliers": suppliers,
         "gl_list": gl_list,
-        "next_item_code": generate_next_item_code(),
-    })
+        "next_item_code": next_item_code,
+    }
+
+    if request.method == "POST":
+        purchase_date = request.POST.get("purchase_date") or None
+        parsed_purchase_date = purchase_date if purchase_date else None
+
+        retail_gl_account_id = request.POST.get("retail_gl_account") or None
+        cost_gl_account_id = request.POST.get("cost_gl_account") or None
+        is_service = request.POST.get("is_service") == "on"
+
+        if not retail_gl_account_id:
+            messages.error(request, "Retail GL Account is required.")
+            return render(request, "items/add_item.html", context)
+
+        if not is_service and not cost_gl_account_id:
+            messages.error(request, "Cost GL Account is required for non-service items.")
+            return render(request, "items/add_item.html", context)
+
+        Item.objects.create(
+            item_code=request.POST.get("item_code"),
+            name=request.POST.get("name"),
+            category_id=request.POST.get("category") or None,
+            supplier_id=request.POST.get("supplier") or None,
+            unit=request.POST.get("unit") or "pcs",
+            cost_price=request.POST.get("cost_price") or 0,
+            selling_price=request.POST.get("selling_price") or 0,
+            stock=request.POST.get("stock") or 0,
+            purchase_date=parsed_purchase_date,
+            item_type=request.POST.get("item_type") or "retail",
+            is_service=is_service,
+            allow_discount=request.POST.get("allow_discount") == "on",
+            max_discount_value=request.POST.get("max_discount_value") or 0,
+            reorder_level=request.POST.get("reorder_level") or 0,
+            warranty_days=request.POST.get("warranty_days") or 0,
+            retail_gl_account_id=retail_gl_account_id,
+            cost_gl_account_id=cost_gl_account_id,
+            updated_by=request.user,
+        )
+        messages.success(request, "Item added successfully.")
+        return redirect("item_list")
+
+    return render(request, "items/add_item.html", context)
 
 
 @user_passes_test(can_manage_items)
@@ -778,48 +782,54 @@ def item_list(request):
 @user_passes_test(can_manage_items)
 def edit_item(request, item_id):
     item = get_object_or_404(Item, id=item_id)
-    categories = Category.objects.all().order_by("name")
-    suppliers = Supplier.objects.all().order_by("name")
+    categories = Category.objects.filter(is_active=True).order_by("name")
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
     gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
 
+    context = {
+        "item": item,
+        "categories": categories,
+        "suppliers": suppliers,
+        "gl_list": gl_list,
+    }
+
     if request.method == "POST":
-        item.item_code = request.POST.get("item_code", "").strip()
-        item.name = request.POST.get("name", "").strip()
+        retail_gl_account_id = request.POST.get("retail_gl_account") or None
+        cost_gl_account_id = request.POST.get("cost_gl_account") or None
+        is_service = request.POST.get("is_service") == "on"
+
+        if not retail_gl_account_id:
+            messages.error(request, "Retail GL Account is required.")
+            return render(request, "items/edit_item.html", context)
+
+        if not is_service and not cost_gl_account_id:
+            messages.error(request, "Cost GL Account is required for non-service items.")
+            return render(request, "items/edit_item.html", context)
+
+        item.item_code = request.POST.get("item_code")
+        item.name = request.POST.get("name")
         item.category_id = request.POST.get("category") or None
         item.supplier_id = request.POST.get("supplier") or None
         item.unit = request.POST.get("unit") or "pcs"
         item.cost_price = request.POST.get("cost_price") or 0
         item.selling_price = request.POST.get("selling_price") or 0
         item.stock = request.POST.get("stock") or 0
+        item.purchase_date = request.POST.get("purchase_date") or None
         item.item_type = request.POST.get("item_type") or "retail"
-        item.is_service = request.POST.get("is_service") == "on"
+        item.is_service = is_service
+        item.allow_discount = request.POST.get("allow_discount") == "on"
+        item.max_discount_value = request.POST.get("max_discount_value") or 0
         item.reorder_level = request.POST.get("reorder_level") or 0
         item.warranty_days = request.POST.get("warranty_days") or 0
-        item.retail_gl_account_id = request.POST.get("retail_gl_account") or None
-        item.cost_gl_account_id = request.POST.get("cost_gl_account") or None
+        item.retail_gl_account_id = retail_gl_account_id
+        item.cost_gl_account_id = cost_gl_account_id
         item.updated_by = request.user
-
-        purchase_date = request.POST.get("purchase_date") or None
-        if purchase_date:
-            try:
-                item.purchase_date = datetime.strptime(purchase_date, "%Y-%m-%d").date()
-            except ValueError:
-                messages.error(request, "Invalid purchase date")
-                return redirect("edit_item", item_id=item.id)
-        else:
-            item.purchase_date = None
-
         item.save()
-        messages.success(request, "Item updated successfully")
+
+        messages.success(request, "Item updated successfully.")
         return redirect("item_list")
 
-    return render(request, "pos/edit_item.html", {
-        "item": item,
-        "categories": categories,
-        "suppliers": suppliers,
-        "gl_list": gl_list,
-    })
-
+    return render(request, "items/edit_item.html", context)
 
 @user_passes_test(can_manage_items)
 def get_item_details(request, item_id):
@@ -1500,40 +1510,40 @@ def project_income_list(request):
     })
 
 
-@user_passes_test(can_use_project)
+@user_passes_test(can_use_pos)
 def add_project_income(request):
     projects = Project.objects.filter(is_active=True).order_by("-id")
-    income_gls = GLMaster.objects.filter(gl_type="income", is_active=True).order_by("gl_code")
+    gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
 
     if request.method == "POST":
-        project_id = request.POST.get("project")
+        project_id = request.POST.get("project") or None
         income_date = request.POST.get("income_date") or timezone.now().date()
-        description = request.POST.get("description", "").strip()
-        amount = to_decimal(request.POST.get("amount"))
+        description = (request.POST.get("description") or "").strip() or None
+        amount = Decimal(request.POST.get("amount") or 0)
         gl_account_id = request.POST.get("gl_account") or None
 
-        if not project_id or amount <= 0:
-            messages.error(request, "Project and valid Amount are required.")
-            return redirect("add_project_income")
+        if not project_id:
+            messages.error(request, "Project is required.")
+        elif not gl_account_id:
+            messages.error(request, "GL Account is required.")
+        elif amount <= 0:
+            messages.error(request, "Amount must be greater than 0.")
+        else:
+            ProjectIncome.objects.create(
+                project_id=project_id,
+                income_date=income_date,
+                description=description,
+                amount=amount,
+                gl_account_id=gl_account_id,
+                created_by=request.user,
+            )
+            messages.success(request, "Project income added successfully.")
+            return redirect("project_income_list")
 
-        ProjectIncome.objects.create(
-            project_id=project_id,
-            income_date=income_date,
-            description=description,
-            amount=amount,
-            gl_account_id=gl_account_id,
-            created_by=request.user,
-        )
-
-        messages.success(request, "Income added successfully.")
-        return redirect("project_income_list")
-
-    return render(request, "pos/add_project_income.html", {
+    return render(request, "project/add_project_income.html", {
         "projects": projects,
-        "income_gls": income_gls,
+        "gl_list": gl_list,
     })
-
-
 # =========================
 # PROJECT PROFIT
 # =========================
@@ -2111,146 +2121,92 @@ def add_petty_cash_expense_entry(request):
     projects = Project.objects.filter(is_active=True).order_by("-id")
     expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
 
-    selected_employee_id = request.GET.get("employee") or request.POST.get("employee")
-    selected_employee = None
+    selected_employee = request.GET.get("employee") or request.POST.get("employee") or None
     petty_cash = None
     summary = None
 
-    if selected_employee_id:
-        selected_employee = get_object_or_404(Employee, id=selected_employee_id, is_active=True)
-
+    if selected_employee:
         petty_cash = ProjectPettyCash.objects.filter(
-            employee=selected_employee,
+            employee_id=selected_employee,
             is_active=True
         ).order_by("-issue_date", "-id").first()
 
-        total_issued = ProjectPettyCash.objects.filter(
-            employee=selected_employee,
-            is_active=True
-        ).aggregate(total=Sum("amount_issued"))["total"] or Decimal("0")
+        employee = Employee.objects.filter(id=selected_employee, is_active=True).first()
+        if employee:
+            approved_limit = Decimal(str(employee.petty_cash_limit or 0))
+            total_issued = employee.petty_cash_records.filter(is_active=True).aggregate(
+                total=Sum("amount_issued")
+            )["total"] or Decimal("0")
 
-        total_spent = ProjectPettyCashExpense.objects.filter(
-            petty_cash__employee=selected_employee,
-            petty_cash__is_active=True,
-            is_active=True,
-            approval_status__in=["pending", "approved"]
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+            total_spent = ProjectPettyCashExpense.objects.filter(
+                petty_cash__employee=employee,
+                petty_cash__is_active=True,
+                is_active=True,
+                approval_status__in=["pending", "approved"]
+            ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
-        total_balance = Decimal(str(total_issued)) - Decimal(str(total_spent))
-        approved_limit = Decimal(str(selected_employee.petty_cash_limit or 0))
-        reimbursement_required = approved_limit - total_balance
-        if reimbursement_required < 0:
-            reimbursement_required = Decimal("0")
+            total_balance = Decimal(str(total_issued)) - Decimal(str(total_spent))
+            reimbursement_required = approved_limit - total_balance
+            if reimbursement_required < 0:
+                reimbursement_required = Decimal("0")
 
-        summary = {
-            "approved_limit": approved_limit,
-            "total_issued": Decimal(str(total_issued)),
-            "total_spent": Decimal(str(total_spent)),
-            "total_balance": total_balance,
-            "reimbursement_required": reimbursement_required,
-        }
+            summary = {
+                "approved_limit": approved_limit,
+                "total_issued": Decimal(str(total_issued)),
+                "total_spent": Decimal(str(total_spent)),
+                "total_balance": total_balance,
+                "reimbursement_required": reimbursement_required,
+            }
 
     if request.method == "POST":
         if not selected_employee:
             messages.error(request, "Employee is required.")
-            return render(request, "pos/add_petty_cash_expense_entry.html", {
-                "employees": employees,
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "selected_employee": selected_employee,
-                "petty_cash": petty_cash,
-                "summary": summary,
-            })
-
-        if not petty_cash:
-            messages.error(request, "No active petty cash record found for this employee.")
-            return render(request, "pos/add_petty_cash_expense_entry.html", {
-                "employees": employees,
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "selected_employee": selected_employee,
-                "petty_cash": petty_cash,
-                "summary": summary,
-            })
-
-        project_id = request.POST.get("project")
-        expense_date = request.POST.get("expense_date") or timezone.now().date()
-        description = (request.POST.get("description") or "").strip()
-        gl_account_id = request.POST.get("gl_account") or None
-        bill_no = (request.POST.get("bill_no") or "").strip()
-        bill_date = request.POST.get("bill_date") or None
-        amount = to_decimal(request.POST.get("amount"))
-        note = (request.POST.get("note") or "").strip()
-
-        if not project_id:
-            messages.error(request, "Project is required.")
-            return render(request, "pos/add_petty_cash_expense_entry.html", {
-                "employees": employees,
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "selected_employee": selected_employee,
-                "petty_cash": petty_cash,
-                "summary": summary,
-            })
-
-        if not description:
-            messages.error(request, "Description is required.")
-            return render(request, "pos/add_petty_cash_expense_entry.html", {
-                "employees": employees,
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "selected_employee": selected_employee,
-                "petty_cash": petty_cash,
-                "summary": summary,
-            })
-
-        if amount <= 0:
-            messages.error(request, "Amount must be greater than 0.")
-            return render(request, "pos/add_petty_cash_expense_entry.html", {
-                "employees": employees,
-                "projects": projects,
-                "expense_gls": expense_gls,
-                "selected_employee": selected_employee,
-                "petty_cash": petty_cash,
-                "summary": summary,
-            })
-
-        #if amount > petty_cash.balance:
-           # messages.error(request, "Expense exceeds petty cash balance.")
-            #return render(request, "pos/add_petty_cash_expense_entry.html", {
-               # "employees": employees,
-               # "projects": projects,
-               # "expense_gls": expense_gls,
-               # "selected_employee": selected_employee,
-              #  "petty_cash": petty_cash,
-              #  "summary": summary,
-           # })
-
-        approval_status = "approved" if is_owner(request.user) else "pending"
-
-        expense = ProjectPettyCashExpense.objects.create(
-            expense_no=generate_petty_cash_expense_no(),
-            petty_cash=petty_cash,
-            project_id=project_id,
-            expense_date=expense_date,
-            description=description,
-            gl_account_id=gl_account_id,
-            bill_no=bill_no,
-            bill_date=bill_date or None,
-            amount=amount,
-            note=note,
-            approval_status=approval_status,
-            approved_by=request.user if approval_status == "approved" else None,
-            approved_at=timezone.now() if approval_status == "approved" else None,
-            created_by=request.user,
-        )
-
-        if approval_status == "approved":
-            messages.success(request, f"Saved and approved successfully. Expense No: {expense.expense_no}")
+        elif not petty_cash:
+            messages.error(request, "No active petty cash found for selected employee.")
         else:
-            messages.success(request, f"Saved successfully and waiting for owner approval. Expense No: {expense.expense_no}")
+            project_id = request.POST.get("project") or None
+            expense_date = request.POST.get("expense_date") or timezone.now().date()
+            description = (request.POST.get("description") or "").strip()
+            gl_account_id = request.POST.get("gl_account") or None
+            bill_no = (request.POST.get("bill_no") or "").strip() or None
+            bill_date = request.POST.get("bill_date") or None
+            amount = to_decimal(request.POST.get("amount"))
+            note = (request.POST.get("note") or "").strip() or None
 
-        return redirect("petty_cash_list")
+            if not project_id:
+                messages.error(request, "Project is required.")
+            elif not description:
+                messages.error(request, "Description is required.")
+            elif not gl_account_id:
+                messages.error(request, "GL Account is required.")
+            elif amount <= 0:
+                messages.error(request, "Amount must be greater than 0.")
+            else:
+                approval_status = "approved" if is_owner(request.user) else "pending"
+
+                expense = ProjectPettyCashExpense.objects.create(
+                    expense_no=generate_petty_cash_expense_no(),
+                    petty_cash=petty_cash,
+                    project_id=project_id,
+                    expense_date=expense_date,
+                    description=description,
+                    gl_account_id=gl_account_id,
+                    bill_no=bill_no,
+                    bill_date=bill_date or None,
+                    amount=amount,
+                    note=note,
+                    approval_status=approval_status,
+                    approved_by=request.user if approval_status == "approved" else None,
+                    approved_at=timezone.now() if approval_status == "approved" else None,
+                    created_by=request.user,
+                )
+
+                if approval_status == "approved":
+                    messages.success(request, f"Saved and approved successfully. Expense No: {expense.expense_no}")
+                else:
+                    messages.success(request, f"Saved successfully and waiting for owner approval. Expense No: {expense.expense_no}")
+
+                return redirect("petty_cash_expense_list")
 
     return render(request, "pos/add_petty_cash_expense_entry.html", {
         "employees": employees,
@@ -2260,6 +2216,7 @@ def add_petty_cash_expense_entry(request):
         "petty_cash": petty_cash,
         "summary": summary,
     })
+
 @user_passes_test(can_use_project)
 def petty_cash_expense_list(request):
     employee_id = request.GET.get("employee")

@@ -66,7 +66,7 @@
 
         <div class="mt-2">
             <label class="form-label">GL Account</label>
-            <select name="gl_account" class="form-select form-select-sm">
+            <select name="gl_account" class="form-select form-select-sm" required>
                 <option value="">Select GL Account</option>
                 {% for gl in expense_gls %}
                 <option value="{{ gl.id }}">{{ gl.gl_code }} - {{ gl.gl_name }}</option>

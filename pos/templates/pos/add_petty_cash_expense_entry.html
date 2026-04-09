@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+F{% extends "base.html" %}
 {% load currency_filters %}
 
 {% block title %}Add Petty Cash Expense{% endblock %}
@@ -130,7 +130,7 @@
         <div class="row g-2 mt-1">
             <div class="col-md-6">
                 <label class="form-label">GL Account</label>
-                <select name="gl_account" class="form-select form-select-sm">
+                <select name="gl_account" class="form-select form-select-sm" required>
                     <option value="">Select GL Account</option>
                     {% for gl in expense_gls %}
                     <option value="{{ gl.id }}">{{ gl.gl_code }} - {{ gl.gl_name }}</option>

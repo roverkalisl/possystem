@@ -140,7 +140,7 @@
 
             <div class="col-md-6">
                 <label class="form-label">Cost GL Account</label>
-                <select name="cost_gl_account" class="form-select form-select-sm">
+              <select name="gl_account" class="form-select form-select-sm" required>
                     <option value="">Select GL Account</option>
                     {% for gl in gl_list %}
                     <option value="{{ gl.id }}">{{ gl.gl_code }} - {{ gl.gl_name }}</option>
