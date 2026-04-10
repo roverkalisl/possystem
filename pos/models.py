@@ -974,6 +974,60 @@ class SupplierSettlementAdvanceLink(models.Model):
     def __str__(self):
         return f"{self.settlement.settlement_no} - {self.advance.advance_no}"
     
+class PurchaseOrder(models.Model):
+    ORDER_TYPE_CHOICES = [
+        ("item", "Item"),
+        ("service", "Service"),
+        ("rental", "Rental"),
+        ("other", "Other"),
+    ]
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("approved", "Approved"),
+        ("partially_used", "Partially Used"),
+        ("closed", "Closed"),
+    ]
+
+    po_no = models.CharField(max_length=30, unique=True, blank=True, null=True)
+    po_date = models.DateField(default=timezone.now)
+
+    supplier = models.ForeignKey("Supplier", on_delete=models.PROTECT, related_name="purchase_orders")
+    project = models.ForeignKey("Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="purchase_orders")
+
+    order_type = models.CharField(max_length=20, choices=ORDER_TYPE_CHOICES, default="service")
+    description = models.CharField(max_length=255)
+
+    qty = models.DecimalField(max_digits=12, decimal_places=2, default=1)
+    rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    estimated_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    note = models.TextField(blank=True, null=True)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_purchase_orders")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-po_date", "-id"]
+
+    def save(self, *args, **kwargs):
+        if not self.po_no:
+            last = PurchaseOrder.objects.exclude(po_no__isnull=True).order_by("-id").first()
+            if last and last.po_no and str(last.po_no).replace("PO", "").isdigit():
+                next_no = int(str(last.po_no).replace("PO", "")) + 1
+                self.po_no = f"PO{next_no:05d}"
+            else:
+                self.po_no = "PO00001"
+
+        if not self.estimated_amount:
+            self.estimated_amount = Decimal(str(self.qty or 0)) * Decimal(str(self.rate or 0))
+
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.po_no or f"PO {self.id}"
+    
 
     
 

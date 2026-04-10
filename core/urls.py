@@ -148,4 +148,7 @@ path("supplier-advances/<int:advance_id>/settle/", views.add_supplier_settlement
 path("supplier-settlements/", views.supplier_settlement_list, name="supplier_settlement_list"),
 path("supplier-settlements/<int:settlement_id>/approve/", views.approve_supplier_settlement, name="approve_supplier_settlement"),
 path("supplier-settlements/<int:settlement_id>/reject/", views.reject_supplier_settlement, name="reject_supplier_settlement"),
-    ]
+   path("purchase-orders/", views.purchase_order_list, name="purchase_order_list"),
+path("purchase-orders/add/", views.add_purchase_order, name="add_purchase_order"),
+path("purchase-orders/<int:po_id>/edit/", views.edit_purchase_order, name="edit_purchase_order"),
+   ]

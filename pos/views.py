@@ -18,11 +18,17 @@ from .models import (
     Project, ProjectExpense, ProjectPettyCash,
     ProjectPettyCashExpense, ProjectIncome, Employee,
     ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem,SupplierAdvance,
-    SupplierSettlement, SupplierSettlementAdvanceLink)
+    SupplierSettlement, SupplierSettlementAdvanceLink,PurchaseOrder)
 
 # =========================
 # HELPERS
 # =========================
+def generate_purchase_order_no():
+    last = PurchaseOrder.objects.exclude(po_no__isnull=True).order_by("-id").first()
+    if last and last.po_no and str(last.po_no).replace("PO", "").isdigit():
+        return f"PO{int(str(last.po_no).replace('PO', '')) + 1:05d}"
+    return "PO00001"
+
 def generate_customer_code():
     last = Customer.objects.order_by("-id").first()
     if not last or not last.customer_code:
@@ -2706,3 +2712,140 @@ def reject_supplier_settlement(request, settlement_id):
 
     messages.success(request, "Settlement rejected.")
     return redirect("supplier_settlement_list")
+
+@user_passes_test(can_use_project)
+def purchase_order_list(request):
+    query = request.GET.get("q", "").strip()
+
+    orders = PurchaseOrder.objects.select_related(
+        "supplier", "project", "created_by"
+    ).order_by("-po_date", "-id")
+
+    if query:
+        orders = orders.filter(
+            Q(po_no__icontains=query) |
+            Q(supplier__name__icontains=query) |
+            Q(project__project_id__icontains=query) |
+            Q(project__project_name__icontains=query) |
+            Q(description__icontains=query)
+        )
+
+    return render(request, "pos/purchase_order_list.html", {
+        "orders": orders,
+        "query": query,
+        "is_owner": is_owner(request.user),
+    })
+
+
+@user_passes_test(can_use_project)
+def add_purchase_order(request):
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+    next_po_no = generate_purchase_order_no()
+
+    context = {
+        "suppliers": suppliers,
+        "projects": projects,
+        "next_po_no": next_po_no,
+    }
+
+    if request.method == "POST":
+        po_date = request.POST.get("po_date") or timezone.localdate()
+        supplier_id = request.POST.get("supplier") or None
+        project_id = request.POST.get("project") or None
+        order_type = request.POST.get("order_type") or "service"
+        description = (request.POST.get("description") or "").strip()
+        qty = to_decimal(request.POST.get("qty") or 0)
+        rate = to_decimal(request.POST.get("rate") or 0)
+        estimated_amount = to_decimal(request.POST.get("estimated_amount") or 0)
+        status = request.POST.get("status") or "draft"
+        note = (request.POST.get("note") or "").strip()
+
+        if not supplier_id:
+            messages.error(request, "Supplier is required.")
+            return render(request, "pos/add_purchase_order.html", context)
+
+        if not description:
+            messages.error(request, "Description is required.")
+            return render(request, "pos/add_purchase_order.html", context)
+
+        if qty <= 0:
+            messages.error(request, "Qty must be greater than 0.")
+            return render(request, "pos/add_purchase_order.html", context)
+
+        if rate < 0:
+            messages.error(request, "Rate cannot be negative.")
+            return render(request, "pos/add_purchase_order.html", context)
+
+        if estimated_amount <= 0:
+            estimated_amount = qty * rate
+
+        PurchaseOrder.objects.create(
+            po_no=next_po_no,
+            po_date=po_date,
+            supplier_id=supplier_id,
+            project_id=project_id,
+            order_type=order_type,
+            description=description,
+            qty=qty,
+            rate=rate,
+            estimated_amount=estimated_amount,
+            status=status,
+            note=note,
+            created_by=request.user,
+        )
+
+        messages.success(request, "Purchase Order created successfully.")
+        return redirect("purchase_order_list")
+
+    return render(request, "pos/add_purchase_order.html", context)
+
+
+@user_passes_test(can_use_project)
+def edit_purchase_order(request, po_id):
+    order = get_object_or_404(PurchaseOrder, id=po_id)
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+
+    context = {
+        "order": order,
+        "suppliers": suppliers,
+        "projects": projects,
+    }
+
+    if request.method == "POST":
+        order.po_date = request.POST.get("po_date") or order.po_date
+        order.supplier_id = request.POST.get("supplier") or None
+        order.project_id = request.POST.get("project") or None
+        order.order_type = request.POST.get("order_type") or "service"
+        order.description = (request.POST.get("description") or "").strip()
+        order.qty = to_decimal(request.POST.get("qty") or 0)
+        order.rate = to_decimal(request.POST.get("rate") or 0)
+        order.estimated_amount = to_decimal(request.POST.get("estimated_amount") or 0)
+        order.status = request.POST.get("status") or "draft"
+        order.note = (request.POST.get("note") or "").strip()
+
+        if not order.supplier_id:
+            messages.error(request, "Supplier is required.")
+            return render(request, "pos/edit_purchase_order.html", context)
+
+        if not order.description:
+            messages.error(request, "Description is required.")
+            return render(request, "pos/edit_purchase_order.html", context)
+
+        if order.qty <= 0:
+            messages.error(request, "Qty must be greater than 0.")
+            return render(request, "pos/edit_purchase_order.html", context)
+
+        if order.rate < 0:
+            messages.error(request, "Rate cannot be negative.")
+            return render(request, "pos/edit_purchase_order.html", context)
+
+        if order.estimated_amount <= 0:
+            order.estimated_amount = order.qty * order.rate
+
+        order.save()
+        messages.success(request, "Purchase Order updated successfully.")
+        return redirect("purchase_order_list")
+
+    return render(request, "pos/edit_purchase_order.html", context)

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Edit Purchase Order{% endblock %}
+
+{% block content %}
+<h3 class="page-title">Edit Purchase Order</h3>
+
+<div class="card card-soft">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">PO No</label>
+                    <input type="text" class="form-control" value="{{ order.po_no }}" readonly>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">PO Date</label>
+                    <input type="date" name="po_date" class="form-control" value="{{ order.po_date|date:'Y-m-d' }}">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Supplier <span class="required-star">*</span></label>
+                    <select name="supplier" class="form-select" required>
+                        <option value="">-- Select Supplier --</option>
+                        {% for s in suppliers %}
+                            <option value="{{ s.id }}" {% if order.supplier_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Project</label>
+                    <select name="project" class="form-select">
+                        <option value="">-- Select Project --</option>
+                        {% for p in projects %}
+                            <option value="{{ p.id }}" {% if order.project_id == p.id %}selected{% endif %}>
+                                {{ p.project_id }} - {{ p.project_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Order Type</label>
+                    <select name="order_type" class="form-select">
+                        <option value="item" {% if order.order_type == 'item' %}selected{% endif %}>Item</option>
+                        <option value="service" {% if order.order_type == 'service' %}selected{% endif %}>Service</option>
+                        <option value="rental" {% if order.order_type == 'rental' %}selected{% endif %}>Rental</option>
+                        <option value="other" {% if order.order_type == 'other' %}selected{% endif %}>Other</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Qty <span class="required-star">*</span></label>
+                    <input type="number" step="0.01" min="0" name="qty" class="form-control" value="{{ order.qty }}" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Rate <span class="required-star">*</span></label>
+                    <input type="number" step="0.01" min="0" name="rate" class="form-control" value="{{ order.rate }}" required>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Description <span class="required-star">*</span></label>
+                    <input type="text" name="description" class="form-control" value="{{ order.description }}" required>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Estimated Amount</label>
+                    <input type="number" step="0.01" min="0" name="estimated_amount" class="form-control" value="{{ order.estimated_amount }}">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="draft" {% if order.status == 'draft' %}selected{% endif %}>Draft</option>
+                        <option value="approved" {% if order.status == 'approved' %}selected{% endif %}>Approved</option>
+                        <option value="partially_used" {% if order.status == 'partially_used' %}selected{% endif %}>Partially Used</option>
+                        <option value="closed" {% if order.status == 'closed' %}selected{% endif %}>Closed</option>
+                    </select>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Note</label>
+                    <textarea name="note" rows="3" class="form-control">{{ order.note|default:'' }}</textarea>
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Update PO</button>
+                <a href="{% url 'purchase_order_list' %}" class="btn btn-secondary">Back</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

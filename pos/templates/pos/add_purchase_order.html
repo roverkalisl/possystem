@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Add Purchase Order{% endblock %}
+
+{% block content %}
+<h3 class="page-title">Add Purchase Order</h3>
+
+<div class="card card-soft">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">PO No</label>
+                    <input type="text" class="form-control" value="{{ next_po_no }}" readonly>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">PO Date</label>
+                    <input type="date" name="po_date" class="form-control">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Supplier <span class="required-star">*</span></label>
+                    <select name="supplier" class="form-select" required>
+                        <option value="">-- Select Supplier --</option>
+                        {% for s in suppliers %}
+                            <option value="{{ s.id }}">{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Project</label>
+                    <select name="project" class="form-select">
+                        <option value="">-- Select Project --</option>
+                        {% for p in projects %}
+                            <option value="{{ p.id }}">{{ p.project_id }} - {{ p.project_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Order Type</label>
+                    <select name="order_type" class="form-select">
+                        <option value="item">Item</option>
+                        <option value="service" selected>Service</option>
+                        <option value="rental">Rental</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Qty <span class="required-star">*</span></label>
+                    <input type="number" step="0.01" min="0" name="qty" class="form-control" value="1" required>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Rate <span class="required-star">*</span></label>
+                    <input type="number" step="0.01" min="0" name="rate" class="form-control" value="0" required>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Description <span class="required-star">*</span></label>
+                    <input type="text" name="description" class="form-control" required>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Estimated Amount</label>
+                    <input type="number" step="0.01" min="0" name="estimated_amount" class="form-control" value="0">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="draft" selected>Draft</option>
+                        <option value="approved">Approved</option>
+                        <option value="partially_used">Partially Used</option>
+                        <option value="closed">Closed</option>
+                    </select>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Note</label>
+                    <textarea name="note" rows="3" class="form-control"></textarea>
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Save PO</button>
+                <a href="{% url 'purchase_order_list' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

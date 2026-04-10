@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Purchase Orders{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="page-title mb-0">Purchase Orders</h3>
+    <a href="{% url 'add_purchase_order' %}" class="btn btn-primary">Add PO</a>
+</div>
+
+<div class="card card-soft mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2">
+            <div class="col-md-10">
+                <input type="text" name="q" value="{{ query }}" class="form-control"
+                       placeholder="Search by PO No / Supplier / Project / Description">
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">Search</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card card-soft">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>PO No</th>
+                        <th>Date</th>
+                        <th>Supplier</th>
+                        <th>Project</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th class="text-end">Qty</th>
+                        <th class="text-end">Rate</th>
+                        <th class="text-end">Estimated</th>
+                        <th>Status</th>
+                        <th class="text-center" style="width:90px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for o in orders %}
+                    <tr>
+                        <td>{{ o.po_no }}</td>
+                        <td>{{ o.po_date }}</td>
+                        <td>{{ o.supplier.name }}</td>
+                        <td>
+                            {% if o.project %}
+                                {{ o.project.project_id }} - {{ o.project.project_name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>{{ o.get_order_type_display }}</td>
+                        <td>{{ o.description }}</td>
+                        <td class="text-end">{{ o.qty }}</td>
+                        <td class="text-end">{{ o.rate }}</td>
+                        <td class="text-end">{{ o.estimated_amount }}</td>
+                        <td>{{ o.get_status_display }}</td>
+                        <td class="text-center">
+                            <a href="{% url 'edit_purchase_order' o.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="11" class="text-center text-muted py-4">No purchase orders found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
