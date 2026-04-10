@@ -1,0 +1,580 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}POS{% endblock %}
+
+{% block content %}
+<div class="pos-layout">
+
+    <div class="pos-left-panel">
+        <div class="card p-3 p-md-4 pos-panel-card">
+            <div class="pos-panel-header">
+                <h4 class="app-page-title mb-0">Current Sale</h4>
+                <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+            </div>
+
+            <div class="pos-form-area">
+                <div class="mb-2">
+                    <label class="form-label">Sale Type</label>
+                    <select id="sale_type" class="form-select form-select-sm" onchange="toggleProjectField()">
+                        <option value="retail">Retail Sale</option>
+                        <option value="project_issue">Project Issue</option>
+                    </select>
+                </div>
+
+                <div class="mb-2" id="project_box" style="display:none;">
+                    <label class="form-label">Project</label>
+                    <select id="project_id" class="form-select form-select-sm">
+                        <option value="">Select Project</option>
+                        {% for p in projects %}
+                        <option value="{{ p.id }}">
+                            {{ p.project_id }} - {{ p.project_name }}{% if p.client_name %} - {{ p.client_name }}{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label">Customer</label>
+                    <select id="customer_id" class="form-select form-select-sm">
+                        <option value="">Select Customer</option>
+                        {% for c in customers %}
+                        <option value="{{ c.id }}"
+                                data-name="{{ c.name|escapejs }}"
+                                data-phone="{{ c.phone|default:''|escapejs }}">
+                            {{ c.customer_code }} - {{ c.name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label">Customer Name</label>
+                    <input type="text" id="customer_name" class="form-control form-control-sm">
+                </div>
+
+                <div class="mb-2">
+                    <label class="form-label">Customer Phone</label>
+                    <input type="text" id="customer_phone" class="form-control form-control-sm">
+                </div>
+            </div>
+
+            <div class="pos-summary-box">
+                <div class="row g-2">
+                    <div class="col-6">
+                        <label class="form-label">Total</label>
+                        <input type="text" id="total" class="form-control form-control-sm readonly-box text-money" value="0.00" readonly>
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Extra Discount</label>
+                        <input type="number" step="0.01" id="discount" class="form-control form-control-sm" value="0" oninput="updateTotals()">
+                    </div>
+                </div>
+
+                <div class="mt-2">
+                    <label class="form-label">Grand Total</label>
+                    <input type="text" id="grand_total" class="form-control form-control-sm readonly-box text-money" value="0.00" readonly>
+                </div>
+
+                <div class="mt-2">
+                    <label class="form-label">Payment Method</label>
+                    <select id="payment_method" class="form-select form-select-sm" onchange="togglePaymentFields()">
+                        <option value="cash">Cash</option>
+                        <option value="card">Card</option>
+                        <option value="credit">Credit</option>
+                    </select>
+                </div>
+
+                <div class="row g-2 mt-1" id="cash_fields">
+                    <div class="col-6">
+                        <label class="form-label">Received</label>
+                        <input type="number" step="0.01" id="received" class="form-control form-control-sm" value="0" oninput="updateBalance()">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Balance</label>
+                        <input type="text" id="balance" class="form-control form-control-sm readonly-box text-money" value="0.00" readonly>
+                    </div>
+                </div>
+
+                <div class="mt-2" id="card_field" style="display:none;">
+                    <label class="form-label">Card Last 4</label>
+                    <input type="text" id="card_last4" class="form-control form-control-sm" maxlength="4">
+                </div>
+
+                <div class="mt-2" id="credit_field" style="display:none;">
+                    <label class="form-label">Cheque / Ref No</label>
+                    <input type="text" id="cheque_number" class="form-control form-control-sm">
+                </div>
+            </div>
+
+            <div class="pos-action-buttons pos-action-buttons-top">
+                <button type="button" class="btn btn-outline-danger w-100" onclick="clearCart()">Clear</button>
+                <button type="button" class="btn btn-primary w-100" onclick="saveSale()">Save Sale</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="pos-right-panel">
+        <div class="card p-3 p-md-4 pos-right-card">
+            <div class="row g-2 mb-3">
+                <div class="col-md-10">
+                    <input type="text" id="itemSearch" class="form-control" placeholder="Search items..." onkeyup="filterItems()">
+                </div>
+                <div class="col-md-2">
+                    <button type="button" class="btn btn-dark w-100" onclick="resetItemFilters()">Reset</button>
+                </div>
+            </div>
+
+            <div class="pos-cart-box pos-cart-box-top">
+                <div class="pos-cart-title">Cart Items</div>
+                <div class="pos-cart-scroll">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th style="min-width:180px;">Item Name</th>
+                                <th style="width:80px;">Qty</th>
+                                <th style="width:95px;">Price</th>
+                                <th style="width:95px;">Discount</th>
+                                <th style="width:95px;">Amt</th>
+                                <th style="width:50px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="cartBody">
+                            <tr id="emptyCartRow">
+                                <td colspan="6" class="text-center text-muted">Cart is empty</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="pos-category-bar mb-3">
+                <button type="button" class="btn btn-primary btn-sm category-btn active" onclick="filterByCategory('all', this)">All</button>
+                {% for category in categories %}
+                <button type="button"
+                        class="btn btn-outline-primary btn-sm category-btn"
+                        onclick="filterByCategory('{{ category.name|lower|escapejs }}', this)">
+                    {{ category.name }}
+                </button>
+                {% endfor %}
+            </div>
+
+            <div class="pos-items-grid" id="itemsGrid">
+                {% for item in items %}
+                <div class="pos-item-card"
+                     data-name="{{ item.name|lower }}"
+                     data-code="{{ item.item_code|lower }}"
+                     data-category="{% if item.category %}{{ item.category.name|lower }}{% else %}uncategorized{% endif %}">
+
+                    <div class="pos-item-name">{{ item.name }}</div>
+                    <div class="pos-item-meta">Code: {{ item.item_code }}</div>
+                    <div class="pos-item-price">Rs. {{ item.selling_price|money }}</div>
+                    <div class="pos-item-stock">
+                        {% if item.is_service %}
+                            Service Item
+                        {% else %}
+                            Stock: {{ item.stock }}
+                        {% endif %}
+                    </div>
+
+                    {% if not item.is_service and item.stock <= 0 %}
+                        <button type="button" class="btn btn-outline-danger btn-sm mt-2 w-100" disabled>
+                            Out of Stock
+                        </button>
+                    {% else %}
+                        <button type="button"
+                                class="btn btn-outline-primary btn-sm mt-2 w-100 add-item-btn"
+                                data-id="{{ item.id }}"
+                                data-code="{{ item.item_code|escapejs }}"
+                                data-name="{{ item.name|escapejs }}"
+                                data-price="{{ item.selling_price }}"
+                                data-maxdiscount="{{ item.max_discount_value }}"
+                                data-allowdiscount="{{ item.allow_discount|yesno:'true,false' }}"
+                                data-stock="{{ item.stock }}"
+                                data-isservice="{{ item.is_service|yesno:'true,false' }}">
+                            Add
+                        </button>
+                    {% endif %}
+                </div>
+                {% empty %}
+                <div class="text-muted">No items found.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let cart = [];
+let currentCategory = "all";
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== "") {
+        const cookies = document.cookie.split(";");
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + "=")) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+function toggleProjectField() {
+    const saleType = document.getElementById("sale_type").value;
+    document.getElementById("project_box").style.display =
+        saleType === "project_issue" ? "block" : "none";
+}
+
+function togglePaymentFields() {
+    const method = document.getElementById("payment_method").value;
+    document.getElementById("cash_fields").style.display = method === "cash" ? "flex" : "none";
+    document.getElementById("card_field").style.display = method === "card" ? "block" : "none";
+    document.getElementById("credit_field").style.display = method === "credit" ? "block" : "none";
+    updateBalance();
+}
+
+function bindCustomerSelect() {
+    const customerSelect = document.getElementById("customer_id");
+    const customerName = document.getElementById("customer_name");
+    const customerPhone = document.getElementById("customer_phone");
+
+    if (!customerSelect) return;
+
+    customerSelect.addEventListener("change", function () {
+        const selected = customerSelect.options[customerSelect.selectedIndex];
+        if (!selected.value) {
+            customerName.value = "";
+            customerPhone.value = "";
+            return;
+        }
+        customerName.value = selected.getAttribute("data-name") || "";
+        customerPhone.value = selected.getAttribute("data-phone") || "";
+    });
+}
+
+document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".add-item-btn");
+    if (!btn) return;
+
+    addToCart(
+        btn.dataset.id,
+        btn.dataset.code,
+        btn.dataset.name,
+        btn.dataset.price,
+        btn.dataset.maxdiscount,
+        btn.dataset.allowdiscount,
+        btn.dataset.stock,
+        btn.dataset.isservice
+    );
+});
+
+function addToCart(id, code, name, price, maxDiscount, allowDiscount, stock, isService) {
+    const serviceItem = String(isService) === "true";
+    const availableStock = parseFloat(stock || 0);
+    let existing = cart.find(row => row.id === id);
+
+    if (!serviceItem) {
+        const currentQty = existing ? existing.qty : 0;
+
+        if (availableStock <= 0) {
+            alert(name + " is out of stock.");
+            return;
+        }
+
+        if ((currentQty + 1) > availableStock) {
+            alert("Not enough stock for " + name + ". Available stock: " + availableStock);
+            return;
+        }
+    }
+
+    if (existing) {
+        existing.qty += 1;
+    } else {
+        cart.push({
+            id: id,
+            code: code,
+            name: name,
+            qty: 1,
+            price: parseFloat(price || 0),
+            discount: 0,
+            max_discount_value: parseFloat(maxDiscount || 0),
+            allow_discount: String(allowDiscount) === "true",
+            stock: availableStock,
+            is_service: serviceItem
+        });
+    }
+
+    renderCart();
+}
+
+function removeFromCart(id) {
+    cart = cart.filter(row => row.id !== id);
+    renderCart();
+}
+
+function updateQty(id, value) {
+    let row = cart.find(item => item.id === id);
+    if (!row) return;
+
+    let newQty = parseInt(value) || 1;
+    if (newQty <= 0) newQty = 1;
+
+    if (!row.is_service && newQty > row.stock) {
+        alert("Not enough stock for " + row.name + ". Available stock: " + row.stock);
+        newQty = parseInt(row.stock) || 1;
+    }
+
+    row.qty = newQty;
+    renderCart();
+}
+
+function updatePrice(id, value) {
+    let row = cart.find(item => item.id === id);
+    if (!row) return;
+
+    row.price = parseFloat(value) || 0;
+    if (row.price < 0) row.price = 0;
+
+    renderCart();
+}
+
+function updateDiscount(id, value) {
+    let row = cart.find(item => item.id === id);
+    if (!row) return;
+
+    row.discount = parseFloat(value) || 0;
+    if (row.discount < 0) row.discount = 0;
+
+    let allowed = row.max_discount_value * row.qty;
+    if (row.discount > allowed) {
+        alert("Max allowed discount for " + row.name + " is Rs. " + allowed.toFixed(2));
+        row.discount = allowed;
+    }
+
+    renderCart();
+}
+
+function renderCart() {
+    let tbody = document.getElementById("cartBody");
+    tbody.innerHTML = "";
+
+    if (cart.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Cart is empty</td></tr>';
+        updateTotals();
+        return;
+    }
+
+    for (let i = 0; i < cart.length; i++) {
+        let row = cart[i];
+        let amount = (row.qty * row.price) - (row.discount || 0);
+
+        let discountHtml = row.allow_discount
+            ? `<input type="number" step="0.01" value="${parseFloat(row.discount || 0).toFixed(2)}"
+                      class="form-control form-control-sm"
+                      oninput="updateDiscount('${row.id}', this.value)">`
+            : `<input type="number" step="0.01" value="0.00"
+                      class="form-control form-control-sm" readonly>`;
+
+        let tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td>
+                <strong>${row.name}</strong><br>
+                <small style="color:#6b7280;">${row.code}</small>
+            </td>
+            <td>
+                <input type="number" min="1" step="1" value="${row.qty}"
+                       class="form-control form-control-sm"
+                       oninput="updateQty('${row.id}', this.value)">
+            </td>
+            <td>
+                <input type="number" step="0.01" value="${parseFloat(row.price).toFixed(2)}"
+                       class="form-control form-control-sm"
+                       oninput="updatePrice('${row.id}', this.value)">
+            </td>
+            <td>${discountHtml}</td>
+            <td class="text-money">${amount.toFixed(2)}</td>
+            <td>
+                <button type="button" class="btn btn-sm btn-outline-danger"
+                        onclick="removeFromCart('${row.id}')">X</button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    }
+
+    updateTotals();
+}
+
+function updateTotals() {
+    let total = 0;
+
+    cart.forEach(function(row) {
+        total += (row.qty * row.price) - (row.discount || 0);
+    });
+
+    let extraDiscount = parseFloat(document.getElementById("discount").value || 0);
+    let grandTotal = total - extraDiscount;
+
+    document.getElementById("total").value = total.toFixed(2);
+    document.getElementById("grand_total").value = grandTotal.toFixed(2);
+    updateBalance();
+}
+
+function updateBalance() {
+    let method = document.getElementById("payment_method").value;
+    let grandTotal = parseFloat(document.getElementById("grand_total").value || 0);
+    let received = parseFloat(document.getElementById("received").value || 0);
+
+    if (method === "cash") {
+        document.getElementById("balance").value = (received - grandTotal).toFixed(2);
+    } else if (method === "credit") {
+        document.getElementById("balance").value = grandTotal.toFixed(2);
+    } else {
+        document.getElementById("balance").value = "0.00";
+    }
+}
+
+function clearCart() {
+    cart = [];
+    renderCart();
+    document.getElementById("customer_id").value = "";
+    document.getElementById("customer_name").value = "";
+    document.getElementById("customer_phone").value = "";
+    document.getElementById("project_id").value = "";
+    document.getElementById("discount").value = "0";
+    document.getElementById("received").value = "0";
+    document.getElementById("card_last4").value = "";
+    document.getElementById("cheque_number").value = "";
+    document.getElementById("payment_method").value = "cash";
+    document.getElementById("sale_type").value = "retail";
+    toggleProjectField();
+    togglePaymentFields();
+    updateTotals();
+}
+
+function filterByCategory(category, btn) {
+    currentCategory = category;
+    document.querySelectorAll(".category-btn").forEach(function(el) {
+        el.classList.remove("active");
+    });
+    btn.classList.add("active");
+    applyFilters();
+}
+
+function filterItems() {
+    applyFilters();
+}
+
+function resetItemFilters() {
+    document.getElementById("itemSearch").value = "";
+    currentCategory = "all";
+    document.querySelectorAll(".category-btn").forEach(function(el) {
+        el.classList.remove("active");
+    });
+    let firstBtn = document.querySelector(".category-btn");
+    if (firstBtn) firstBtn.classList.add("active");
+    applyFilters();
+}
+
+function applyFilters() {
+    let term = document.getElementById("itemSearch").value.toLowerCase().trim();
+    let cards = document.querySelectorAll(".pos-item-card");
+
+    cards.forEach(function(card) {
+        let name = card.dataset.name || "";
+        let code = card.dataset.code || "";
+        let category = card.dataset.category || "";
+
+        let matchSearch = name.includes(term) || code.includes(term);
+        let matchCategory = currentCategory === "all" || category === currentCategory;
+
+        card.style.display = (matchSearch && matchCategory) ? "block" : "none";
+    });
+}
+
+function saveSale() {
+    if (cart.length === 0) {
+        alert("Cart is empty");
+        return;
+    }
+
+    let saleType = document.getElementById("sale_type").value;
+    let projectId = document.getElementById("project_id").value;
+    let paymentMethod = document.getElementById("payment_method").value;
+    let customerId = document.getElementById("customer_id").value;
+
+    if (saleType === "project_issue" && !projectId) {
+        alert("Please select a project");
+        return;
+    }
+
+    if (paymentMethod === "credit" && !customerId) {
+        alert("Please select a customer for credit sale");
+        return;
+    }
+
+    let payload = {
+        items: cart.map(function(row) {
+            return {
+                id: row.id,
+                qty: row.qty,
+                price: row.price,
+                discount: row.discount || 0
+            };
+        }),
+        total: document.getElementById("total").value,
+        discount: document.getElementById("discount").value,
+        grand_total: document.getElementById("grand_total").value,
+        payment_method: paymentMethod,
+        received: document.getElementById("received").value,
+        balance: document.getElementById("balance").value,
+        card_last4: document.getElementById("card_last4").value,
+        cheque_number: document.getElementById("cheque_number").value,
+        customer_id: customerId || "",
+        customer_name: document.getElementById("customer_name").value,
+        customer_phone: document.getElementById("customer_phone").value,
+        sale_type: saleType,
+        project_id: projectId || null
+    };
+
+    fetch("{% url 'save_sale' %}", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            "X-CSRFToken": getCookie("csrftoken")
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(async response => {
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data.message || "Error saving sale");
+        }
+        return data;
+    })
+    .then(data => {
+        if (data.status === "success") {
+            const invoiceUrl = "{% url 'invoice_page' 0 %}".replace("/0/", "/" + data.sale_id + "/");
+            window.location.href = invoiceUrl;
+        } else {
+            alert(data.message || "Error saving sale");
+        }
+    })
+    .catch(error => {
+        alert(error.message || "Error saving sale");
+        console.error(error);
+    });
+}
+
+bindCustomerSelect();
+toggleProjectField();
+togglePaymentFields();
+updateTotals();
+</script>
+{% endblock %}
