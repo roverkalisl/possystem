@@ -141,4 +141,11 @@ urlpatterns = [
     path("suppliers/", views.supplier_list, name="supplier_list"),
     path("suppliers/add/", views.add_supplier, name="add_supplier"),
     path("suppliers/<int:supplier_id>/edit/", views.edit_supplier, name="edit_supplier"),
+    path("supplier-advances/", views.supplier_advance_list, name="supplier_advance_list"),
+path("supplier-advances/add/", views.add_supplier_advance, name="add_supplier_advance"),
+path("supplier-advances/<int:advance_id>/settle/", views.add_supplier_settlement_from_advance, name="add_supplier_settlement_from_advance"),
+
+path("supplier-settlements/", views.supplier_settlement_list, name="supplier_settlement_list"),
+path("supplier-settlements/<int:settlement_id>/approve/", views.approve_supplier_settlement, name="approve_supplier_settlement"),
+path("supplier-settlements/<int:settlement_id>/reject/", views.reject_supplier_settlement, name="reject_supplier_settlement"),
     ]

@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Supplier Settlements{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="page-title mb-0">Supplier Settlements</h3>
+</div>
+
+<div class="card card-soft mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2">
+            <div class="col-md-10">
+                <input type="text" name="q" value="{{ query }}" class="form-control"
+                       placeholder="Search by settlement no / supplier / project / description">
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">Search</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card card-soft">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>No</th>
+                        <th>Date</th>
+                        <th>Advance No</th>
+                        <th>Supplier</th>
+                        <th>Project</th>
+                        <th>Description</th>
+                        <th class="text-end">Actual</th>
+                        <th class="text-end">Advance Applied</th>
+                        <th class="text-end">Balance Due</th>
+                        <th class="text-end">Excess Advance</th>
+                        <th>Status</th>
+                        <th class="text-center" style="width:170px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for s in settlements %}
+                    <tr>
+                        <td>{{ s.settlement_no }}</td>
+                        <td>{{ s.settlement_date }}</td>
+                        <td>{{ s.advance.advance_no }}</td>
+                        <td>{{ s.supplier.name }}</td>
+                        <td>
+                            {% if s.project %}
+                                {{ s.project.project_id }} - {{ s.project.project_name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>{{ s.description }}</td>
+                        <td class="text-end">{{ s.actual_amount }}</td>
+                        <td class="text-end">{{ s.advance_applied }}</td>
+                        <td class="text-end">{{ s.balance_due }}</td>
+                        <td class="text-end">{{ s.excess_advance }}</td>
+                        <td>{{ s.approval_status }}</td>
+                        <td class="text-center">
+                            {% if is_owner and s.approval_status == "pending" %}
+                                <a href="{% url 'approve_supplier_settlement' s.id %}" class="btn btn-sm btn-success">Approve</a>
+                                <form method="post" action="{% url 'reject_supplier_settlement' s.id %}" style="display:inline;">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-danger">Reject</button>
+                                </form>
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="12" class="text-center text-muted py-4">No settlements found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

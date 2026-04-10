@@ -796,6 +796,185 @@ class Customer(models.Model):
 
     def __str__(self):
         return f"{self.customer_code} - {self.name}"
+
+class SupplierAdvance(models.Model):
+    PAYMENT_METHODS = [
+        ("cash", "Cash"),
+        ("card", "Card"),
+        ("bank", "Bank Transfer"),
+        ("cheque", "Cheque"),
+    ]
+
+    STATUS_CHOICES = [
+        ("approved", "Approved"),
+        ("closed", "Closed"),
+    ]
+
+    advance_no = models.CharField(max_length=30, unique=True, blank=True, null=True)
+    supplier = models.ForeignKey("Supplier", on_delete=models.PROTECT, related_name="advances")
+    project = models.ForeignKey("Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="supplier_advances")
+    advance_date = models.DateField(default=timezone.now)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default="cash")
+    paid_from_gl = models.ForeignKey(
+        "GLMaster",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="supplier_advance_paid_from"
+    )
+    advance_gl = models.ForeignKey(
+        "GLMaster",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="supplier_advance_gl"
+    )
+
+    note = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="approved")
+    is_active = models.BooleanField(default=True)
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_supplier_advances"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-advance_date", "-id"]
+
+    def save(self, *args, **kwargs):
+        if not self.advance_no:
+            last = SupplierAdvance.objects.exclude(advance_no__isnull=True).order_by("-id").first()
+            if last and last.advance_no and str(last.advance_no).replace("SADV", "").isdigit():
+                next_no = int(str(last.advance_no).replace("SADV", "")) + 1
+                self.advance_no = f"SADV{next_no:05d}"
+            else:
+                self.advance_no = "SADV00001"
+        super().save(*args, **kwargs)
+
+    @property
+    def settled_amount(self):
+        return self.settlements.filter(approval_status="approved").aggregate(
+            total=Sum("actual_amount")
+        )["total"] or Decimal("0")
+
+    @property
+    def pending_settlement_amount(self):
+        return self.settlements.filter(approval_status="pending").aggregate(
+            total=Sum("actual_amount")
+        )["total"] or Decimal("0")
+
+    @property
+    def balance_amount(self):
+        return Decimal(str(self.amount or 0)) - Decimal(str(self.settled_amount or 0))
+
+    def __str__(self):
+        return self.advance_no or f"Supplier Advance {self.id}"
+
+
+class SupplierSettlement(models.Model):
+    APPROVAL_STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    settlement_no = models.CharField(max_length=30, unique=True, blank=True, null=True)
+    advance = models.ForeignKey(
+        "SupplierAdvance",
+        on_delete=models.PROTECT,
+        related_name="settlements"
+    )
+    supplier = models.ForeignKey("Supplier", on_delete=models.PROTECT, related_name="settlements")
+    project = models.ForeignKey("Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="supplier_settlements")
+    settlement_date = models.DateField(default=timezone.now)
+
+    description = models.CharField(max_length=255)
+    actual_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    advance_applied = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    balance_due = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    excess_advance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    expense_gl = models.ForeignKey(
+        "GLMaster",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="supplier_settlement_expense_gl"
+    )
+
+    approval_status = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, default="pending")
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_supplier_settlements"
+    )
+    approved_at = models.DateTimeField(null=True, blank=True)
+    approval_note = models.TextField(blank=True, null=True)
+
+    linked_project_expense = models.ForeignKey(
+        "ProjectExpense",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="supplier_settlements"
+    )
+
+    note = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_supplier_settlements"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-settlement_date", "-id"]
+
+    def save(self, *args, **kwargs):
+        if not self.settlement_no:
+            last = SupplierSettlement.objects.exclude(settlement_no__isnull=True).order_by("-id").first()
+            if last and last.settlement_no and str(last.settlement_no).replace("SSET", "").isdigit():
+                next_no = int(str(last.settlement_no).replace("SSET", "")) + 1
+                self.settlement_no = f"SSET{next_no:05d}"
+            else:
+                self.settlement_no = "SSET00001"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.settlement_no or f"Settlement {self.id}"
+
+class SupplierSettlementAdvanceLink(models.Model):
+    settlement = models.ForeignKey(
+        "SupplierSettlement",
+        on_delete=models.CASCADE,
+        related_name="advance_links"
+    )
+    advance = models.ForeignKey(
+        "SupplierAdvance",
+        on_delete=models.PROTECT,
+        related_name="settlement_links"
+    )
+    applied_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.settlement.settlement_no} - {self.advance.advance_no}"
+    
+
     
 
 

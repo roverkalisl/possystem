@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Add Supplier Settlement{% endblock %}
+
+{% block content %}
+<h3 class="page-title">Settle Advance</h3>
+
+<div class="card card-soft mb-3">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <label class="form-label">Advance No</label>
+                <input type="text" class="form-control" value="{{ advance.advance_no }}" readonly>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Supplier</label>
+                <input type="text" class="form-control" value="{{ advance.supplier.name }}" readonly>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Project</label>
+                <input type="text" class="form-control"
+                       value="{% if advance.project %}{{ advance.project.project_id }} - {{ advance.project.project_name }}{% endif %}" readonly>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Available Balance</label>
+                <input type="text" class="form-control" value="{{ advance.balance_amount }}" readonly>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-soft">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Settlement No</label>
+                    <input type="text" class="form-control" value="{{ next_settlement_no }}" readonly>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Date</label>
+                    <input type="date" name="settlement_date" class="form-control">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Expense GL <span class="required-star">*</span></label>
+                    <select name="expense_gl" class="form-select" required>
+                        <option value="">-- Select Expense GL --</option>
+                        {% for gl in expense_gls %}
+                            <option value="{{ gl.id }}">{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Description <span class="required-star">*</span></label>
+                    <input type="text" name="description" class="form-control" required>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Actual Amount <span class="required-star">*</span></label>
+                    <input type="number" step="0.01" min="0" name="actual_amount" class="form-control" required>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Note</label>
+                    <textarea name="note" rows="3" class="form-control"></textarea>
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Submit for Approval</button>
+                <a href="{% url 'supplier_advance_list' %}" class="btn btn-secondary">Back</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

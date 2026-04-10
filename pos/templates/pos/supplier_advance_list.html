@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Supplier Advances{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="page-title mb-0">Supplier Advances</h3>
+    <a href="{% url 'add_supplier_advance' %}" class="btn btn-primary">Add Advance</a>
+</div>
+
+<div class="card card-soft mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2">
+            <div class="col-md-10">
+                <input type="text" name="q" value="{{ query }}" class="form-control"
+                       placeholder="Search by advance no / supplier / project">
+            </div>
+            <div class="col-md-2 d-grid">
+                <button type="submit" class="btn btn-outline-primary">Search</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card card-soft">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>No</th>
+                        <th>Date</th>
+                        <th>Supplier</th>
+                        <th>Project</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-end">Settled</th>
+                        <th class="text-end">Balance</th>
+                        <th>Status</th>
+                        <th class="text-center" style="width:140px;">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in advances %}
+                    <tr>
+                        <td>{{ a.advance_no }}</td>
+                        <td>{{ a.advance_date }}</td>
+                        <td>{{ a.supplier.name }}</td>
+                        <td>
+                            {% if a.project %}
+                                {{ a.project.project_id }} - {{ a.project.project_name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td class="text-end">{{ a.amount }}</td>
+                        <td class="text-end">{{ a.settled_amount }}</td>
+                        <td class="text-end">{{ a.balance_amount }}</td>
+                        <td>{{ a.status }}</td>
+                        <td class="text-center">
+                            {% if a.balance_amount > 0 %}
+                                <a href="{% url 'add_supplier_settlement_from_advance' a.id %}" class="btn btn-sm btn-outline-primary">
+                                    Settle
+                                </a>
+                            {% else %}
+                                <span class="text-muted">Settled</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-4">No supplier advances found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

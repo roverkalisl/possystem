@@ -17,9 +17,8 @@ from .models import (
     Sale, SaleItem, SalesReturn, StockTransaction, SaleRecovery,
     Project, ProjectExpense, ProjectPettyCash,
     ProjectPettyCashExpense, ProjectIncome, Employee,
-    ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem
-)
-
+    ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem,SupplierAdvance,
+    SupplierSettlement, SupplierSettlementAdvanceLink)
 
 # =========================
 # HELPERS
@@ -64,7 +63,19 @@ def to_decimal(val):
         return Decimal(str(val).replace(",", "").strip())
     except (InvalidOperation, TypeError, ValueError):
         return Decimal("0")
+    
+def generate_supplier_advance_no():
+    last = SupplierAdvance.objects.exclude(advance_no__isnull=True).order_by("-id").first()
+    if last and last.advance_no and str(last.advance_no).replace("SADV", "").isdigit():
+        return f"SADV{int(str(last.advance_no).replace('SADV', '')) + 1:05d}"
+    return "SADV00001"
 
+
+def generate_supplier_settlement_no():
+    last = SupplierSettlement.objects.exclude(settlement_no__isnull=True).order_by("-id").first()
+    if last and last.settlement_no and str(last.settlement_no).replace("SSET", "").isdigit():
+        return f"SSET{int(str(last.settlement_no).replace('SSET', '')) + 1:05d}"
+    return "SSET00001"
 
 def is_owner(user):
     return user.is_superuser or user.groups.filter(name__iexact="Owner").exists()
@@ -2460,3 +2471,238 @@ def edit_supplier(request, supplier_id):
     return render(request, "pos/edit_supplier.html", {
         "supplier": supplier,
     })
+@user_passes_test(can_use_project)
+def supplier_advance_list(request):
+    query = request.GET.get("q", "").strip()
+
+    advances = SupplierAdvance.objects.filter(is_active=True).select_related(
+        "supplier", "project", "paid_from_gl", "advance_gl", "created_by"
+    ).order_by("-advance_date", "-id")
+
+    if query:
+        advances = advances.filter(
+            Q(advance_no__icontains=query) |
+            Q(supplier__name__icontains=query) |
+            Q(project__project_id__icontains=query) |
+            Q(project__project_name__icontains=query)
+        )
+
+    return render(request, "pos/supplier_advance_list.html", {
+        "advances": advances,
+        "query": query,
+        "is_owner": is_owner(request.user),
+    })
+
+
+@user_passes_test(can_use_project)
+def add_supplier_advance(request):
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+    gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
+    next_advance_no = generate_supplier_advance_no()
+
+    context = {
+        "suppliers": suppliers,
+        "projects": projects,
+        "gl_list": gl_list,
+        "next_advance_no": next_advance_no,
+    }
+
+    if request.method == "POST":
+        supplier_id = request.POST.get("supplier") or None
+        project_id = request.POST.get("project") or None
+        advance_date = request.POST.get("advance_date") or timezone.localdate()
+        amount = to_decimal(request.POST.get("amount") or 0)
+        payment_method = request.POST.get("payment_method") or "cash"
+        paid_from_gl_id = request.POST.get("paid_from_gl") or None
+        advance_gl_id = request.POST.get("advance_gl") or None
+        note = (request.POST.get("note") or "").strip()
+
+        if not supplier_id:
+            messages.error(request, "Supplier is required.")
+            return render(request, "pos/add_supplier_advance.html", context)
+
+        if amount <= 0:
+            messages.error(request, "Amount must be greater than 0.")
+            return render(request, "pos/add_supplier_advance.html", context)
+
+        if not paid_from_gl_id:
+            messages.error(request, "Paid From GL is required.")
+            return render(request, "pos/add_supplier_advance.html", context)
+
+        if not advance_gl_id:
+            messages.error(request, "Advance GL is required.")
+            return render(request, "pos/add_supplier_advance.html", context)
+
+        SupplierAdvance.objects.create(
+            advance_no=next_advance_no,
+            supplier_id=supplier_id,
+            project_id=project_id,
+            advance_date=advance_date,
+            amount=amount,
+            payment_method=payment_method,
+            paid_from_gl_id=paid_from_gl_id,
+            advance_gl_id=advance_gl_id,
+            note=note,
+            status="approved",
+            created_by=request.user,
+        )
+
+        messages.success(request, "Supplier advance saved successfully.")
+        return redirect("supplier_advance_list")
+
+    return render(request, "pos/add_supplier_advance.html", context)
+
+
+@user_passes_test(can_use_project)
+def add_supplier_settlement_from_advance(request, advance_id):
+    advance = get_object_or_404(
+        SupplierAdvance.objects.select_related("supplier", "project"),
+        id=advance_id,
+        is_active=True
+    )
+
+    expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
+    next_settlement_no = generate_supplier_settlement_no()
+
+    context = {
+        "advance": advance,
+        "expense_gls": expense_gls,
+        "next_settlement_no": next_settlement_no,
+    }
+
+    if request.method == "POST":
+        settlement_date = request.POST.get("settlement_date") or timezone.localdate()
+        description = (request.POST.get("description") or "").strip()
+        actual_amount = to_decimal(request.POST.get("actual_amount") or 0)
+        expense_gl_id = request.POST.get("expense_gl") or None
+        note = (request.POST.get("note") or "").strip()
+
+        if advance.balance_amount <= 0:
+            messages.error(request, "This advance has no available balance.")
+            return redirect("supplier_advance_list")
+
+        if not description:
+            messages.error(request, "Description is required.")
+            return render(request, "pos/add_supplier_settlement.html", context)
+
+        if actual_amount <= 0:
+            messages.error(request, "Actual amount must be greater than 0.")
+            return render(request, "pos/add_supplier_settlement.html", context)
+
+        if not expense_gl_id:
+            messages.error(request, "Expense GL is required.")
+            return render(request, "pos/add_supplier_settlement.html", context)
+
+        available_balance = Decimal(str(advance.balance_amount or 0))
+        advance_applied = available_balance if actual_amount >= available_balance else actual_amount
+        balance_due = actual_amount - advance_applied if actual_amount > advance_applied else Decimal("0")
+        excess_advance = available_balance - actual_amount if available_balance > actual_amount else Decimal("0")
+
+        SupplierSettlement.objects.create(
+            settlement_no=next_settlement_no,
+            advance=advance,
+            supplier=advance.supplier,
+            project=advance.project,
+            settlement_date=settlement_date,
+            description=description,
+            actual_amount=actual_amount,
+            advance_applied=advance_applied,
+            balance_due=balance_due,
+            excess_advance=excess_advance,
+            expense_gl_id=expense_gl_id,
+            approval_status="pending",
+            note=note,
+            created_by=request.user,
+        )
+
+        messages.success(request, "Settlement submitted for approval.")
+        return redirect("supplier_settlement_list")
+
+    return render(request, "pos/add_supplier_settlement.html", context)
+
+
+@user_passes_test(can_use_project)
+def supplier_settlement_list(request):
+    query = request.GET.get("q", "").strip()
+
+    settlements = SupplierSettlement.objects.select_related(
+        "advance", "supplier", "project", "expense_gl", "linked_project_expense", "created_by", "approved_by"
+    ).order_by("-settlement_date", "-id")
+
+    if query:
+        settlements = settlements.filter(
+            Q(settlement_no__icontains=query) |
+            Q(supplier__name__icontains=query) |
+            Q(project__project_id__icontains=query) |
+            Q(project__project_name__icontains=query) |
+            Q(description__icontains=query)
+        )
+
+    return render(request, "pos/supplier_settlement_list.html", {
+        "settlements": settlements,
+        "query": query,
+        "is_owner": is_owner(request.user),
+    })
+
+
+@user_passes_test(is_owner)
+def approve_supplier_settlement(request, settlement_id):
+    settlement = get_object_or_404(
+        SupplierSettlement.objects.select_related("advance", "project", "expense_gl", "supplier"),
+        id=settlement_id
+    )
+
+    if settlement.approval_status == "approved":
+        messages.warning(request, "Settlement already approved.")
+        return redirect("supplier_settlement_list")
+
+    with transaction.atomic():
+        linked_project_expense = None
+
+        if settlement.project:
+            linked_project_expense = ProjectExpense.objects.create(
+                expense_no=generate_project_expense_no(),
+                project=settlement.project,
+                expense_type="service",
+                expense_date=settlement.settlement_date,
+                description=f"Supplier Settlement - {settlement.supplier.name} - {settlement.description}",
+                qty=1,
+                unit_price=settlement.actual_amount,
+                amount=settlement.actual_amount,
+                gl_account=settlement.expense_gl,
+                created_by=request.user,
+            )
+
+        settlement.approval_status = "approved"
+        settlement.approved_by = request.user
+        settlement.approved_at = timezone.now()
+        settlement.linked_project_expense = linked_project_expense
+        settlement.save()
+
+        if settlement.advance.balance_amount <= 0:
+            settlement.advance.status = "closed"
+            settlement.advance.save()
+
+    messages.success(request, "Settlement approved and posted to Project Expenses.")
+    return redirect("supplier_settlement_list")
+
+
+@user_passes_test(is_owner)
+def reject_supplier_settlement(request, settlement_id):
+    settlement = get_object_or_404(SupplierSettlement, id=settlement_id)
+
+    if settlement.approval_status == "approved":
+        messages.error(request, "Approved settlement cannot be rejected.")
+        return redirect("supplier_settlement_list")
+
+    note = (request.POST.get("approval_note") or "").strip() if request.method == "POST" else ""
+
+    settlement.approval_status = "rejected"
+    settlement.approval_note = note
+    settlement.approved_by = request.user
+    settlement.approved_at = timezone.now()
+    settlement.save()
+
+    messages.success(request, "Settlement rejected.")
+    return redirect("supplier_settlement_list")
