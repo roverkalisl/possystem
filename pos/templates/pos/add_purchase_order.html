@@ -20,6 +20,20 @@
                     <input type="date" name="po_date" class="form-control">
                 </div>
 
+                <div class="col-md-3">
+                    <label class="form-label">Delivery Date Required</label>
+                    <input type="date" name="delivery_date_required" class="form-control">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="draft">Draft</option>
+                        <option value="approved">Approved</option>
+                        <option value="closed">Closed</option>
+                    </select>
+                </div>
+
                 <div class="col-md-6">
                     <label class="form-label">Supplier <span class="required-star">*</span></label>
                     <select name="supplier" class="form-select" required>
@@ -30,7 +44,7 @@
                     </select>
                 </div>
 
-                <div class="col-md-12">
+                <div class="col-md-6">
                     <label class="form-label">Project</label>
                     <select name="project" class="form-select">
                         <option value="">-- Select Project --</option>
@@ -41,48 +55,123 @@
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label">Order Type</label>
-                    <select name="order_type" class="form-select">
-                        <option value="item">Item</option>
-                        <option value="service" selected>Service</option>
-                        <option value="rental">Rental</option>
-                        <option value="other">Other</option>
-                    </select>
+                    <label class="form-label">Buyer Company Name</label>
+                    <input type="text" name="buyer_company_name" class="form-control">
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label">Qty <span class="required-star">*</span></label>
-                    <input type="number" step="0.01" min="0" name="qty" class="form-control" value="1" required>
+                    <label class="form-label">Buyer Contact Person</label>
+                    <input type="text" name="buyer_contact_person" class="form-control">
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label">Rate <span class="required-star">*</span></label>
-                    <input type="number" step="0.01" min="0" name="rate" class="form-control" value="0" required>
-                </div>
-
-                <div class="col-md-12">
-                    <label class="form-label">Description <span class="required-star">*</span></label>
-                    <input type="text" name="description" class="form-control" required>
+                    <label class="form-label">Buyer Phone</label>
+                    <input type="text" name="buyer_phone" class="form-control">
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label">Estimated Amount</label>
-                    <input type="number" step="0.01" min="0" name="estimated_amount" class="form-control" value="0">
+                    <label class="form-label">Buyer Email</label>
+                    <input type="email" name="buyer_email" class="form-control">
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label">Status</label>
-                    <select name="status" class="form-select">
-                        <option value="draft" selected>Draft</option>
-                        <option value="approved">Approved</option>
-                        <option value="partially_used">Partially Used</option>
-                        <option value="closed">Closed</option>
+                    <label class="form-label">Buyer Address</label>
+                    <textarea name="buyer_address" rows="2" class="form-control"></textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Supplier Address</label>
+                    <textarea name="supplier_address" rows="2" class="form-control"></textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Supplier Contact Details</label>
+                    <input type="text" name="supplier_contact_details" class="form-control">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Payment Method</label>
+                    <select name="payment_method" class="form-select">
+                        <option value="cash">Cash</option>
+                        <option value="bank" selected>Bank Transfer</option>
+                        <option value="cheque">Cheque</option>
                     </select>
                 </div>
 
+                <div class="col-md-8">
+                    <label class="form-label">Payment Period</label>
+                    <input type="text" name="payment_period" class="form-control" placeholder="Advance / 30 days / etc.">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Delivery Location</label>
+                    <input type="text" name="delivery_location" class="form-control">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Delivery Method</label>
+                    <input type="text" name="delivery_method" class="form-control">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Authorized Person Name</label>
+                    <input type="text" name="authorized_person_name" class="form-control">
+                </div>
+
                 <div class="col-md-12">
+                    <label class="form-label">Special Instructions</label>
+                    <textarea name="special_instructions" rows="2" class="form-control"></textarea>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Item Details</label>
+                    <div id="po-items">
+                        <div class="row g-2 mb-2 po-item-row">
+                            <div class="col-md-6">
+                                <input type="text" name="item_description[]" class="form-control" placeholder="Description">
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" step="0.01" min="0" name="item_qty[]" class="form-control" placeholder="Qty">
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" step="0.01" min="0" name="item_price[]" class="form-control" placeholder="Unit Price">
+                            </div>
+                            <div class="col-md-2 d-grid">
+                                <button type="button" class="btn btn-outline-danger" onclick="removePoRow(this)">Remove</button>
+                            </div>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="addPoRow()">Add Item Row</button>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Terms & Conditions</label>
+                    <textarea name="terms_and_conditions" rows="3" class="form-control"></textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Warranty Details</label>
+                    <textarea name="warranty_details" rows="3" class="form-control"></textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Return Policy</label>
+                    <textarea name="return_policy" rows="3" class="form-control"></textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Penalties / Conditions</label>
+                    <textarea name="penalties_conditions" rows="3" class="form-control"></textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Signature Text</label>
+                    <input type="text" name="signature_text" class="form-control">
+                </div>
+
+                <div class="col-md-6">
                     <label class="form-label">Note</label>
-                    <textarea name="note" rows="3" class="form-control"></textarea>
+                    <textarea name="note" rows="2" class="form-control"></textarea>
                 </div>
             </div>
 
@@ -93,4 +182,33 @@
         </form>
     </div>
 </div>
+
+<script>
+function addPoRow() {
+    const wrap = document.getElementById("po-items");
+    const row = document.createElement("div");
+    row.className = "row g-2 mb-2 po-item-row";
+    row.innerHTML = `
+        <div class="col-md-6">
+            <input type="text" name="item_description[]" class="form-control" placeholder="Description">
+        </div>
+        <div class="col-md-2">
+            <input type="number" step="0.01" min="0" name="item_qty[]" class="form-control" placeholder="Qty">
+        </div>
+        <div class="col-md-2">
+            <input type="number" step="0.01" min="0" name="item_price[]" class="form-control" placeholder="Unit Price">
+        </div>
+        <div class="col-md-2 d-grid">
+            <button type="button" class="btn btn-outline-danger" onclick="removePoRow(this)">Remove</button>
+        </div>
+    `;
+    wrap.appendChild(row);
+}
+function removePoRow(btn) {
+    const rows = document.querySelectorAll(".po-item-row");
+    if (rows.length > 1) {
+        btn.closest(".po-item-row").remove();
+    }
+}
+</script>
 {% endblock %}

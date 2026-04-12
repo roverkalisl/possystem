@@ -20,6 +20,20 @@
                     <input type="date" name="po_date" class="form-control" value="{{ order.po_date|date:'Y-m-d' }}">
                 </div>
 
+                <div class="col-md-3">
+                    <label class="form-label">Delivery Date Required</label>
+                    <input type="date" name="delivery_date_required" class="form-control" value="{{ order.delivery_date_required|date:'Y-m-d' }}">
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="draft" {% if order.status == 'draft' %}selected{% endif %}>Draft</option>
+                        <option value="approved" {% if order.status == 'approved' %}selected{% endif %}>Approved</option>
+                        <option value="closed" {% if order.status == 'closed' %}selected{% endif %}>Closed</option>
+                    </select>
+                </div>
+
                 <div class="col-md-6">
                     <label class="form-label">Supplier <span class="required-star">*</span></label>
                     <select name="supplier" class="form-select" required>
@@ -30,61 +44,151 @@
                     </select>
                 </div>
 
-                <div class="col-md-12">
+                <div class="col-md-6">
                     <label class="form-label">Project</label>
                     <select name="project" class="form-select">
                         <option value="">-- Select Project --</option>
                         {% for p in projects %}
-                            <option value="{{ p.id }}" {% if order.project_id == p.id %}selected{% endif %}>
-                                {{ p.project_id }} - {{ p.project_name }}
-                            </option>
+                            <option value="{{ p.id }}" {% if order.project_id == p.id %}selected{% endif %}>{{ p.project_id }} - {{ p.project_name }}</option>
                         {% endfor %}
                     </select>
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label">Order Type</label>
-                    <select name="order_type" class="form-select">
-                        <option value="item" {% if order.order_type == 'item' %}selected{% endif %}>Item</option>
-                        <option value="service" {% if order.order_type == 'service' %}selected{% endif %}>Service</option>
-                        <option value="rental" {% if order.order_type == 'rental' %}selected{% endif %}>Rental</option>
-                        <option value="other" {% if order.order_type == 'other' %}selected{% endif %}>Other</option>
-                    </select>
+                    <label class="form-label">Buyer Company Name</label>
+                    <input type="text" name="buyer_company_name" class="form-control" value="{{ order.buyer_company_name|default:'' }}">
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label">Qty <span class="required-star">*</span></label>
-                    <input type="number" step="0.01" min="0" name="qty" class="form-control" value="{{ order.qty }}" required>
+                    <label class="form-label">Buyer Contact Person</label>
+                    <input type="text" name="buyer_contact_person" class="form-control" value="{{ order.buyer_contact_person|default:'' }}">
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label">Rate <span class="required-star">*</span></label>
-                    <input type="number" step="0.01" min="0" name="rate" class="form-control" value="{{ order.rate }}" required>
-                </div>
-
-                <div class="col-md-12">
-                    <label class="form-label">Description <span class="required-star">*</span></label>
-                    <input type="text" name="description" class="form-control" value="{{ order.description }}" required>
+                    <label class="form-label">Buyer Phone</label>
+                    <input type="text" name="buyer_phone" class="form-control" value="{{ order.buyer_phone|default:'' }}">
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label">Estimated Amount</label>
-                    <input type="number" step="0.01" min="0" name="estimated_amount" class="form-control" value="{{ order.estimated_amount }}">
+                    <label class="form-label">Buyer Email</label>
+                    <input type="email" name="buyer_email" class="form-control" value="{{ order.buyer_email|default:'' }}">
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label">Status</label>
-                    <select name="status" class="form-select">
-                        <option value="draft" {% if order.status == 'draft' %}selected{% endif %}>Draft</option>
-                        <option value="approved" {% if order.status == 'approved' %}selected{% endif %}>Approved</option>
-                        <option value="partially_used" {% if order.status == 'partially_used' %}selected{% endif %}>Partially Used</option>
-                        <option value="closed" {% if order.status == 'closed' %}selected{% endif %}>Closed</option>
+                    <label class="form-label">Buyer Address</label>
+                    <textarea name="buyer_address" rows="2" class="form-control">{{ order.buyer_address|default:'' }}</textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Supplier Address</label>
+                    <textarea name="supplier_address" rows="2" class="form-control">{{ order.supplier_address|default:'' }}</textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Supplier Contact Details</label>
+                    <input type="text" name="supplier_contact_details" class="form-control" value="{{ order.supplier_contact_details|default:'' }}">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Payment Method</label>
+                    <select name="payment_method" class="form-select">
+                        <option value="cash" {% if order.payment_method == 'cash' %}selected{% endif %}>Cash</option>
+                        <option value="bank" {% if order.payment_method == 'bank' %}selected{% endif %}>Bank Transfer</option>
+                        <option value="cheque" {% if order.payment_method == 'cheque' %}selected{% endif %}>Cheque</option>
                     </select>
                 </div>
 
+                <div class="col-md-8">
+                    <label class="form-label">Payment Period</label>
+                    <input type="text" name="payment_period" class="form-control" value="{{ order.payment_period|default:'' }}">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Delivery Location</label>
+                    <input type="text" name="delivery_location" class="form-control" value="{{ order.delivery_location|default:'' }}">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Delivery Method</label>
+                    <input type="text" name="delivery_method" class="form-control" value="{{ order.delivery_method|default:'' }}">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Authorized Person Name</label>
+                    <input type="text" name="authorized_person_name" class="form-control" value="{{ order.authorized_person_name|default:'' }}">
+                </div>
+
                 <div class="col-md-12">
+                    <label class="form-label">Special Instructions</label>
+                    <textarea name="special_instructions" rows="2" class="form-control">{{ order.special_instructions|default:'' }}</textarea>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Item Details</label>
+                    <div id="po-items">
+                        {% for row in order.items.all %}
+                        <div class="row g-2 mb-2 po-item-row">
+                            <div class="col-md-6">
+                                <input type="text" name="item_description[]" class="form-control" value="{{ row.description }}">
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" step="0.01" min="0" name="item_qty[]" class="form-control" value="{{ row.quantity }}">
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" step="0.01" min="0" name="item_price[]" class="form-control" value="{{ row.unit_price }}">
+                            </div>
+                            <div class="col-md-2 d-grid">
+                                <button type="button" class="btn btn-outline-danger" onclick="removePoRow(this)">Remove</button>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="row g-2 mb-2 po-item-row">
+                            <div class="col-md-6">
+                                <input type="text" name="item_description[]" class="form-control" placeholder="Description">
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" step="0.01" min="0" name="item_qty[]" class="form-control" placeholder="Qty">
+                            </div>
+                            <div class="col-md-2">
+                                <input type="number" step="0.01" min="0" name="item_price[]" class="form-control" placeholder="Unit Price">
+                            </div>
+                            <div class="col-md-2 d-grid">
+                                <button type="button" class="btn btn-outline-danger" onclick="removePoRow(this)">Remove</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <button type="button" class="btn btn-outline-primary btn-sm mt-2" onclick="addPoRow()">Add Item Row</button>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Terms & Conditions</label>
+                    <textarea name="terms_and_conditions" rows="3" class="form-control">{{ order.terms_and_conditions|default:'' }}</textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Warranty Details</label>
+                    <textarea name="warranty_details" rows="3" class="form-control">{{ order.warranty_details|default:'' }}</textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Return Policy</label>
+                    <textarea name="return_policy" rows="3" class="form-control">{{ order.return_policy|default:'' }}</textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Penalties / Conditions</label>
+                    <textarea name="penalties_conditions" rows="3" class="form-control">{{ order.penalties_conditions|default:'' }}</textarea>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Signature Text</label>
+                    <input type="text" name="signature_text" class="form-control" value="{{ order.signature_text|default:'' }}">
+                </div>
+
+                <div class="col-md-6">
                     <label class="form-label">Note</label>
-                    <textarea name="note" rows="3" class="form-control">{{ order.note|default:'' }}</textarea>
+                    <textarea name="note" rows="2" class="form-control">{{ order.note|default:'' }}</textarea>
                 </div>
             </div>
 
@@ -95,4 +199,33 @@
         </form>
     </div>
 </div>
+
+<script>
+function addPoRow() {
+    const wrap = document.getElementById("po-items");
+    const row = document.createElement("div");
+    row.className = "row g-2 mb-2 po-item-row";
+    row.innerHTML = `
+        <div class="col-md-6">
+            <input type="text" name="item_description[]" class="form-control" placeholder="Description">
+        </div>
+        <div class="col-md-2">
+            <input type="number" step="0.01" min="0" name="item_qty[]" class="form-control" placeholder="Qty">
+        </div>
+        <div class="col-md-2">
+            <input type="number" step="0.01" min="0" name="item_price[]" class="form-control" placeholder="Unit Price">
+        </div>
+        <div class="col-md-2 d-grid">
+            <button type="button" class="btn btn-outline-danger" onclick="removePoRow(this)">Remove</button>
+        </div>
+    `;
+    wrap.appendChild(row);
+}
+function removePoRow(btn) {
+    const rows = document.querySelectorAll(".po-item-row");
+    if (rows.length > 1) {
+        btn.closest(".po-item-row").remove();
+    }
+}
+</script>
 {% endblock %}

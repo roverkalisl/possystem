@@ -24,9 +24,19 @@ class Category(models.Model):
 class Supplier(models.Model):
     name = models.CharField(max_length=150, unique=True)
     address = models.TextField(blank=True, null=True)
-    phone = models.CharField(max_length=30, blank=True, null=True)
+
+    phone_1 = models.CharField(max_length=30, blank=True, null=True)
+    phone_2 = models.CharField(max_length=30, blank=True, null=True)
+    phone_3 = models.CharField(max_length=30, blank=True, null=True)
+
     email = models.EmailField(blank=True, null=True)
     contact_person = models.CharField(max_length=150, blank=True, null=True)
+
+    bank_name = models.CharField(max_length=150, blank=True, null=True)
+    bank_branch = models.CharField(max_length=150, blank=True, null=True)
+    account_name = models.CharField(max_length=150, blank=True, null=True)
+    account_number = models.CharField(max_length=80, blank=True, null=True)
+
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -35,7 +45,7 @@ class Supplier(models.Model):
 
     def __str__(self):
         return self.name
-
+    
 
 class GLMaster(models.Model):
     GL_TYPE_CHOICES = [
@@ -781,6 +791,7 @@ class Customer(models.Model):
     email = models.EmailField(blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     credit_limit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    registration_no = models.CharField(max_length=100, blank=True, null=True)
     receivable_gl_account = models.ForeignKey(
         GLMaster,
         on_delete=models.SET_NULL,
@@ -813,6 +824,13 @@ class SupplierAdvance(models.Model):
     advance_no = models.CharField(max_length=30, unique=True, blank=True, null=True)
     supplier = models.ForeignKey("Supplier", on_delete=models.PROTECT, related_name="advances")
     project = models.ForeignKey("Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="supplier_advances")
+    po = models.ForeignKey(
+    "PurchaseOrder",
+    on_delete=models.SET_NULL,
+    null=True,
+    blank=True,
+    related_name="advances"
+)
     advance_date = models.DateField(default=timezone.now)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
@@ -975,37 +993,59 @@ class SupplierSettlementAdvanceLink(models.Model):
         return f"{self.settlement.settlement_no} - {self.advance.advance_no}"
     
 class PurchaseOrder(models.Model):
-    ORDER_TYPE_CHOICES = [
-        ("item", "Item"),
-        ("service", "Service"),
-        ("rental", "Rental"),
-        ("other", "Other"),
+    PAYMENT_METHOD_CHOICES = [
+        ("cash", "Cash"),
+        ("bank", "Bank Transfer"),
+        ("cheque", "Cheque"),
     ]
 
     STATUS_CHOICES = [
         ("draft", "Draft"),
         ("approved", "Approved"),
-        ("partially_used", "Partially Used"),
         ("closed", "Closed"),
     ]
 
     po_no = models.CharField(max_length=30, unique=True, blank=True, null=True)
     po_date = models.DateField(default=timezone.now)
+    delivery_date_required = models.DateField(blank=True, null=True)
+
+    buyer_company_name = models.CharField(max_length=200, blank=True, null=True)
+    buyer_address = models.TextField(blank=True, null=True)
+    buyer_contact_person = models.CharField(max_length=150, blank=True, null=True)
+    buyer_phone = models.CharField(max_length=50, blank=True, null=True)
+    buyer_email = models.EmailField(blank=True, null=True)
 
     supplier = models.ForeignKey("Supplier", on_delete=models.PROTECT, related_name="purchase_orders")
+    supplier_address = models.TextField(blank=True, null=True)
+    supplier_contact_details = models.CharField(max_length=255, blank=True, null=True)
+
     project = models.ForeignKey("Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="purchase_orders")
 
-    order_type = models.CharField(max_length=20, choices=ORDER_TYPE_CHOICES, default="service")
-    description = models.CharField(max_length=255)
+    payment_method = models.CharField(max_length=20, choices=PAYMENT_METHOD_CHOICES, default="bank")
+    payment_period = models.CharField(max_length=100, blank=True, null=True)
 
-    qty = models.DecimalField(max_digits=12, decimal_places=2, default=1)
-    rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    estimated_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    delivery_location = models.CharField(max_length=255, blank=True, null=True)
+    delivery_method = models.CharField(max_length=100, blank=True, null=True)
+    special_instructions = models.TextField(blank=True, null=True)
+
+    terms_and_conditions = models.TextField(blank=True, null=True)
+    warranty_details = models.TextField(blank=True, null=True)
+    return_policy = models.TextField(blank=True, null=True)
+    penalties_conditions = models.TextField(blank=True, null=True)
+
+    authorized_person_name = models.CharField(max_length=150, blank=True, null=True)
+    signature_text = models.CharField(max_length=150, blank=True, null=True)
 
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     note = models.TextField(blank=True, null=True)
 
-    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_purchase_orders")
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_purchase_orders"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1019,16 +1059,35 @@ class PurchaseOrder(models.Model):
                 self.po_no = f"PO{next_no:05d}"
             else:
                 self.po_no = "PO00001"
-
-        if not self.estimated_amount:
-            self.estimated_amount = Decimal(str(self.qty or 0)) * Decimal(str(self.rate or 0))
-
         super().save(*args, **kwargs)
+
+    @property
+    def grand_total(self):
+        return self.items.aggregate(total=Sum("line_total"))["total"] or Decimal("0")
 
     def __str__(self):
         return self.po_no or f"PO {self.id}"
     
+class PurchaseOrderItem(models.Model):
+    purchase_order = models.ForeignKey(
+        "PurchaseOrder",
+        on_delete=models.CASCADE,
+        related_name="items"
+    )
+    description = models.CharField(max_length=255)
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, default=1)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    line_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
+    class Meta:
+        ordering = ["id"]
+
+    def save(self, *args, **kwargs):
+        self.line_total = Decimal(str(self.quantity or 0)) * Decimal(str(self.unit_price or 0))
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.description
     
 
 

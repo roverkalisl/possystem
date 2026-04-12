@@ -12,7 +12,7 @@
         <form method="get" class="row g-2">
             <div class="col-md-10">
                 <input type="text" name="q" value="{{ query }}" class="form-control"
-                       placeholder="Search by PO No / Supplier / Project / Description">
+                       placeholder="Search by PO No / Supplier / Project / Buyer">
             </div>
             <div class="col-md-2 d-grid">
                 <button type="submit" class="btn btn-outline-primary">Search</button>
@@ -31,11 +31,9 @@
                         <th>Date</th>
                         <th>Supplier</th>
                         <th>Project</th>
-                        <th>Type</th>
-                        <th>Description</th>
-                        <th class="text-end">Qty</th>
-                        <th class="text-end">Rate</th>
-                        <th class="text-end">Estimated</th>
+                        <th>Buyer</th>
+                        <th>Delivery Date</th>
+                        <th class="text-end">Total</th>
                         <th>Status</th>
                         <th class="text-center" style="width:90px;">Action</th>
                     </tr>
@@ -46,18 +44,10 @@
                         <td>{{ o.po_no }}</td>
                         <td>{{ o.po_date }}</td>
                         <td>{{ o.supplier.name }}</td>
-                        <td>
-                            {% if o.project %}
-                                {{ o.project.project_id }} - {{ o.project.project_name }}
-                            {% else %}
-                                -
-                            {% endif %}
-                        </td>
-                        <td>{{ o.get_order_type_display }}</td>
-                        <td>{{ o.description }}</td>
-                        <td class="text-end">{{ o.qty }}</td>
-                        <td class="text-end">{{ o.rate }}</td>
-                        <td class="text-end">{{ o.estimated_amount }}</td>
+                        <td>{% if o.project %}{{ o.project.project_id }} - {{ o.project.project_name }}{% else %}-{% endif %}</td>
+                        <td>{{ o.buyer_company_name|default:"-" }}</td>
+                        <td>{{ o.delivery_date_required|default:"-" }}</td>
+                        <td class="text-end">{{ o.grand_total }}</td>
                         <td>{{ o.get_status_display }}</td>
                         <td class="text-center">
                             <a href="{% url 'edit_purchase_order' o.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
@@ -65,7 +55,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="11" class="text-center text-muted py-4">No purchase orders found.</td>
+                        <td colspan="9" class="text-center text-muted py-4">No purchase orders found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>

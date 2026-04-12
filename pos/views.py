@@ -17,12 +17,23 @@ from .models import (
     Sale, SaleItem, SalesReturn, StockTransaction, SaleRecovery,
     Project, ProjectExpense, ProjectPettyCash,
     ProjectPettyCashExpense, ProjectIncome, Employee,
-    ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem,SupplierAdvance,
-    SupplierSettlement, SupplierSettlementAdvanceLink,PurchaseOrder)
-
+    ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem,
+    SupplierAdvance, SupplierSettlement, PurchaseOrder, PurchaseOrderItem
+)
 # =========================
 # HELPERS
 # =========================
+def get_customer_outstanding(customer):
+    total_outstanding = Decimal("0")
+    credit_sales = customer.sales.filter(payment_method="credit")
+
+    for sale in credit_sales:
+        total_outstanding += Decimal(str(sale.credit_balance or 0))
+
+    return total_outstanding
+
+
+
 def generate_purchase_order_no():
     last = PurchaseOrder.objects.exclude(po_no__isnull=True).order_by("-id").first()
     if last and last.po_no and str(last.po_no).replace("PO", "").isdigit():
@@ -379,28 +390,19 @@ def save_sale(request):
                 sale_type = "retail"
 
             if sale_type == "project_issue" and not project_id:
-                return JsonResponse({
-                    "status": "error",
-                    "message": "Project is required for project issue sales."
-                }, status=400)
+                return JsonResponse({"status": "error", "message": "Project is required for project issue sales."}, status=400)
 
             project = None
             if project_id:
                 project = Project.objects.filter(id=project_id, is_active=True).first()
                 if not project and sale_type == "project_issue":
-                    return JsonResponse({
-                        "status": "error",
-                        "message": "Selected project not found."
-                    }, status=400)
+                    return JsonResponse({"status": "error", "message": "Selected project not found."}, status=400)
 
             customer = None
             if customer_id:
                 customer = Customer.objects.filter(id=customer_id, is_active=True).first()
                 if not customer:
-                    return JsonResponse({
-                        "status": "error",
-                        "message": "Selected customer not found."
-                    }, status=400)
+                    return JsonResponse({"status": "error", "message": "Selected customer not found."}, status=400)
 
                 if not customer_name:
                     customer_name = customer.name
@@ -408,22 +410,23 @@ def save_sale(request):
                     customer_phone = customer.phone
 
             if payment_method not in ["cash", "card", "credit"]:
-                return JsonResponse({
-                    "status": "error",
-                    "message": "Invalid payment method."
-                }, status=400)
+                return JsonResponse({"status": "error", "message": "Invalid payment method."}, status=400)
 
             if payment_method == "card" and not card_last4:
-                return JsonResponse({
-                    "status": "error",
-                    "message": "Card last 4 digits required for card payment."
-                }, status=400)
+                return JsonResponse({"status": "error", "message": "Card last 4 digits required for card payment."}, status=400)
 
             if payment_method == "credit" and not cheque_number:
-                return JsonResponse({
-                    "status": "error",
-                    "message": "Cheque / Ref No required for credit sale."
-                }, status=400)
+                return JsonResponse({"status": "error", "message": "Cheque / Ref No required for credit sale."}, status=400)
+
+            if payment_method == "credit":
+                if not customer:
+                    return JsonResponse({"status": "error", "message": "Please select a customer for credit sale."}, status=400)
+
+                if not customer.registration_no:
+                    return JsonResponse({
+                        "status": "error",
+                        "message": f"Customer registration number is required for credit sale. Please update customer: {customer.name}"
+                    }, status=400)
 
             if sale_type == "project_issue" and not customer_name and project:
                 customer_name = f"Project - {project.project_id}"
@@ -458,38 +461,23 @@ def save_sale(request):
                 gl_error = validate_item_gl_or_message(item)
                 if gl_error:
                     transaction.set_rollback(True)
-                    return JsonResponse({
-                        "status": "error",
-                        "message": gl_error
-                    }, status=400)
+                    return JsonResponse({"status": "error", "message": gl_error}, status=400)
 
                 qty = to_decimal(i.get("qty"))
                 price = to_decimal(i.get("price"))
                 discount = to_decimal(i.get("discount") or 0)
 
                 if qty <= 0:
-                    return JsonResponse({
-                        "status": "error",
-                        "message": f"Invalid qty for item: {item.name}"
-                    }, status=400)
+                    return JsonResponse({"status": "error", "message": f"Invalid qty for item: {item.name}"}, status=400)
 
                 if price < 0:
-                    return JsonResponse({
-                        "status": "error",
-                        "message": f"Invalid price for item: {item.name}"
-                    }, status=400)
+                    return JsonResponse({"status": "error", "message": f"Invalid price for item: {item.name}"}, status=400)
 
                 if discount < 0:
-                    return JsonResponse({
-                        "status": "error",
-                        "message": f"Invalid discount for item: {item.name}"
-                    }, status=400)
+                    return JsonResponse({"status": "error", "message": f"Invalid discount for item: {item.name}"}, status=400)
 
                 if not item.allow_discount and discount > 0:
-                    return JsonResponse({
-                        "status": "error",
-                        "message": f"Discount not allowed for item: {item.name}"
-                    }, status=400)
+                    return JsonResponse({"status": "error", "message": f"Discount not allowed for item: {item.name}"}, status=400)
 
                 allowed_discount = Decimal(str(item.max_discount_value or 0)) * qty
                 if discount > allowed_discount:
@@ -502,19 +490,12 @@ def save_sale(request):
                 net_amount = gross_amount - discount
 
                 if net_amount < 0:
-                    return JsonResponse({
-                        "status": "error",
-                        "message": f"Net amount cannot be negative for item: {item.name}"
-                    }, status=400)
+                    return JsonResponse({"status": "error", "message": f"Net amount cannot be negative for item: {item.name}"}, status=400)
 
                 if not item.is_service:
                     current_stock = Decimal(str(item.stock or 0))
-
                     if current_stock <= 0:
-                        return JsonResponse({
-                            "status": "error",
-                            "message": f"{item.name} is out of stock."
-                        }, status=400)
+                        return JsonResponse({"status": "error", "message": f"{item.name} is out of stock."}, status=400)
 
                     if qty > current_stock:
                         return JsonResponse({
@@ -550,10 +531,18 @@ def save_sale(request):
 
             if final_grand_total < 0:
                 transaction.set_rollback(True)
-                return JsonResponse({
-                    "status": "error",
-                    "message": "Grand total cannot be negative."
-                }, status=400)
+                return JsonResponse({"status": "error", "message": "Grand total cannot be negative."}, status=400)
+
+            if payment_method == "credit" and customer:
+                current_outstanding = get_customer_outstanding(customer)
+                customer_credit_limit = Decimal(str(customer.credit_limit or 0))
+
+                if (current_outstanding + final_grand_total) > customer_credit_limit:
+                    transaction.set_rollback(True)
+                    return JsonResponse({
+                        "status": "error",
+                        "message": f"Credit limit exceeded for {customer.name}. Limit: Rs. {customer_credit_limit:.2f}, Outstanding: Rs. {current_outstanding:.2f}"
+                    }, status=400)
 
             sale.total = final_total
             sale.grand_total = final_grand_total
@@ -577,17 +566,9 @@ def save_sale(request):
             })
 
     except Item.DoesNotExist:
-        return JsonResponse({
-            "status": "error",
-            "message": "Selected item not found."
-        }, status=404)
-
+        return JsonResponse({"status": "error", "message": "Selected item not found."}, status=404)
     except Exception as e:
-        return JsonResponse({
-            "status": "error",
-            "message": str(e)
-        }, status=500)
-    
+        return JsonResponse({"status": "error", "message": str(e)}, status=500)    
 @user_passes_test(can_use_pos)
 def invoice_page(request, sale_id):
     sale = get_object_or_404(Sale, id=sale_id)
@@ -1475,7 +1456,6 @@ def delete_petty_cash_expense(request, expense_id):
     mark_inactive(expense, request.user, "Deactivated by owner")
     messages.success(request, "Petty cash expense deactivated successfully.")
     return redirect("petty_cash_detail", petty_cash_id=petty_cash_id)
-
 
 # =========================
 # PETTY CASH APPROVALS
@@ -2400,9 +2380,13 @@ def supplier_list(request):
     if query:
         suppliers = suppliers.filter(
             Q(name__icontains=query) |
-            Q(phone__icontains=query) |
+            Q(phone_1__icontains=query) |
+            Q(phone_2__icontains=query) |
+            Q(phone_3__icontains=query) |
             Q(email__icontains=query) |
-            Q(contact_person__icontains=query)
+            Q(contact_person__icontains=query) |
+            Q(bank_name__icontains=query) |
+            Q(account_number__icontains=query)
         )
 
     return render(request, "pos/supplier_list.html", {
@@ -2410,15 +2394,21 @@ def supplier_list(request):
         "query": query,
     })
 
-
 @user_passes_test(can_manage_items)
 def add_supplier(request):
     if request.method == "POST":
         name = (request.POST.get("name") or "").strip()
         address = (request.POST.get("address") or "").strip()
-        phone = (request.POST.get("phone") or "").strip()
+        phone_1 = (request.POST.get("phone_1") or "").strip()
+        phone_2 = (request.POST.get("phone_2") or "").strip()
+        phone_3 = (request.POST.get("phone_3") or "").strip()
         email = (request.POST.get("email") or "").strip()
         contact_person = (request.POST.get("contact_person") or "").strip()
+
+        bank_name = (request.POST.get("bank_name") or "").strip()
+        bank_branch = (request.POST.get("bank_branch") or "").strip()
+        account_name = (request.POST.get("account_name") or "").strip()
+        account_number = (request.POST.get("account_number") or "").strip()
 
         if not name:
             messages.error(request, "Supplier name is required.")
@@ -2431,9 +2421,15 @@ def add_supplier(request):
         Supplier.objects.create(
             name=name,
             address=address or None,
-            phone=phone or None,
+            phone_1=phone_1 or None,
+            phone_2=phone_2 or None,
+            phone_3=phone_3 or None,
             email=email or None,
             contact_person=contact_person or None,
+            bank_name=bank_name or None,
+            bank_branch=bank_branch or None,
+            account_name=account_name or None,
+            account_number=account_number or None,
             is_active=True,
         )
 
@@ -2442,7 +2438,6 @@ def add_supplier(request):
 
     return render(request, "pos/add_supplier.html")
 
-
 @user_passes_test(can_manage_items)
 def edit_supplier(request, supplier_id):
     supplier = get_object_or_404(Supplier, id=supplier_id)
@@ -2450,9 +2445,17 @@ def edit_supplier(request, supplier_id):
     if request.method == "POST":
         name = (request.POST.get("name") or "").strip()
         address = (request.POST.get("address") or "").strip()
-        phone = (request.POST.get("phone") or "").strip()
+        phone_1 = (request.POST.get("phone_1") or "").strip()
+        phone_2 = (request.POST.get("phone_2") or "").strip()
+        phone_3 = (request.POST.get("phone_3") or "").strip()
         email = (request.POST.get("email") or "").strip()
         contact_person = (request.POST.get("contact_person") or "").strip()
+
+        bank_name = (request.POST.get("bank_name") or "").strip()
+        bank_branch = (request.POST.get("bank_branch") or "").strip()
+        account_name = (request.POST.get("account_name") or "").strip()
+        account_number = (request.POST.get("account_number") or "").strip()
+
         is_active = request.POST.get("is_active") == "on"
 
         if not name:
@@ -2465,18 +2468,22 @@ def edit_supplier(request, supplier_id):
 
         supplier.name = name
         supplier.address = address or None
-        supplier.phone = phone or None
+        supplier.phone_1 = phone_1 or None
+        supplier.phone_2 = phone_2 or None
+        supplier.phone_3 = phone_3 or None
         supplier.email = email or None
         supplier.contact_person = contact_person or None
+        supplier.bank_name = bank_name or None
+        supplier.bank_branch = bank_branch or None
+        supplier.account_name = account_name or None
+        supplier.account_number = account_number or None
         supplier.is_active = is_active
         supplier.save()
 
         messages.success(request, "Supplier updated successfully.")
         return redirect("supplier_list")
 
-    return render(request, "pos/edit_supplier.html", {
-        "supplier": supplier,
-    })
+    return render(request, "pos/edit_supplier.html", {"supplier": supplier})
 @user_passes_test(can_use_project)
 def supplier_advance_list(request):
     query = request.GET.get("q", "").strip()
@@ -2499,6 +2506,74 @@ def supplier_advance_list(request):
         "is_owner": is_owner(request.user),
     })
 
+@user_passes_test(can_use_project)
+def add_supplier_advance(request):
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+    gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
+    purchase_orders = PurchaseOrder.objects.select_related("supplier", "project").order_by("-po_date", "-id")
+    next_advance_no = generate_supplier_advance_no()
+
+    context = {
+        "suppliers": suppliers,
+        "projects": projects,
+        "gl_list": gl_list,
+        "purchase_orders": purchase_orders,
+        "next_advance_no": next_advance_no,
+    }
+
+    if request.method == "POST":
+        po_id = request.POST.get("po") or None
+        supplier_id = request.POST.get("supplier") or None
+        project_id = request.POST.get("project") or None
+        advance_date = request.POST.get("advance_date") or timezone.localdate()
+        amount = to_decimal(request.POST.get("amount") or 0)
+        payment_method = request.POST.get("payment_method") or "cash"
+        paid_from_gl_id = request.POST.get("paid_from_gl") or None
+        advance_gl_id = request.POST.get("advance_gl") or None
+        note = (request.POST.get("note") or "").strip()
+
+        if po_id:
+            po = PurchaseOrder.objects.filter(id=po_id).first()
+            if po:
+                supplier_id = po.supplier_id
+                project_id = po.project_id
+
+        if not supplier_id:
+            messages.error(request, "Supplier is required.")
+            return render(request, "pos/add_supplier_advance.html", context)
+
+        if amount <= 0:
+            messages.error(request, "Amount must be greater than 0.")
+            return render(request, "pos/add_supplier_advance.html", context)
+
+        if not paid_from_gl_id:
+            messages.error(request, "Paid From GL is required.")
+            return render(request, "pos/add_supplier_advance.html", context)
+
+        if not advance_gl_id:
+            messages.error(request, "Advance GL is required.")
+            return render(request, "pos/add_supplier_advance.html", context)
+
+        SupplierAdvance.objects.create(
+            advance_no=next_advance_no,
+            po_id=po_id,
+            supplier_id=supplier_id,
+            project_id=project_id,
+            advance_date=advance_date,
+            amount=amount,
+            payment_method=payment_method,
+            paid_from_gl_id=paid_from_gl_id,
+            advance_gl_id=advance_gl_id,
+            note=note,
+            status="approved",
+            created_by=request.user,
+        )
+
+        messages.success(request, "Supplier advance saved successfully.")
+        return redirect("supplier_advance_list")
+
+    return render(request, "pos/add_supplier_advance.html", context)
 
 @user_passes_test(can_use_project)
 def add_supplier_advance(request):
@@ -2719,7 +2794,7 @@ def purchase_order_list(request):
 
     orders = PurchaseOrder.objects.select_related(
         "supplier", "project", "created_by"
-    ).order_by("-po_date", "-id")
+    ).prefetch_related("items").order_by("-po_date", "-id")
 
     if query:
         orders = orders.filter(
@@ -2727,7 +2802,7 @@ def purchase_order_list(request):
             Q(supplier__name__icontains=query) |
             Q(project__project_id__icontains=query) |
             Q(project__project_name__icontains=query) |
-            Q(description__icontains=query)
+            Q(buyer_company_name__icontains=query)
         )
 
     return render(request, "pos/purchase_order_list.html", {
@@ -2735,7 +2810,6 @@ def purchase_order_list(request):
         "query": query,
         "is_owner": is_owner(request.user),
     })
-
 
 @user_passes_test(can_use_project)
 def add_purchase_order(request):
@@ -2751,59 +2825,124 @@ def add_purchase_order(request):
 
     if request.method == "POST":
         po_date = request.POST.get("po_date") or timezone.localdate()
+        delivery_date_required = request.POST.get("delivery_date_required") or None
+
         supplier_id = request.POST.get("supplier") or None
         project_id = request.POST.get("project") or None
-        order_type = request.POST.get("order_type") or "service"
-        description = (request.POST.get("description") or "").strip()
-        qty = to_decimal(request.POST.get("qty") or 0)
-        rate = to_decimal(request.POST.get("rate") or 0)
-        estimated_amount = to_decimal(request.POST.get("estimated_amount") or 0)
+
+        buyer_company_name = (request.POST.get("buyer_company_name") or "").strip()
+        buyer_address = (request.POST.get("buyer_address") or "").strip()
+        buyer_contact_person = (request.POST.get("buyer_contact_person") or "").strip()
+        buyer_phone = (request.POST.get("buyer_phone") or "").strip()
+        buyer_email = (request.POST.get("buyer_email") or "").strip()
+
+        supplier_address = (request.POST.get("supplier_address") or "").strip()
+        supplier_contact_details = (request.POST.get("supplier_contact_details") or "").strip()
+
+        payment_method = request.POST.get("payment_method") or "bank"
+        payment_period = (request.POST.get("payment_period") or "").strip()
+
+        delivery_location = (request.POST.get("delivery_location") or "").strip()
+        delivery_method = (request.POST.get("delivery_method") or "").strip()
+        special_instructions = (request.POST.get("special_instructions") or "").strip()
+
+        terms_and_conditions = (request.POST.get("terms_and_conditions") or "").strip()
+        warranty_details = (request.POST.get("warranty_details") or "").strip()
+        return_policy = (request.POST.get("return_policy") or "").strip()
+        penalties_conditions = (request.POST.get("penalties_conditions") or "").strip()
+
+        authorized_person_name = (request.POST.get("authorized_person_name") or "").strip()
+        signature_text = (request.POST.get("signature_text") or "").strip()
         status = request.POST.get("status") or "draft"
         note = (request.POST.get("note") or "").strip()
+
+        descriptions = request.POST.getlist("item_description[]")
+        quantities = request.POST.getlist("item_qty[]")
+        unit_prices = request.POST.getlist("item_price[]")
 
         if not supplier_id:
             messages.error(request, "Supplier is required.")
             return render(request, "pos/add_purchase_order.html", context)
 
-        if not description:
-            messages.error(request, "Description is required.")
+        cleaned_rows = []
+        row_count = max(len(descriptions), len(quantities), len(unit_prices))
+
+        for i in range(row_count):
+            desc = (descriptions[i] if i < len(descriptions) else "").strip()
+            qty = to_decimal(quantities[i] if i < len(quantities) else 0)
+            price = to_decimal(unit_prices[i] if i < len(unit_prices) else 0)
+
+            if not desc and qty <= 0 and price <= 0:
+                continue
+
+            if not desc:
+                messages.error(request, f"Item description is required for row {i+1}.")
+                return render(request, "pos/add_purchase_order.html", context)
+
+            if qty <= 0:
+                messages.error(request, f"Qty must be greater than 0 for row {i+1}.")
+                return render(request, "pos/add_purchase_order.html", context)
+
+            if price < 0:
+                messages.error(request, f"Price cannot be negative for row {i+1}.")
+                return render(request, "pos/add_purchase_order.html", context)
+
+            cleaned_rows.append({
+                "description": desc,
+                "quantity": qty,
+                "unit_price": price,
+            })
+
+        if not cleaned_rows:
+            messages.error(request, "At least one PO item is required.")
             return render(request, "pos/add_purchase_order.html", context)
 
-        if qty <= 0:
-            messages.error(request, "Qty must be greater than 0.")
-            return render(request, "pos/add_purchase_order.html", context)
+        with transaction.atomic():
+            po = PurchaseOrder.objects.create(
+                po_no=next_po_no,
+                po_date=po_date,
+                delivery_date_required=delivery_date_required,
+                supplier_id=supplier_id,
+                project_id=project_id,
+                buyer_company_name=buyer_company_name or None,
+                buyer_address=buyer_address or None,
+                buyer_contact_person=buyer_contact_person or None,
+                buyer_phone=buyer_phone or None,
+                buyer_email=buyer_email or None,
+                supplier_address=supplier_address or None,
+                supplier_contact_details=supplier_contact_details or None,
+                payment_method=payment_method,
+                payment_period=payment_period or None,
+                delivery_location=delivery_location or None,
+                delivery_method=delivery_method or None,
+                special_instructions=special_instructions or None,
+                terms_and_conditions=terms_and_conditions or None,
+                warranty_details=warranty_details or None,
+                return_policy=return_policy or None,
+                penalties_conditions=penalties_conditions or None,
+                authorized_person_name=authorized_person_name or None,
+                signature_text=signature_text or None,
+                status=status,
+                note=note or None,
+                created_by=request.user,
+            )
 
-        if rate < 0:
-            messages.error(request, "Rate cannot be negative.")
-            return render(request, "pos/add_purchase_order.html", context)
-
-        if estimated_amount <= 0:
-            estimated_amount = qty * rate
-
-        PurchaseOrder.objects.create(
-            po_no=next_po_no,
-            po_date=po_date,
-            supplier_id=supplier_id,
-            project_id=project_id,
-            order_type=order_type,
-            description=description,
-            qty=qty,
-            rate=rate,
-            estimated_amount=estimated_amount,
-            status=status,
-            note=note,
-            created_by=request.user,
-        )
+            for row in cleaned_rows:
+                PurchaseOrderItem.objects.create(
+                    purchase_order=po,
+                    description=row["description"],
+                    quantity=row["quantity"],
+                    unit_price=row["unit_price"],
+                )
 
         messages.success(request, "Purchase Order created successfully.")
         return redirect("purchase_order_list")
 
     return render(request, "pos/add_purchase_order.html", context)
 
-
 @user_passes_test(can_use_project)
 def edit_purchase_order(request, po_id):
-    order = get_object_or_404(PurchaseOrder, id=po_id)
+    order = get_object_or_404(PurchaseOrder.objects.prefetch_related("items"), id=po_id)
     suppliers = Supplier.objects.filter(is_active=True).order_by("name")
     projects = Project.objects.filter(is_active=True).order_by("-id")
 
@@ -2815,37 +2954,112 @@ def edit_purchase_order(request, po_id):
 
     if request.method == "POST":
         order.po_date = request.POST.get("po_date") or order.po_date
+        order.delivery_date_required = request.POST.get("delivery_date_required") or None
         order.supplier_id = request.POST.get("supplier") or None
         order.project_id = request.POST.get("project") or None
-        order.order_type = request.POST.get("order_type") or "service"
-        order.description = (request.POST.get("description") or "").strip()
-        order.qty = to_decimal(request.POST.get("qty") or 0)
-        order.rate = to_decimal(request.POST.get("rate") or 0)
-        order.estimated_amount = to_decimal(request.POST.get("estimated_amount") or 0)
+
+        order.buyer_company_name = (request.POST.get("buyer_company_name") or "").strip() or None
+        order.buyer_address = (request.POST.get("buyer_address") or "").strip() or None
+        order.buyer_contact_person = (request.POST.get("buyer_contact_person") or "").strip() or None
+        order.buyer_phone = (request.POST.get("buyer_phone") or "").strip() or None
+        order.buyer_email = (request.POST.get("buyer_email") or "").strip() or None
+
+        order.supplier_address = (request.POST.get("supplier_address") or "").strip() or None
+        order.supplier_contact_details = (request.POST.get("supplier_contact_details") or "").strip() or None
+
+        order.payment_method = request.POST.get("payment_method") or "bank"
+        order.payment_period = (request.POST.get("payment_period") or "").strip() or None
+
+        order.delivery_location = (request.POST.get("delivery_location") or "").strip() or None
+        order.delivery_method = (request.POST.get("delivery_method") or "").strip() or None
+        order.special_instructions = (request.POST.get("special_instructions") or "").strip() or None
+
+        order.terms_and_conditions = (request.POST.get("terms_and_conditions") or "").strip() or None
+        order.warranty_details = (request.POST.get("warranty_details") or "").strip() or None
+        order.return_policy = (request.POST.get("return_policy") or "").strip() or None
+        order.penalties_conditions = (request.POST.get("penalties_conditions") or "").strip() or None
+
+        order.authorized_person_name = (request.POST.get("authorized_person_name") or "").strip() or None
+        order.signature_text = (request.POST.get("signature_text") or "").strip() or None
         order.status = request.POST.get("status") or "draft"
-        order.note = (request.POST.get("note") or "").strip()
+        order.note = (request.POST.get("note") or "").strip() or None
 
         if not order.supplier_id:
             messages.error(request, "Supplier is required.")
             return render(request, "pos/edit_purchase_order.html", context)
 
-        if not order.description:
-            messages.error(request, "Description is required.")
+        descriptions = request.POST.getlist("item_description[]")
+        quantities = request.POST.getlist("item_qty[]")
+        unit_prices = request.POST.getlist("item_price[]")
+
+        cleaned_rows = []
+        row_count = max(len(descriptions), len(quantities), len(unit_prices))
+
+        for i in range(row_count):
+            desc = (descriptions[i] if i < len(descriptions) else "").strip()
+            qty = to_decimal(quantities[i] if i < len(quantities) else 0)
+            price = to_decimal(unit_prices[i] if i < len(unit_prices) else 0)
+
+            if not desc and qty <= 0 and price <= 0:
+                continue
+
+            if not desc:
+                messages.error(request, f"Item description is required for row {i+1}.")
+                return render(request, "pos/edit_purchase_order.html", context)
+
+            if qty <= 0:
+                messages.error(request, f"Qty must be greater than 0 for row {i+1}.")
+                return render(request, "pos/edit_purchase_order.html", context)
+
+            if price < 0:
+                messages.error(request, f"Price cannot be negative for row {i+1}.")
+                return render(request, "pos/edit_purchase_order.html", context)
+
+            cleaned_rows.append({
+                "description": desc,
+                "quantity": qty,
+                "unit_price": price,
+            })
+
+        if not cleaned_rows:
+            messages.error(request, "At least one PO item is required.")
             return render(request, "pos/edit_purchase_order.html", context)
 
-        if order.qty <= 0:
-            messages.error(request, "Qty must be greater than 0.")
-            return render(request, "pos/edit_purchase_order.html", context)
+        with transaction.atomic():
+            order.save()
+            order.items.all().delete()
 
-        if order.rate < 0:
-            messages.error(request, "Rate cannot be negative.")
-            return render(request, "pos/edit_purchase_order.html", context)
+            for row in cleaned_rows:
+                PurchaseOrderItem.objects.create(
+                    purchase_order=order,
+                    description=row["description"],
+                    quantity=row["quantity"],
+                    unit_price=row["unit_price"],
+                )
 
-        if order.estimated_amount <= 0:
-            order.estimated_amount = order.qty * order.rate
-
-        order.save()
         messages.success(request, "Purchase Order updated successfully.")
         return redirect("purchase_order_list")
 
     return render(request, "pos/edit_purchase_order.html", context)
+
+@user_passes_test(can_use_project)
+def purchase_order_data(request, po_id):
+    po = get_object_or_404(
+        PurchaseOrder.objects.select_related("supplier", "project"),
+        id=po_id
+    )
+
+    return JsonResponse({
+        "id": po.id,
+        "po_no": po.po_no,
+        "supplier_id": po.supplier_id,
+        "supplier_name": po.supplier.name,
+        "project_id": po.project_id,
+        "project_name": po.project.project_name if po.project else "",
+        "project_code": po.project.project_id if po.project else "",
+        "description": "",
+        "estimated_amount": str(po.grand_total or 0),
+        "note": po.note or "",
+        "delivery_location": po.delivery_location or "",
+    })
+
