@@ -9,6 +9,8 @@
         <h4 class="app-page-title">Petty Cash List</h4>
         <div class="d-flex gap-2 flex-wrap">
             <a href="{% url 'add_petty_cash' %}" class="btn btn-primary btn-sm">+ Add Petty Cash</a>
+		<a href="{% url 'petty_cash_ledger_report' %}" class="btn btn-outline-primary">  Petty Cash Ledger
+</a>
             <a href="{% url 'add_petty_cash_expense_entry' %}" class="btn btn-outline-primary btn-sm">+ Petty Cash Expenses</a>
             {% if is_owner %}
             <a href="{% url 'petty_cash_expense_approvals' %}" class="btn btn-outline-dark btn-sm">Approvals</a>

@@ -1232,6 +1232,101 @@ def petty_cash_list(request):
     })
 
 @user_passes_test(can_use_project)
+def petty_cash_ledger_report(request):
+    employee_id = request.GET.get("employee") or ""
+    petty_cash_id = request.GET.get("petty_cash") or ""
+    date_from = request.GET.get("date_from") or ""
+    date_to = request.GET.get("date_to") or ""
+    status_filter = request.GET.get("status") or "all"
+
+    employees = Employee.objects.filter(is_active=True).order_by("emp_no")
+    petty_cash_records = ProjectPettyCash.objects.filter(is_active=True).select_related("employee").order_by("-issue_date", "-id")
+
+    ledger_rows = []
+
+    petty_cash_qs = ProjectPettyCash.objects.filter(is_active=True).select_related("employee").order_by("issue_date", "id")
+
+    if employee_id:
+        petty_cash_qs = petty_cash_qs.filter(employee_id=employee_id)
+
+    if petty_cash_id:
+        petty_cash_qs = petty_cash_qs.filter(id=petty_cash_id)
+
+    if date_from:
+        petty_cash_qs = petty_cash_qs.filter(issue_date__gte=date_from)
+
+    if date_to:
+        petty_cash_qs = petty_cash_qs.filter(issue_date__lte=date_to)
+
+    for pc in petty_cash_qs:
+        expenses = pc.expenses.filter(is_active=True).select_related("project", "gl_account").order_by("expense_date", "id")
+
+        if status_filter in ["pending", "approved", "rejected"]:
+            expenses = expenses.filter(approval_status=status_filter)
+
+        if date_from:
+            expenses = expenses.filter(expense_date__gte=date_from)
+
+        if date_to:
+            expenses = expenses.filter(expense_date__lte=date_to)
+
+        running_balance = Decimal("0")
+
+        # reimbursement / issue row
+        running_balance += Decimal(str(pc.amount_issued or 0))
+        ledger_rows.append({
+            "row_type": "issue",
+            "date": pc.issue_date,
+            "ref_no": pc.petty_cash_no,
+            "petty_cash_no": pc.petty_cash_no,
+            "employee": pc.employee,
+            "project": None,
+            "gl_name": "",
+            "description": pc.note or "Petty cash issued",
+            "bill_no": "",
+            "reimbursement_amount": Decimal(str(pc.amount_issued or 0)),
+            "expense_amount": Decimal("0"),
+            "balance": running_balance,
+            "status": "issued",
+        })
+
+        for exp in expenses:
+            running_balance -= Decimal(str(exp.amount or 0))
+            ledger_rows.append({
+                "row_type": "expense",
+                "date": exp.expense_date,
+                "ref_no": exp.expense_no,
+                "petty_cash_no": pc.petty_cash_no,
+                "employee": pc.employee,
+                "project": exp.project,
+                "gl_name": exp.gl_account.gl_name if exp.gl_account else "",
+                "description": exp.description or "",
+                "bill_no": exp.bill_no or "",
+                "reimbursement_amount": Decimal("0"),
+                "expense_amount": Decimal(str(exp.amount or 0)),
+                "balance": running_balance,
+                "status": exp.approval_status,
+            })
+
+    total_reimbursement = sum((row["reimbursement_amount"] for row in ledger_rows), Decimal("0"))
+    total_expense = sum((row["expense_amount"] for row in ledger_rows), Decimal("0"))
+    closing_balance = total_reimbursement - total_expense
+
+    return render(request, "pos/petty_cash_ledger_report.html", {
+        "ledger_rows": ledger_rows,
+        "employees": employees,
+        "petty_cash_records": petty_cash_records,
+        "selected_employee": employee_id,
+        "selected_petty_cash": petty_cash_id,
+        "date_from": date_from,
+        "date_to": date_to,
+        "status_filter": status_filter,
+        "total_reimbursement": total_reimbursement,
+        "total_expense": total_expense,
+        "closing_balance": closing_balance,
+    })
+
+@user_passes_test(can_use_project)
 def add_petty_cash(request):
     employees = Employee.objects.filter(is_active=True).order_by("emp_no")
 

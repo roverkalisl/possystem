@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Petty Cash Ledger Report{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="page-title mb-0">Petty Cash Ledger Report</h3>
+    <a href="{% url 'petty_cash_list' %}" class="btn btn-secondary">Back to Petty Cash</a>
+</div>
+
+<div class="card card-soft mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2">
+            <div class="col-md-3">
+                <label class="form-label">Employee</label>
+                <select name="employee" class="form-select">
+                    <option value="">All Employees</option>
+                    {% for emp in employees %}
+                        <option value="{{ emp.id }}" {% if selected_employee == emp.id|stringformat:"s" %}selected{% endif %}>
+                            {{ emp.emp_no }} - {{ emp.full_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label">Petty Cash No</label>
+                <select name="petty_cash" class="form-select">
+                    <option value="">All Records</option>
+                    {% for pc in petty_cash_records %}
+                        <option value="{{ pc.id }}" {% if selected_petty_cash == pc.id|stringformat:"s" %}selected{% endif %}>
+                            {{ pc.petty_cash_no }} - {{ pc.employee }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">Date From</label>
+                <input type="date" name="date_from" value="{{ date_from }}" class="form-control">
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">Date To</label>
+                <input type="date" name="date_to" value="{{ date_to }}" class="form-control">
+            </div>
+
+            <div class="col-md-2">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="all" {% if status_filter == "all" %}selected{% endif %}>All</option>
+                    <option value="pending" {% if status_filter == "pending" %}selected{% endif %}>Pending</option>
+                    <option value="approved" {% if status_filter == "approved" %}selected{% endif %}>Approved</option>
+                    <option value="rejected" {% if status_filter == "rejected" %}selected{% endif %}>Rejected</option>
+                </select>
+            </div>
+
+            <div class="col-md-12 d-flex gap-2 mt-2">
+                <button type="submit" class="btn btn-primary">Filter</button>
+                <a href="{% url 'petty_cash_ledger_report' %}" class="btn btn-outline-secondary">Clear</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row mb-3">
+    <div class="col-md-4">
+        <div class="card card-soft">
+            <div class="card-body">
+                <div class="fw-bold">Total Reimbursement</div>
+                <div class="fs-5">{{ total_reimbursement }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card card-soft">
+            <div class="card-body">
+                <div class="fw-bold">Total Expenses</div>
+                <div class="fs-5">{{ total_expense }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card card-soft">
+            <div class="card-body">
+                <div class="fw-bold">Closing Balance</div>
+                <div class="fs-5">{{ closing_balance }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-soft">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Ref No</th>
+                        <th>Petty Cash No</th>
+                        <th>Employee</th>
+                        <th>Project</th>
+                        <th>GL Name</th>
+                        <th>Description</th>
+                        <th>Bill No</th>
+                        <th class="text-end">Reimbursement</th>
+                        <th class="text-end">Expense</th>
+                        <th class="text-end">Balance</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in ledger_rows %}
+                    <tr>
+                        <td>{{ row.date }}</td>
+                        <td>{{ row.ref_no }}</td>
+                        <td>{{ row.petty_cash_no }}</td>
+                        <td>
+                            {% if row.employee %}
+                                {{ row.employee.emp_no }} - {{ row.employee.full_name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.project %}
+                                {{ row.project.project_id }} - {{ row.project.project_name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>{{ row.gl_name|default:"-" }}</td>
+                        <td>{{ row.description|default:"-" }}</td>
+                        <td>{{ row.bill_no|default:"-" }}</td>
+                        <td class="text-end">
+                            {% if row.reimbursement_amount > 0 %}{{ row.reimbursement_amount }}{% else %}-{% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if row.expense_amount > 0 %}{{ row.expense_amount }}{% else %}-{% endif %}
+                        </td>
+                        <td class="text-end">{{ row.balance }}</td>
+                        <td>{{ row.status }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="12" class="text-center text-muted py-4">No ledger rows found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="fw-bold">
+                        <td colspan="8" class="text-end">Totals</td>
+                        <td class="text-end">{{ total_reimbursement }}</td>
+                        <td class="text-end">{{ total_expense }}</td>
+                        <td class="text-end">{{ closing_balance }}</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
