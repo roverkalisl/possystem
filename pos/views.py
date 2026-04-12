@@ -2505,7 +2505,6 @@ def supplier_advance_list(request):
         "query": query,
         "is_owner": is_owner(request.user),
     })
-
 @user_passes_test(can_use_project)
 def add_supplier_advance(request):
     suppliers = Supplier.objects.filter(is_active=True).order_by("name")
@@ -2574,66 +2573,6 @@ def add_supplier_advance(request):
         return redirect("supplier_advance_list")
 
     return render(request, "pos/add_supplier_advance.html", context)
-
-@user_passes_test(can_use_project)
-def add_supplier_advance(request):
-    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
-    projects = Project.objects.filter(is_active=True).order_by("-id")
-    gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
-    next_advance_no = generate_supplier_advance_no()
-
-    context = {
-        "suppliers": suppliers,
-        "projects": projects,
-        "gl_list": gl_list,
-        "next_advance_no": next_advance_no,
-    }
-
-    if request.method == "POST":
-        supplier_id = request.POST.get("supplier") or None
-        project_id = request.POST.get("project") or None
-        advance_date = request.POST.get("advance_date") or timezone.localdate()
-        amount = to_decimal(request.POST.get("amount") or 0)
-        payment_method = request.POST.get("payment_method") or "cash"
-        paid_from_gl_id = request.POST.get("paid_from_gl") or None
-        advance_gl_id = request.POST.get("advance_gl") or None
-        note = (request.POST.get("note") or "").strip()
-
-        if not supplier_id:
-            messages.error(request, "Supplier is required.")
-            return render(request, "pos/add_supplier_advance.html", context)
-
-        if amount <= 0:
-            messages.error(request, "Amount must be greater than 0.")
-            return render(request, "pos/add_supplier_advance.html", context)
-
-        if not paid_from_gl_id:
-            messages.error(request, "Paid From GL is required.")
-            return render(request, "pos/add_supplier_advance.html", context)
-
-        if not advance_gl_id:
-            messages.error(request, "Advance GL is required.")
-            return render(request, "pos/add_supplier_advance.html", context)
-
-        SupplierAdvance.objects.create(
-            advance_no=next_advance_no,
-            supplier_id=supplier_id,
-            project_id=project_id,
-            advance_date=advance_date,
-            amount=amount,
-            payment_method=payment_method,
-            paid_from_gl_id=paid_from_gl_id,
-            advance_gl_id=advance_gl_id,
-            note=note,
-            status="approved",
-            created_by=request.user,
-        )
-
-        messages.success(request, "Supplier advance saved successfully.")
-        return redirect("supplier_advance_list")
-
-    return render(request, "pos/add_supplier_advance.html", context)
-
 
 @user_passes_test(can_use_project)
 def add_supplier_settlement_from_advance(request, advance_id):
@@ -3049,17 +2988,33 @@ def purchase_order_data(request, po_id):
         id=po_id
     )
 
+    supplier = po.supplier
+
+    amount_value = getattr(po, "estimated_amount", Decimal("0"))
+
+    supplier_phone = ""
+    for field_name in ["phone_1", "phone_2", "phone_3", "phone"]:
+        value = getattr(supplier, field_name, None)
+        if value:
+            supplier_phone = value
+            break
+
     return JsonResponse({
         "id": po.id,
         "po_no": po.po_no,
         "supplier_id": po.supplier_id,
-        "supplier_name": po.supplier.name,
-        "project_id": po.project_id,
+        "supplier_name": supplier.name,
+        "supplier_address": getattr(po, "supplier_address", "") or getattr(supplier, "address", "") or "",
+        "supplier_contact_details": getattr(po, "supplier_contact_details", "") or supplier_phone or "",
+        "project_id": po.project_id or "",
         "project_name": po.project.project_name if po.project else "",
         "project_code": po.project.project_id if po.project else "",
-        "description": "",
-        "estimated_amount": str(po.grand_total or 0),
+        "buyer_company_name": getattr(po, "buyer_company_name", "") or "",
+        "buyer_contact_person": getattr(po, "buyer_contact_person", "") or "",
+        "buyer_phone": getattr(po, "buyer_phone", "") or "",
+        "delivery_location": getattr(po, "delivery_location", "") or "",
+        "delivery_method": getattr(po, "delivery_method", "") or "",
+        "payment_period": getattr(po, "payment_period", "") or "",
+        "amount": str(amount_value or 0),
         "note": po.note or "",
-        "delivery_location": po.delivery_location or "",
     })
-
