@@ -572,6 +572,9 @@ def save_sale(request):
                         item=item,
                         transaction_type="project_issue" if sale_type == "project_issue" else "sale",
                         qty=qty,
+                        reference_type="sale",
+                        reference_no=invoice_no,
+                        created_by=request.user,
                     )
 
             final_total = calculated_total
@@ -897,7 +900,11 @@ def add_item(request):
             StockTransaction.objects.create(
                 item=item,
                 transaction_type="grn",
-                qty=initial_stock
+                qty=initial_stock,
+                reference_type="manual",
+                reference_no=f"INIT-{item.item_code}",
+                notes="Initial stock when item was added",
+                created_by=request.user,
             )
         
         messages.success(request, "Item added successfully.")
@@ -979,7 +986,11 @@ def edit_item(request, item_id):
             StockTransaction.objects.create(
                 item=item,
                 transaction_type="adjustment_in" if stock_diff > 0 else "adjustment_out",
-                qty=abs(stock_diff)
+                qty=abs(stock_diff),
+                reference_type="manual",
+                reference_no=f"ADJ-{item.item_code}",
+                notes=f"Stock adjustment from {old_stock} to {new_stock}",
+                created_by=request.user,
             )
 
         messages.success(request, "Item updated successfully.")
@@ -987,6 +998,40 @@ def edit_item(request, item_id):
 
     return render(request, "pos/edit_item.html", context)
     
+@user_passes_test(can_manage_items)
+def receive_stock(request, item_id):
+    item = get_object_or_404(Item, id=item_id, is_active=True)
+    
+    if request.method == "POST":
+        qty = Decimal(request.POST.get("qty") or 0)
+        reference_no = request.POST.get("reference_no", "").strip()
+        notes = request.POST.get("notes", "").strip()
+        
+        if qty <= 0:
+            messages.error(request, "Quantity must be greater than 0.")
+            return redirect("receive_stock", item_id=item.id)
+        
+        # Update item stock
+        item.stock = Decimal(str(item.stock or 0)) + qty
+        item.updated_by = request.user
+        item.save()
+        
+        # Create stock transaction
+        StockTransaction.objects.create(
+            item=item,
+            transaction_type="grn",
+            qty=qty,
+            reference_type="po" if reference_no.startswith("PO") else "manual",
+            reference_no=reference_no or f"GRN-{item.item_code}",
+            notes=notes or "Stock received",
+            created_by=request.user,
+        )
+        
+        messages.success(request, f"Stock received successfully. {qty} {item.unit} added to {item.name}")
+        return redirect("item_list")
+    
+    return render(request, "pos/receive_stock.html", {"item": item})
+
 @user_passes_test(can_manage_items)
 def get_item_details(request, item_id):
     item = get_object_or_404(Item, id=item_id, is_active=True)

@@ -18,8 +18,11 @@
                     <th>Date & Time</th>
                     <th>Item Code</th>
                     <th>Item Name</th>
+                    <th>Reference Type</th>
+                    <th>Reference No</th>
                     <th>Transaction Type</th>
                     <th>Qty</th>
+                    <th>Notes</th>
                 </tr>
             </thead>
             <tbody>
@@ -28,12 +31,15 @@
                     <td>{{ row.created_at|date:"Y-m-d H:i" }}</td>
                     <td>{{ row.item.item_code }}</td>
                     <td>{{ row.item.name }}</td>
+                    <td>{{ row.get_reference_type_display|default:"-" }}</td>
+                    <td>{{ row.reference_no|default:"-" }}</td>
                     <td>{{ row.get_transaction_type_display }}</td>
                     <td>{{ row.qty }}</td>
+                    <td>{{ row.notes|default:"-" }}</td>
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="5" class="text-center">No stock history found</td>
+                    <td colspan="8" class="text-center">No stock history found</td>
                 </tr>
                 {% endfor %}
             </tbody>

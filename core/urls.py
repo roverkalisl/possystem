@@ -46,6 +46,7 @@ urlpatterns = [
     path('items/', views.item_list, name='item_list'),
     path('add-item/', views.add_item, name='add_item'),
     path('edit-item/<int:item_id>/', views.edit_item, name='edit_item'),
+    path('receive-stock/<int:item_id>/', views.receive_stock, name='receive_stock'),
    # path('items/<int:item_id>/details/', views.get_item_details, name='get_item_details'),
     path('stock-history/', views.stock_history, name='stock_history'),
 

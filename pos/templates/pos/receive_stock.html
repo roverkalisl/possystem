@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block title %}Receive Stock - {{ item.name }}{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Receive Stock - {{ item.name }}</h4>
+        <div>
+            <a href="{% url 'item_list' %}" class="btn btn-secondary btn-sm">Back to Items</a>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="mb-3">
+                <strong>Item Code:</strong> {{ item.item_code }}
+            </div>
+            <div class="mb-3">
+                <strong>Item Name:</strong> {{ item.name }}
+            </div>
+            <div class="mb-3">
+                <strong>Current Stock:</strong> {{ item.stock }} {{ item.unit }}
+            </div>
+            <div class="mb-3">
+                <strong>Unit:</strong> {{ item.unit }}
+            </div>
+        </div>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label for="qty" class="form-label">Quantity to Receive *</label>
+                <input type="number" class="form-control" id="qty" name="qty" step="0.01" min="0.01" required>
+            </div>
+            
+            <div class="col-md-6">
+                <label for="reference_no" class="form-label">Reference No (PO/GRN)</label>
+                <input type="text" class="form-control" id="reference_no" name="reference_no" placeholder="e.g., PO-001, GRN-001">
+            </div>
+            
+            <div class="col-12">
+                <label for="notes" class="form-label">Notes</label>
+                <textarea class="form-control" id="notes" name="notes" rows="3" placeholder="Additional notes about this stock receipt"></textarea>
+            </div>
+        </div>
+        
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary">Receive Stock</button>
+            <a href="{% url 'item_list' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
