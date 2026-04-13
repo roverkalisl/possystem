@@ -14,7 +14,15 @@
 <body class="app-body">
 
     <div class="app-shell">
-        {% block page_header %}{% endblock %}
+        {% block page_header %}
+        <div class="container-fluid pt-3 pb-1">
+            <div class="d-flex justify-content-between align-items-center">
+                <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">
+                    ← Dashboard
+                </a>
+            </div>
+        </div>
+        {% endblock %}
 
         <main class="container-fluid py-3">
             {% if messages %}
