@@ -1095,6 +1095,13 @@ class PurchaseOrderItem(models.Model):
         on_delete=models.CASCADE,
         related_name="items"
     )
+    item = models.ForeignKey(
+        "Item",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="purchase_order_items"
+    )
     description = models.CharField(max_length=255)
     quantity = models.DecimalField(max_digits=12, decimal_places=2, default=1)
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -1109,6 +1116,130 @@ class PurchaseOrderItem(models.Model):
 
     def __str__(self):
         return self.description
+
+
+class GRN(models.Model):
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("received", "Received"),
+        ("inspected", "Inspected"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    grn_no = models.CharField(max_length=30, unique=True, blank=True, null=True)
+    grn_date = models.DateField(default=timezone.now)
+    received_date = models.DateField(blank=True, null=True)
+    
+    purchase_order = models.ForeignKey(
+        "PurchaseOrder", 
+        on_delete=models.PROTECT, 
+        related_name="grns"
+    )
+    supplier = models.ForeignKey(
+        "Supplier", 
+        on_delete=models.PROTECT, 
+        related_name="grns"
+    )
+    
+    delivery_note_no = models.CharField(max_length=50, blank=True, null=True)
+    invoice_no = models.CharField(max_length=50, blank=True, null=True)
+    vehicle_no = models.CharField(max_length=50, blank=True, null=True)
+    
+    received_by = models.CharField(max_length=150, blank=True, null=True)
+    inspected_by = models.CharField(max_length=150, blank=True, null=True)
+    approved_by = models.CharField(max_length=150, blank=True, null=True)
+    
+    quality_check_passed = models.BooleanField(default=False)
+    quality_notes = models.TextField(blank=True, null=True)
+    
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    notes = models.TextField(blank=True, null=True)
+    
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_grns"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-grn_date", "-id"]
+        verbose_name = "GRN"
+        verbose_name_plural = "GRNs"
+
+    def save(self, *args, **kwargs):
+        if not self.grn_no:
+            last = GRN.objects.exclude(grn_no__isnull=True).order_by("-id").first()
+            if last and last.grn_no and str(last.grn_no).replace("GRN", "").isdigit():
+                next_no = int(str(last.grn_no).replace("GRN", "")) + 1
+                self.grn_no = f"GRN{next_no:05d}"
+            else:
+                self.grn_no = "GRN00001"
+        super().save(*args, **kwargs)
+
+    @property
+    def total_quantity_received(self):
+        return self.items.aggregate(total=Sum("quantity_received"))["total"] or Decimal("0")
+
+    @property
+    def total_value(self):
+        return sum(item.line_total for item in self.items.all())
+
+    def __str__(self):
+        return self.grn_no or f"GRN {self.id}"
+
+
+class GRNItem(models.Model):
+    QUALITY_CHOICES = [
+        ("good", "Good"),
+        ("damaged", "Damaged"),
+        ("rejected", "Rejected"),
+    ]
+
+    grn = models.ForeignKey(
+        "GRN",
+        on_delete=models.CASCADE,
+        related_name="items"
+    )
+    purchase_order_item = models.ForeignKey(
+        "PurchaseOrderItem",
+        on_delete=models.PROTECT,
+        related_name="grn_items"
+    )
+    item = models.ForeignKey(
+        "Item",
+        on_delete=models.PROTECT,
+        related_name="grn_items"
+    )
+    
+    quantity_ordered = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    quantity_received = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    quantity_accepted = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    quantity_rejected = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    line_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    
+    quality_status = models.CharField(max_length=20, choices=QUALITY_CHOICES, default="good")
+    quality_notes = models.TextField(blank=True, null=True)
+    
+    batch_no = models.CharField(max_length=50, blank=True, null=True)
+    expiry_date = models.DateField(blank=True, null=True)
+    
+    class Meta:
+        ordering = ["id"]
+        unique_together = ["grn", "purchase_order_item"]
+
+    def save(self, *args, **kwargs):
+        self.line_total = Decimal(str(self.quantity_accepted or 0)) * Decimal(str(self.unit_price or 0))
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.grn.grn_no} - {self.item.name}"
     
 
 

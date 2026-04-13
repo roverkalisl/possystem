@@ -18,7 +18,8 @@ from .models import (
     Project, ProjectExpense, ProjectPettyCash,
     ProjectPettyCashExpense, ProjectIncome, Employee,
     ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem,
-    SupplierAdvance, SupplierSettlement, PurchaseOrder, PurchaseOrderItem
+    SupplierAdvance, SupplierSettlement, PurchaseOrder, PurchaseOrderItem,
+    GRN, GRNItem
 )
 # =========================
 # HELPERS
@@ -3516,5 +3517,152 @@ def sales_return_list(request):
         "returns": returns,
         "query": query,
     })
+
+
+# =========================
+# GRN (Goods Received Note)
+# =========================
+@user_passes_test(can_manage_items)
+def grn_list(request):
+    query = request.GET.get("q", "").strip()
+    
+    grns = GRN.objects.select_related(
+        "purchase_order", "supplier", "created_by"
+    ).order_by("-grn_date", "-id")
+    
+    if query:
+        grns = grns.filter(
+            Q(grn_no__icontains=query) |
+            Q(purchase_order__po_no__icontains=query) |
+            Q(supplier__name__icontains=query) |
+            Q(delivery_note_no__icontains=query)
+        )
+    
+    return render(request, "pos/grn_list.html", {
+        "grns": grns,
+        "query": query,
+    })
+
+
+@user_passes_test(can_manage_items)
+def create_grn(request, po_id=None):
+    if po_id:
+        purchase_order = get_object_or_404(PurchaseOrder, id=po_id, status="approved")
+    else:
+        purchase_order = None
+    
+    if request.method == "POST":
+        po_id = request.POST.get("purchase_order")
+        purchase_order = get_object_or_404(PurchaseOrder, id=po_id, status="approved")
+        
+        grn = GRN.objects.create(
+            purchase_order=purchase_order,
+            supplier=purchase_order.supplier,
+            delivery_note_no=request.POST.get("delivery_note_no"),
+            invoice_no=request.POST.get("invoice_no"),
+            vehicle_no=request.POST.get("vehicle_no"),
+            received_date=request.POST.get("received_date") or timezone.now().date(),
+            received_by=request.POST.get("received_by"),
+            notes=request.POST.get("notes"),
+            status="received",
+            created_by=request.user,
+        )
+        
+        # Create GRN items from PO items
+        for po_item in purchase_order.items.all():
+            qty_received = Decimal(request.POST.get(f"qty_received_{po_item.id}") or 0)
+            qty_accepted = Decimal(request.POST.get(f"qty_accepted_{po_item.id}") or 0)
+            qty_rejected = qty_received - qty_accepted
+            
+            if qty_received > 0:
+                GRNItem.objects.create(
+                    grn=grn,
+                    purchase_order_item=po_item,
+                    item=po_item.item,
+                    quantity_ordered=po_item.quantity,
+                    quantity_received=qty_received,
+                    quantity_accepted=qty_accepted,
+                    quantity_rejected=qty_rejected,
+                    unit_price=po_item.unit_price,
+                    quality_status=request.POST.get(f"quality_{po_item.id}", "good"),
+                    quality_notes=request.POST.get(f"quality_notes_{po_item.id}"),
+                    batch_no=request.POST.get(f"batch_no_{po_item.id}"),
+                    expiry_date=request.POST.get(f"expiry_date_{po_item.id}") or None,
+                )
+                
+                # Update item stock if accepted and item exists
+                if qty_accepted > 0 and po_item.item:
+                    po_item.item.stock = Decimal(str(po_item.item.stock or 0)) + qty_accepted
+                    po_item.item.save()
+                    
+                    # Create stock transaction
+                    StockTransaction.objects.create(
+                        item=po_item.item,
+                        transaction_type="grn",
+                        qty=qty_accepted,
+                        reference_type="po",
+                        reference_no=grn.grn_no,
+                        notes=f"GRN from PO {purchase_order.po_no}",
+                        created_by=request.user,
+                    )
+        
+        messages.success(request, f"GRN {grn.grn_no} created successfully.")
+        return redirect("grn_detail", grn_id=grn.id)
+    
+    # Get approved POs that don't have complete GRNs yet
+    available_pos = PurchaseOrder.objects.filter(
+        status="approved"
+    ).exclude(
+        grns__status__in=["approved"]
+    ).select_related("supplier").order_by("-po_date")
+    
+    context = {
+        "purchase_order": purchase_order,
+        "available_pos": available_pos,
+    }
+    
+    if purchase_order:
+        context["po_items"] = purchase_order.items.select_related("item").all()
+    
+    return render(request, "pos/create_grn.html", context)
+
+
+@user_passes_test(can_manage_items)
+def grn_detail(request, grn_id):
+    grn = get_object_or_404(GRN.objects.select_related(
+        "purchase_order", "supplier", "created_by"
+    ), id=grn_id)
+    
+    grn_items = grn.items.select_related(
+        "purchase_order_item", "item"
+    ).all()
+    
+    return render(request, "pos/grn_detail.html", {
+        "grn": grn,
+        "grn_items": grn_items,
+    })
+
+
+@user_passes_test(can_manage_items)
+def update_grn_status(request, grn_id):
+    grn = get_object_or_404(GRN, id=grn_id)
+    
+    if request.method == "POST":
+        new_status = request.POST.get("status")
+        quality_check_passed = request.POST.get("quality_check_passed") == "on"
+        quality_notes = request.POST.get("quality_notes")
+        inspected_by = request.POST.get("inspected_by")
+        approved_by = request.POST.get("approved_by")
+        
+        grn.status = new_status
+        grn.quality_check_passed = quality_check_passed
+        grn.quality_notes = quality_notes
+        grn.inspected_by = inspected_by
+        grn.approved_by = approved_by
+        grn.save()
+        
+        messages.success(request, f"GRN {grn.grn_no} status updated to {grn.get_status_display()}.")
+    
+    return redirect("grn_detail", grn_id=grn.id)
 
 

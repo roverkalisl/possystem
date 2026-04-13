@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}GRN List{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Goods Received Notes (GRN)</h4>
+        <div>
+            <a href="{% url 'create_grn' %}" class="btn btn-primary btn-sm">+ Create GRN</a>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+        </div>
+    </div>
+
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-10">
+            <input type="text" name="q" value="{{ query }}" class="form-control form-control-sm" placeholder="Search by GRN No, PO No, Supplier, or Delivery Note">
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-outline-secondary btn-sm w-100">Search</button>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>GRN No</th>
+                    <th>Date</th>
+                    <th>PO No</th>
+                    <th>Supplier</th>
+                    <th>Delivery Note</th>
+                    <th>Status</th>
+                    <th>Total Qty</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for grn in grns %}
+                <tr>
+                    <td><a href="{% url 'grn_detail' grn.id %}" class="text-decoration-none">{{ grn.grn_no }}</a></td>
+                    <td>{{ grn.grn_date|date:"Y-m-d" }}</td>
+                    <td>{{ grn.purchase_order.po_no }}</td>
+                    <td>{{ grn.supplier.name }}</td>
+                    <td>{{ grn.delivery_note_no|default:"-" }}</td>
+                    <td>
+                        <span class="badge bg-{% if grn.status == 'approved' %}success{% elif grn.status == 'rejected' %}danger{% elif grn.status == 'received' %}primary{% else %}secondary{% endif %}">
+                            {{ grn.get_status_display }}
+                        </span>
+                    </td>
+                    <td>{{ grn.total_quantity_received|floatformat:2 }}</td>
+                    <td>
+                        <a href="{% url 'grn_detail' grn.id %}" class="btn btn-sm btn-outline-primary">View</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center">No GRNs found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Create GRN{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Create Goods Received Note (GRN)</h4>
+        <div>
+            <a href="{% url 'grn_list' %}" class="btn btn-secondary btn-sm">Back to GRNs</a>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+        </div>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <label for="purchase_order" class="form-label">Purchase Order *</label>
+                <select class="form-select" id="purchase_order" name="purchase_order" required onchange="loadPOItems()">
+                    <option value="">Select Purchase Order</option>
+                    {% for po in available_pos %}
+                    <option value="{{ po.id }}" {% if purchase_order and purchase_order.id == po.id %}selected{% endif %}>
+                        {{ po.po_no }} - {{ po.supplier.name }} ({{ po.grand_total|money }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            
+            <div class="col-md-6">
+                <label for="received_date" class="form-label">Received Date *</label>
+                <input type="date" class="form-control" id="received_date" name="received_date" 
+                       value="{% if purchase_order %}{{ purchase_order.po_date|date:'Y-m-d' }}{% endif %}" required>
+            </div>
+            
+            <div class="col-md-4">
+                <label for="delivery_note_no" class="form-label">Delivery Note No</label>
+                <input type="text" class="form-control" id="delivery_note_no" name="delivery_note_no">
+            </div>
+            
+            <div class="col-md-4">
+                <label for="invoice_no" class="form-label">Invoice No</label>
+                <input type="text" class="form-control" id="invoice_no" name="invoice_no">
+            </div>
+            
+            <div class="col-md-4">
+                <label for="vehicle_no" class="form-label">Vehicle No</label>
+                <input type="text" class="form-control" id="vehicle_no" name="vehicle_no">
+            </div>
+            
+            <div class="col-md-6">
+                <label for="received_by" class="form-label">Received By</label>
+                <input type="text" class="form-control" id="received_by" name="received_by" 
+                       value="{{ request.user.get_full_name|default:request.user.username }}">
+            </div>
+            
+            <div class="col-12">
+                <label for="notes" class="form-label">Notes</label>
+                <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+            </div>
+        </div>
+
+        <div id="po-items-section" style="{% if not purchase_order %}display: none;{% endif %}">
+            <h5 class="mb-3">Purchase Order Items</h5>
+            <div class="table-responsive">
+                <table class="table table-bordered">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Item Description</th>
+                            <th>Ordered Qty</th>
+                            <th>Unit Price</th>
+                            <th>Received Qty</th>
+                            <th>Accepted Qty</th>
+                            <th>Rejected Qty</th>
+                            <th>Quality</th>
+                            <th>Batch No</th>
+                            <th>Expiry Date</th>
+                            <th>Notes</th>
+                        </tr>
+                    </thead>
+                    <tbody id="po-items-tbody">
+                        {% if purchase_order %}
+                        {% for item in po_items %}
+                        <tr>
+                            <td>{{ item.description }}</td>
+                            <td>{{ item.quantity }}</td>
+                            <td>Rs. {{ item.unit_price|money }}</td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm" 
+                                       name="qty_received_{{ item.id }}" step="0.01" min="0" 
+                                       onchange="calculateAccepted({{ item.id }})">
+                            </td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm" 
+                                       name="qty_accepted_{{ item.id }}" id="qty_accepted_{{ item.id }}" 
+                                       step="0.01" min="0" onchange="calculateRejected({{ item.id }})">
+                            </td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm" 
+                                       name="qty_rejected_{{ item.id }}" id="qty_rejected_{{ item.id }}" 
+                                       step="0.01" min="0" readonly>
+                            </td>
+                            <td>
+                                <select class="form-select form-select-sm" name="quality_{{ item.id }}">
+                                    <option value="good">Good</option>
+                                    <option value="damaged">Damaged</option>
+                                    <option value="rejected">Rejected</option>
+                                </select>
+                            </td>
+                            <td>
+                                <input type="text" class="form-control form-control-sm" 
+                                       name="batch_no_{{ item.id }}">
+                            </td>
+                            <td>
+                                <input type="date" class="form-control form-control-sm" 
+                                       name="expiry_date_{{ item.id }}">
+                            </td>
+                            <td>
+                                <textarea class="form-control form-control-sm" 
+                                          name="quality_notes_{{ item.id }}" rows="1"></textarea>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary">Create GRN</button>
+            <a href="{% url 'grn_list' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<script>
+function loadPOItems() {
+    const poSelect = document.getElementById('purchase_order');
+    const poId = poSelect.value;
+    const itemsSection = document.getElementById('po-items-section');
+    
+    if (poId) {
+        // In a real implementation, you might want to load PO items via AJAX
+        // For now, we'll just show the section
+        itemsSection.style.display = 'block';
+    } else {
+        itemsSection.style.display = 'none';
+    }
+}
+
+function calculateAccepted(itemId) {
+    const received = parseFloat(document.querySelector(`input[name="qty_received_${itemId}"]`).value) || 0;
+    const acceptedInput = document.getElementById(`qty_accepted_${itemId}`);
+    const rejectedInput = document.getElementById(`qty_rejected_${itemId}`);
+    
+    if (!acceptedInput.value) {
+        acceptedInput.value = received;
+    }
+    
+    calculateRejected(itemId);
+}
+
+function calculateRejected(itemId) {
+    const received = parseFloat(document.querySelector(`input[name="qty_received_${itemId}"]`).value) || 0;
+    const accepted = parseFloat(document.getElementById(`qty_accepted_${itemId}`).value) || 0;
+    const rejectedInput = document.getElementById(`qty_rejected_${itemId}`);
+    
+    rejectedInput.value = Math.max(0, received - accepted);
+}
+</script>
+{% endblock %}

@@ -157,4 +157,13 @@ path("purchase-orders/<int:po_id>/edit/", views.edit_purchase_order, name="edit_
     path("petty-cash-ledger/", views.petty_cash_ledger_report, name="petty_cash_ledger_report"),
     path("supplier-advances/<int:advance_id>/edit/", views.edit_supplier_advance, name="edit_supplier_advance"),
     path("sales-return-list/", views.sales_return_list, name="sales_return_list"),
+    
+    # =========================
+    # GRN (Goods Received Note)
+    # =========================
+    path("grn/", views.grn_list, name="grn_list"),
+    path("grn/create/", views.create_grn, name="create_grn"),
+    path("grn/create/<int:po_id>/", views.create_grn, name="create_grn_from_po"),
+    path("grn/<int:grn_id>/", views.grn_detail, name="grn_detail"),
+    path("grn/<int:grn_id>/update-status/", views.update_grn_status, name="update_grn_status"),
    ]

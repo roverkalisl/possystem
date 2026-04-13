@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}GRN {{ grn.grn_no }}{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">GRN Details - {{ grn.grn_no }}</h4>
+        <div>
+            {% if grn.status != 'approved' and grn.status != 'rejected' %}
+            <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#statusModal">Update Status</button>
+            {% endif %}
+            <a href="{% url 'grn_list' %}" class="btn btn-secondary btn-sm">Back to GRNs</a>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <strong>GRN No:</strong> {{ grn.grn_no }}
+        </div>
+        <div class="col-md-3">
+            <strong>GRN Date:</strong> {{ grn.grn_date|date:"Y-m-d" }}
+        </div>
+        <div class="col-md-3">
+            <strong>Received Date:</strong> {{ grn.received_date|date:"Y-m-d" }}
+        </div>
+        <div class="col-md-3">
+            <strong>Status:</strong> 
+            <span class="badge bg-{% if grn.status == 'approved' %}success{% elif grn.status == 'rejected' %}danger{% elif grn.status == 'received' %}primary{% else %}secondary{% endif %}">
+                {{ grn.get_status_display }}
+            </span>
+        </div>
+        
+        <div class="col-md-4">
+            <strong>PO No:</strong> {{ grn.purchase_order.po_no }}
+        </div>
+        <div class="col-md-4">
+            <strong>Supplier:</strong> {{ grn.supplier.name }}
+        </div>
+        <div class="col-md-4">
+            <strong>Received By:</strong> {{ grn.received_by|default:"-" }}
+        </div>
+        
+        {% if grn.delivery_note_no %}
+        <div class="col-md-3">
+            <strong>Delivery Note:</strong> {{ grn.delivery_note_no }}
+        </div>
+        {% endif %}
+        {% if grn.invoice_no %}
+        <div class="col-md-3">
+            <strong>Invoice No:</strong> {{ grn.invoice_no }}
+        </div>
+        {% endif %}
+        {% if grn.vehicle_no %}
+        <div class="col-md-3">
+            <strong>Vehicle No:</strong> {{ grn.vehicle_no }}
+        </div>
+        {% endif %}
+        
+        {% if grn.inspected_by %}
+        <div class="col-md-3">
+            <strong>Inspected By:</strong> {{ grn.inspected_by }}
+        </div>
+        {% endif %}
+        {% if grn.approved_by %}
+        <div class="col-md-3">
+            <strong>Approved By:</strong> {{ grn.approved_by }}
+        </div>
+        {% endif %}
+        
+        <div class="col-12">
+            <strong>Quality Check:</strong> 
+            {% if grn.quality_check_passed %}
+            <span class="badge bg-success">Passed</span>
+            {% else %}
+            <span class="badge bg-warning">Pending/Failed</span>
+            {% endif %}
+        </div>
+        
+        {% if grn.quality_notes %}
+        <div class="col-12">
+            <strong>Quality Notes:</strong> {{ grn.quality_notes }}
+        </div>
+        {% endif %}
+        
+        {% if grn.notes %}
+        <div class="col-12">
+            <strong>Notes:</strong> {{ grn.notes }}
+        </div>
+        {% endif %}
+    </div>
+
+    <h5 class="mb-3">Received Items</h5>
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Item Description</th>
+                    <th>Ordered Qty</th>
+                    <th>Received Qty</th>
+                    <th>Accepted Qty</th>
+                    <th>Rejected Qty</th>
+                    <th>Unit Price</th>
+                    <th>Line Total</th>
+                    <th>Quality</th>
+                    <th>Batch No</th>
+                    <th>Expiry Date</th>
+                    <th>Notes</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in grn_items %}
+                <tr>
+                    <td>{{ item.purchase_order_item.description }}</td>
+                    <td>{{ item.quantity_ordered }}</td>
+                    <td>{{ item.quantity_received }}</td>
+                    <td>{{ item.quantity_accepted }}</td>
+                    <td>{{ item.quantity_rejected }}</td>
+                    <td>Rs. {{ item.unit_price|money }}</td>
+                    <td>Rs. {{ item.line_total|money }}</td>
+                    <td>
+                        <span class="badge bg-{% if item.quality_status == 'good' %}success{% elif item.quality_status == 'damaged' %}warning{% else %}danger{% endif %}">
+                            {{ item.get_quality_status_display }}
+                        </span>
+                    </td>
+                    <td>{{ item.batch_no|default:"-" }}</td>
+                    <td>{{ item.expiry_date|date:"Y-m-d" if item.expiry_date else "-" }}</td>
+                    <td>{{ item.quality_notes|default:"-" }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot class="table-dark">
+                <tr>
+                    <th colspan="2">Totals</th>
+                    <th>{{ grn.total_quantity_received }}</th>
+                    <th>{{ grn_items|length }}</th>
+                    <th>-</th>
+                    <th>-</th>
+                    <th>Rs. {{ grn.total_value|money }}</th>
+                    <th colspan="4">-</th>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+</div>
+
+<!-- Status Update Modal -->
+<div class="modal fade" id="statusModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Update GRN Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form method="post" action="{% url 'update_grn_status' grn.id %}">
+                {% csrf_token %}
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-select" id="status" name="status" required>
+                            <option value="received" {% if grn.status == 'received' %}selected{% endif %}>Received</option>
+                            <option value="inspected" {% if grn.status == 'inspected' %}selected{% endif %}>Inspected</option>
+                            <option value="approved" {% if grn.status == 'approved' %}selected{% endif %}>Approved</option>
+                            <option value="rejected" {% if grn.status == 'rejected' %}selected{% endif %}>Rejected</option>
+                        </select>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="quality_check_passed" name="quality_check_passed" {% if grn.quality_check_passed %}checked{% endif %}>
+                            <label class="form-check-label" for="quality_check_passed">
+                                Quality Check Passed
+                            </label>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="quality_notes" class="form-label">Quality Notes</label>
+                        <textarea class="form-control" id="quality_notes" name="quality_notes" rows="3">{{ grn.quality_notes }}</textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="inspected_by" class="form-label">Inspected By</label>
+                        <input type="text" class="form-control" id="inspected_by" name="inspected_by" value="{{ grn.inspected_by }}">
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label for="approved_by" class="form-label">Approved By</label>
+                        <input type="text" class="form-control" id="approved_by" name="approved_by" value="{{ grn.approved_by }}">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Update Status</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

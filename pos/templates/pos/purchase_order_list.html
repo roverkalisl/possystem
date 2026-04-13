@@ -51,6 +51,9 @@
                         <td class="text-end">{{ o.grand_total }}</td>
                         <td>{{ o.get_status_display }}</td>
                         <td class="text-center">
+                            {% if o.status == 'approved' %}
+                            <a href="{% url 'create_grn_from_po' o.id %}" class="btn btn-sm btn-success">Create GRN</a>
+                            {% endif %}
                             <a href="{% url 'edit_purchase_order' o.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
                         </td>
                     </tr>
