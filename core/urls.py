@@ -60,6 +60,7 @@ urlpatterns = [
     # =========================
     path('gl/', views.gl_list, name='gl_list'),
     path('gl/add/', views.add_gl, name='add_gl'),
+    path('categories/', views.category_list, name='category_list'),
 
     # =========================
     # PROJECTS

@@ -1,5 +1,6 @@
 from decimal import Decimal, InvalidOperation
 from django import template
+from django.conf import settings
 
 register = template.Library()
 
@@ -9,6 +10,8 @@ def money(value):
         if value in (None, ""):
             value = Decimal("0")
         value = Decimal(str(value))
-        return f"{value:,.2f}"
+        symbol = getattr(settings, 'CURRENCY_SYMBOL', '$')
+        return f"{symbol} {value:,.2f}"
     except (InvalidOperation, ValueError, TypeError):
-        return "0.00"
+        symbol = getattr(settings, 'CURRENCY_SYMBOL', '$')
+        return f"{symbol} 0.00"

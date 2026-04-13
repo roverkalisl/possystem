@@ -1093,6 +1093,12 @@ def gl_list(request):
 
 
 @user_passes_test(can_use_gl)
+def category_list(request):
+    categories = Category.objects.all().order_by("name")
+    return render(request, "pos/category_list.html", {"categories": categories})
+
+
+@user_passes_test(can_use_gl)
 def add_gl(request):
     if request.method == "POST":
         GLMaster.objects.create(

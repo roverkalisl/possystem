@@ -124,6 +124,13 @@ USE_TZ = True
 
 
 # ==============================
+# CURRENCY SETTINGS
+# ==============================
+CURRENCY_CODE = 'LKR'
+CURRENCY_SYMBOL = 'Rs.'
+
+
+# ==============================
 # STATIC FILES
 # ==============================
 STATIC_URL = '/static/'
