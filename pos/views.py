@@ -3575,10 +3575,27 @@ def create_grn(request, po_id=None):
             qty_rejected = qty_received - qty_accepted
             
             if qty_received > 0:
+                linked_item = po_item.item
+                if not linked_item and qty_accepted > 0:
+                    linked_item = Item.objects.filter(name__iexact=po_item.description).first()
+                    if not linked_item:
+                        linked_item = Item.objects.create(
+                            item_code=generate_next_item_code(),
+                            name=po_item.description,
+                            supplier=purchase_order.supplier,
+                            unit="pcs",
+                            cost_price=po_item.unit_price,
+                            selling_price=po_item.unit_price,
+                            stock=Decimal("0"),
+                            updated_by=request.user,
+                        )
+                    po_item.item = linked_item
+                    po_item.save(update_fields=["item"])
+
                 GRNItem.objects.create(
                     grn=grn,
                     purchase_order_item=po_item,
-                    item=po_item.item,
+                    item=linked_item,
                     quantity_ordered=po_item.quantity,
                     quantity_received=qty_received,
                     quantity_accepted=qty_accepted,
@@ -3590,14 +3607,14 @@ def create_grn(request, po_id=None):
                     expiry_date=request.POST.get(f"expiry_date_{po_item.id}") or None,
                 )
                 
-                # Update item stock if accepted and item exists
-                if qty_accepted > 0 and po_item.item:
-                    po_item.item.stock = Decimal(str(po_item.item.stock or 0)) + qty_accepted
-                    po_item.item.save()
+                # Update item stock if accepted
+                if qty_accepted > 0 and linked_item:
+                    linked_item.stock = Decimal(str(linked_item.stock or 0)) + qty_accepted
+                    linked_item.save()
                     
                     # Create stock transaction
                     StockTransaction.objects.create(
-                        item=po_item.item,
+                        item=linked_item,
                         transaction_type="grn",
                         qty=qty_accepted,
                         reference_type="po",
