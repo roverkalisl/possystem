@@ -80,6 +80,54 @@ def to_decimal(val):
         return Decimal(str(val).replace(",", "").strip())
     except (InvalidOperation, TypeError, ValueError):
         return Decimal("0")
+from django.db.models import Sum
+
+def get_returned_qty_for_sale_item(sale_item):
+    return sale_item.returns.aggregate(total=Sum("qty"))["total"] or Decimal("0")
+
+
+def get_available_qty_for_sale_item(sale_item):
+    sold_qty = Decimal(str(sale_item.qty or 0))
+    returned_qty = Decimal(str(get_returned_qty_for_sale_item(sale_item) or 0))
+    available_qty = sold_qty - returned_qty
+    if available_qty < 0:
+        available_qty = Decimal("0")
+    return available_qty
+
+
+def recalculate_sale_totals_after_return(sale):
+    remaining_total = Decimal("0")
+
+    for row in sale.sale_items.all():
+        sold_qty = Decimal(str(row.qty or 0))
+        returned_qty = Decimal(str(get_returned_qty_for_sale_item(row) or 0))
+        available_qty = sold_qty - returned_qty
+
+        if available_qty <= 0:
+            continue
+
+        unit_net = Decimal("0")
+        if sold_qty > 0:
+            unit_net = Decimal(str(row.net_amount or 0)) / sold_qty
+
+        remaining_total += unit_net * available_qty
+
+    sale.total = remaining_total
+
+    extra_discount = Decimal(str(sale.discount or 0))
+    sale.grand_total = remaining_total - extra_discount
+    if sale.grand_total < 0:
+        sale.grand_total = Decimal("0")
+
+    if sale.payment_method == "cash":
+        received_amount = Decimal(str(sale.received_amount or 0))
+        sale.balance = received_amount - sale.grand_total
+    elif sale.payment_method == "credit":
+        sale.balance = sale.grand_total
+    else:
+        sale.balance = Decimal("0")
+
+    sale.save()
     
 def generate_supplier_advance_no():
     last = SupplierAdvance.objects.exclude(advance_no__isnull=True).order_by("-id").first()
@@ -677,69 +725,123 @@ def print_sale_recovery_receipt(request, recovery_id):
 # =========================
 @user_passes_test(can_use_pos)
 def sales_return(request):
-    sales = Sale.objects.all().order_by("-id")
+    sales = Sale.objects.filter(grand_total__gt=0).order_by("-id")
 
     if request.method == "POST":
         sale_id = request.POST.get("sale")
         sale_item_id = request.POST.get("sale_item")
         qty = to_decimal(request.POST.get("qty"))
         return_type = request.POST.get("return_type") or "refund"
-        reason = request.POST.get("reason") or ""
+        reason = (request.POST.get("reason") or "").strip()
 
-        sale_item = get_object_or_404(SaleItem, id=sale_item_id)
+        sale = get_object_or_404(Sale, id=sale_id)
+        sale_item = get_object_or_404(SaleItem, id=sale_item_id, sale=sale)
 
         if qty <= 0:
-            messages.error(request, "Invalid return qty")
+            messages.error(request, "Return quantity must be greater than 0.")
             return redirect("sales_return")
 
-        if qty > sale_item.qty:
-            messages.error(request, "Return qty exceeds sold qty")
+        available_qty = get_available_qty_for_sale_item(sale_item)
+
+        if available_qty <= 0:
+            messages.error(request, "This item has already been fully returned.")
+            return redirect("sales_return")
+
+        if qty > available_qty:
+            messages.error(request, f"Return quantity exceeds available quantity. Available: {available_qty}")
             return redirect("sales_return")
 
         return_no = f"RET{SalesReturn.objects.count() + 1:05d}"
 
-        r = SalesReturn.objects.create(
-            return_no=return_no,
-            sale_id=sale_id,
-            sale_item=sale_item,
-            qty=qty,
-            return_type=return_type,
-            reason=reason,
-            created_by=request.user,
-        )
-
-        item = sale_item.item
-        if not item.is_service:
-            item.stock = Decimal(str(item.stock or 0)) + qty
-            item.updated_by = request.user
-            item.save()
-
-            StockTransaction.objects.create(
-                item=item,
-                transaction_type="return_in",
+        with transaction.atomic():
+            r = SalesReturn.objects.create(
+                return_no=return_no,
+                sale=sale,
+                sale_item=sale_item,
                 qty=qty,
+                return_type=return_type,
+                reason=reason,
+                created_by=request.user,
             )
 
+            item = sale_item.item
+            if not item.is_service:
+                item.stock = Decimal(str(item.stock or 0)) + qty
+                item.updated_by = request.user
+                item.save()
+
+                StockTransaction.objects.create(
+                    item=item,
+                    transaction_type="return_in",
+                    qty=qty,
+                )
+
+            recalculate_sale_totals_after_return(sale)
+
+        messages.success(request, f"Sales return saved successfully. Return No: {r.return_no}")
         return redirect("return_receipt", return_id=r.id)
 
     return render(request, "pos/sales_return.html", {"sales": sales})
 
-
 @user_passes_test(can_use_pos)
-def get_sale_items(request, sale_id):
-    sale = get_object_or_404(Sale, id=sale_id)
-    data = []
+def sales_return(request):
+    sales = Sale.objects.filter(grand_total__gt=0).order_by("-id")
 
-    for row in sale.sale_items.all():
-        data.append({
-            "sale_item_id": row.id,
-            "item_name": row.item.name,
-            "qty": str(row.qty),
-            "price": str(row.price),
-        })
+    if request.method == "POST":
+        sale_id = request.POST.get("sale")
+        sale_item_id = request.POST.get("sale_item")
+        qty = to_decimal(request.POST.get("qty"))
+        return_type = request.POST.get("return_type") or "refund"
+        reason = (request.POST.get("reason") or "").strip()
 
-    return JsonResponse({"items": data})
+        sale = get_object_or_404(Sale, id=sale_id)
+        sale_item = get_object_or_404(SaleItem, id=sale_item_id, sale=sale)
 
+        if qty <= 0:
+            messages.error(request, "Return quantity must be greater than 0.")
+            return redirect("sales_return")
+
+        available_qty = get_available_qty_for_sale_item(sale_item)
+
+        if available_qty <= 0:
+            messages.error(request, "This item has already been fully returned.")
+            return redirect("sales_return")
+
+        if qty > available_qty:
+            messages.error(request, f"Return quantity exceeds available quantity. Available: {available_qty}")
+            return redirect("sales_return")
+
+        return_no = f"RET{SalesReturn.objects.count() + 1:05d}"
+
+        with transaction.atomic():
+            r = SalesReturn.objects.create(
+                return_no=return_no,
+                sale=sale,
+                sale_item=sale_item,
+                qty=qty,
+                return_type=return_type,
+                reason=reason,
+                created_by=request.user,
+            )
+
+            item = sale_item.item
+            if not item.is_service:
+                item.stock = Decimal(str(item.stock or 0)) + qty
+                item.updated_by = request.user
+                item.save()
+
+                StockTransaction.objects.create(
+                    item=item,
+                    transaction_type="return_in",
+                    qty=qty,
+                )
+
+            recalculate_sale_totals_after_return(sale)
+
+        messages.success(request, f"Sales return saved successfully. Return No: {r.return_no}")
+        return redirect("return_receipt", return_id=r.id)
+
+    return render(request, "pos/sales_return.html", {"sales": sales})
 
 @user_passes_test(can_use_pos)
 def return_receipt(request, return_id):
@@ -892,7 +994,7 @@ def stock_history(request):
 @login_required
 def daily_report(request):
     today = timezone.localdate()
-    sales = Sale.objects.filter(created_at__date=today).prefetch_related("sale_items__item")
+    sales = Sale.objects.filter(created_at__date=today).prefetch_related("sale_items__item", "sale_items__returns")
 
     total_sales = Decimal("0")
     total_cost = Decimal("0")
@@ -900,8 +1002,14 @@ def daily_report(request):
 
     for sale in sales:
         sale_cost = Decimal("0")
+
         for row in sale.sale_items.all():
-            sale_cost += Decimal(str(row.item.cost_price or 0)) * Decimal(str(row.qty or 0))
+            available_qty = get_available_qty_for_sale_item(row)
+            if available_qty <= 0:
+                continue
+
+            item_cost = Decimal(str(row.item.cost_price or 0))
+            sale_cost += item_cost * available_qty
 
         sale.sale_cost = sale_cost
         sale.sale_profit = Decimal(str(sale.grand_total or 0)) - sale_cost
@@ -918,7 +1026,6 @@ def daily_report(request):
         "total_discount": total_discount,
         "total_profit": total_sales - total_cost,
     })
-
 
 @login_required
 def monthly_report(request):
@@ -937,7 +1044,7 @@ def monthly_report(request):
     sales = Sale.objects.filter(
         created_at__year=year,
         created_at__month=month
-    ).prefetch_related("sale_items__item").order_by("-created_at")
+    ).prefetch_related("sale_items__item", "sale_items__returns").order_by("-created_at")
 
     total_sales = Decimal("0")
     total_discount = Decimal("0")
@@ -946,10 +1053,14 @@ def monthly_report(request):
 
     for sale in sales:
         sale_cost = Decimal("0")
+
         for row in sale.sale_items.all():
+            available_qty = get_available_qty_for_sale_item(row)
+            if available_qty <= 0:
+                continue
+
             item_cost = Decimal(str(row.item.cost_price or 0))
-            qty = Decimal(str(row.qty or 0))
-            sale_cost += item_cost * qty
+            sale_cost += item_cost * available_qty
 
         sale.sale_cost = sale_cost
         sale.sale_profit = Decimal(str(sale.grand_total or 0)) - sale_cost
@@ -972,8 +1083,6 @@ def monthly_report(request):
         "month": month,
         "summary": summary,
     })
-
-
 # =========================
 # GL MASTER
 # =========================
@@ -3257,3 +3366,46 @@ def edit_supplier_advance(request, advance_id):
         return redirect("supplier_advance_list")
 
     return render(request, "pos/edit_supplier_advance.html", context)
+
+@user_passes_test(can_use_pos)
+def get_sale_items(request, sale_id):
+    sale = get_object_or_404(Sale, id=sale_id)
+    data = []
+
+    for row in sale.sale_items.all():
+        available_qty = get_available_qty_for_sale_item(row)
+
+        if available_qty <= 0:
+            continue
+
+        data.append({
+            "sale_item_id": row.id,
+            "item_name": row.item.name,
+            "qty": str(available_qty),
+            "price": str(row.price),
+        })
+
+    return JsonResponse({"items": data})
+
+@user_passes_test(can_use_pos)
+def sales_return_list(request):
+    query = request.GET.get("q", "").strip()
+
+    returns = SalesReturn.objects.select_related(
+        "sale", "sale_item", "sale_item__item", "created_by"
+    ).order_by("-created_at", "-id")
+
+    if query:
+        returns = returns.filter(
+            Q(return_no__icontains=query) |
+            Q(sale__invoice_no__icontains=query) |
+            Q(sale_item__item__name__icontains=query) |
+            Q(reason__icontains=query)
+        )
+
+    return render(request, "pos/sales_return_list.html", {
+        "returns": returns,
+        "query": query,
+    })
+
+
