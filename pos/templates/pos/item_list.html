@@ -68,6 +68,7 @@
                         {% endif %}
                     </td>
                     <td>
+                        <a href="{% url 'stock_history' %}?item_id={{ item.id }}" class="btn btn-sm btn-outline-info">Bin Card</a>
                         <a href="{% url 'edit_item' item.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
                     </td>
                 </tr>

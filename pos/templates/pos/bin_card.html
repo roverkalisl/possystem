@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Bin Card - {{ item.name }}{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Bin Card - {{ item.name }}</h4>
+        <div>
+            <a href="{% url 'item_list' %}" class="btn btn-secondary btn-sm">Back to Items</a>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+        </div>
+    </div>
+
+    <div class="mb-3">
+        <strong>Item Code:</strong> {{ item.item_code }}<br>
+        <strong>Current Stock:</strong> {{ item.stock }} {{ item.unit }}<br>
+        <strong>Unit:</strong> {{ item.unit }}
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Date</th>
+                    <th>Reference</th>
+                    <th>Receipts (In)</th>
+                    <th>Issues (Out)</th>
+                    <th>Balance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>{{ row.date|date:"Y-m-d" }}</td>
+                    <td>{{ row.reference }}</td>
+                    <td class="text-end">{{ row.receipt|floatformat:2 }}</td>
+                    <td class="text-end">{{ row.issue|floatformat:2 }}</td>
+                    <td class="text-end"><strong>{{ row.balance|floatformat:2 }}</strong></td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-center">No stock transactions found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

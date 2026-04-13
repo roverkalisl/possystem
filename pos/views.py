@@ -870,7 +870,7 @@ def add_item(request):
             messages.error(request, "Cost GL Account is required for non-service items.")
             return render(request, "pos/add_item.html", context)
 
-        Item.objects.create(
+        item = Item.objects.create(
             item_code=request.POST.get("item_code"),
             name=request.POST.get("name"),
             category_id=request.POST.get("category") or None,
@@ -890,6 +890,16 @@ def add_item(request):
             cost_gl_account_id=cost_gl_account_id,
             updated_by=request.user,
         )
+        
+        # Create stock transaction for initial stock
+        initial_stock = Decimal(request.POST.get("stock") or 0)
+        if initial_stock > 0:
+            StockTransaction.objects.create(
+                item=item,
+                transaction_type="grn",
+                qty=initial_stock
+            )
+        
         messages.success(request, "Item added successfully.")
         return redirect("item_list")
 
@@ -940,6 +950,9 @@ def edit_item(request, item_id):
             messages.error(request, "Cost GL Account is required for non-service items.")
             return render(request, "pos/edit_item.html", context)
 
+        old_stock = item.stock
+        new_stock = Decimal(request.POST.get("stock") or 0)
+        
         item.item_code = request.POST.get("item_code")
         item.name = request.POST.get("name")
         item.category_id = request.POST.get("category") or None
@@ -947,7 +960,7 @@ def edit_item(request, item_id):
         item.unit = request.POST.get("unit") or "pcs"
         item.cost_price = request.POST.get("cost_price") or 0
         item.selling_price = request.POST.get("selling_price") or 0
-        item.stock = request.POST.get("stock") or 0
+        item.stock = new_stock
         item.purchase_date = request.POST.get("purchase_date") or None
         item.item_type = request.POST.get("item_type") or "retail"
         item.is_service = is_service
@@ -959,6 +972,15 @@ def edit_item(request, item_id):
         item.cost_gl_account_id = cost_gl_account_id
         item.updated_by = request.user
         item.save()
+
+        # Create stock transaction for stock adjustment
+        stock_diff = new_stock - old_stock
+        if stock_diff != 0:
+            StockTransaction.objects.create(
+                item=item,
+                transaction_type="adjustment_in" if stock_diff > 0 else "adjustment_out",
+                qty=abs(stock_diff)
+            )
 
         messages.success(request, "Item updated successfully.")
         return redirect("item_list")
@@ -984,6 +1006,42 @@ def get_item_details(request, item_id):
 
 @user_passes_test(can_manage_items)
 def stock_history(request):
+    item_id = request.GET.get("item_id")
+    if item_id:
+        try:
+            item = Item.objects.get(id=item_id)
+            transactions = StockTransaction.objects.filter(item=item).order_by("created_at")
+            
+            # Calculate running balance
+            balance = Decimal("0")
+            rows = []
+            for tx in transactions:
+                if tx.transaction_type in ["grn", "adjustment_in", "return_in"]:
+                    balance += tx.qty
+                    receipt = tx.qty
+                    issue = Decimal("0")
+                else:
+                    balance -= tx.qty
+                    receipt = Decimal("0")
+                    issue = tx.qty
+                
+                rows.append({
+                    "date": tx.created_at.date(),
+                    "reference": tx.get_transaction_type_display(),
+                    "receipt": receipt,
+                    "issue": issue,
+                    "balance": balance,
+                    "transaction": tx
+                })
+            
+            return render(request, "pos/bin_card.html", {
+                "item": item,
+                "rows": rows
+            })
+        except Item.DoesNotExist:
+            pass
+    
+    # Default: show all transactions
     rows = StockTransaction.objects.select_related("item").order_by("-created_at")
     return render(request, "pos/stock_history.html", {"rows": rows})
 
