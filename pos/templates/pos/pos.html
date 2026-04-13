@@ -1,7 +1,189 @@
 {% extends "base.html" %}
-{% load currency_filters %}
 
 {% block title %}POS{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pos-layout {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 16px;
+        align-items: start;
+    }
+
+    .pos-panel-card,
+    .pos-right-card {
+        border-radius: 16px;
+        border: 1px solid #dfe3ea;
+        background: #ffffff;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+    }
+
+    .pos-panel-card {
+        position: sticky;
+        top: 10px;
+        padding: 14px !important;
+    }
+
+    .pos-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+
+    .app-page-title {
+        font-size: 16px;
+        font-weight: 700;
+        color: #1f2937;
+    }
+
+    .pos-sticky-actions {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        background: #fff;
+        padding: 6px 0 10px 0;
+        margin-bottom: 10px;
+        border-bottom: 1px solid #e5e7eb;
+    }
+
+    .pos-sticky-actions .btn {
+        min-height: 38px;
+        font-weight: 600;
+        border-radius: 10px;
+        padding: 6px 10px;
+    }
+
+    .pos-form-area .form-label,
+    .pos-summary-box .form-label {
+        font-weight: 600;
+        color: #1f2937;
+        margin-bottom: 4px;
+        font-size: 13px;
+    }
+
+    .pos-form-area .mb-2,
+    .pos-summary-box .mt-2,
+    .pos-summary-box .mt-1 {
+        margin-bottom: 8px !important;
+        margin-top: 8px !important;
+    }
+
+    .pos-form-area .form-control,
+    .pos-form-area .form-select,
+    .pos-summary-box .form-control,
+    .pos-summary-box .form-select {
+        min-height: 36px;
+        padding: 6px 10px;
+        font-size: 14px;
+        border-radius: 10px;
+    }
+
+    .readonly-box {
+        background: #f3f4f6;
+    }
+
+    .text-money {
+        text-align: right;
+        font-weight: 600;
+    }
+
+    .compact-note {
+        font-size: 12px;
+        margin-top: 3px;
+        display: block;
+    }
+
+    .pos-cart-box {
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 10px;
+        margin-bottom: 14px;
+        background: #fafafa;
+    }
+
+    .pos-cart-title {
+        font-size: 16px;
+        font-weight: 700;
+        margin-bottom: 8px;
+        color: #1f2937;
+    }
+
+    .pos-cart-scroll {
+        max-height: 220px;
+        overflow: auto;
+    }
+
+    .pos-category-bar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-bottom: 14px;
+    }
+
+    .category-btn.active {
+        background: #1e3a8a;
+        color: #fff;
+        border-color: #1e3a8a;
+    }
+
+    .pos-items-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+        gap: 12px;
+    }
+
+    .pos-item-card {
+        border: 1px solid #e5e7eb;
+        border-radius: 14px;
+        padding: 12px;
+        background: #fff;
+        transition: 0.2s ease;
+    }
+
+    .pos-item-card:hover {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+        transform: translateY(-1px);
+    }
+
+    .pos-item-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: #111827;
+        margin-bottom: 3px;
+    }
+
+    .pos-item-meta,
+    .pos-item-stock {
+        font-size: 12px;
+        color: #6b7280;
+    }
+
+    .pos-item-price {
+        font-size: 15px;
+        font-weight: 700;
+        color: #1e3a8a;
+        margin: 6px 0 3px;
+    }
+
+    @media (max-width: 992px) {
+        .pos-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .pos-panel-card {
+            position: static;
+        }
+    }
+
+    @media (max-width: 768px) {
+        .pos-sticky-actions {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="pos-layout">
@@ -10,7 +192,15 @@
         <div class="card p-3 p-md-4 pos-panel-card">
             <div class="pos-panel-header">
                 <h4 class="app-page-title mb-0">Current Sale</h4>
-                <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+            </div>
+
+            <div class="pos-sticky-actions">
+                <button type="button" class="btn btn-outline-danger" onclick="clearCartAndForm()">
+                    Clear
+                </button>
+                <button type="button" class="btn btn-primary" onclick="saveSale()">
+                    Save Sale
+                </button>
             </div>
 
             <div class="pos-form-area">
@@ -27,25 +217,24 @@
                     <select id="project_id" class="form-select form-select-sm">
                         <option value="">Select Project</option>
                         {% for p in projects %}
-                        <option value="{{ p.id }}">
-                            {{ p.project_id }} - {{ p.project_name }}{% if p.client_name %} - {{ p.client_name }}{% endif %}
-                        </option>
+                        <option value="{{ p.id }}">{{ p.project_id }} - {{ p.project_name }}</option>
                         {% endfor %}
                     </select>
                 </div>
 
                 <div class="mb-2">
                     <label class="form-label">Customer</label>
-                    <select id="customer_id" class="form-select form-select-sm">
+                    <select id="customer_id" class="form-select form-select-sm" onchange="fillCustomerDetails()">
                         <option value="">Select Customer</option>
                         {% for c in customers %}
                         <option value="{{ c.id }}"
-                                data-name="{{ c.name|escapejs }}"
+                                data-name="{{ c.name|default:''|escapejs }}"
                                 data-phone="{{ c.phone|default:''|escapejs }}">
                             {{ c.customer_code }} - {{ c.name }}
                         </option>
                         {% endfor %}
                     </select>
+                    <small class="text-muted compact-note">Required for credit sales.</small>
                 </div>
 
                 <div class="mb-2">
@@ -97,19 +286,14 @@
                 </div>
 
                 <div class="mt-2" id="card_field" style="display:none;">
-                    <label class="form-label">Card Last 4</label>
+                    <label class="form-label">Card Last 4 Digits</label>
                     <input type="text" id="card_last4" class="form-control form-control-sm" maxlength="4">
                 </div>
 
                 <div class="mt-2" id="credit_field" style="display:none;">
-                    <label class="form-label">Cheque / Ref No</label>
+                    <label class="form-label">Cheque / Reference No</label>
                     <input type="text" id="cheque_number" class="form-control form-control-sm">
                 </div>
-            </div>
-
-            <div class="pos-action-buttons pos-action-buttons-top">
-                <button type="button" class="btn btn-outline-danger w-100" onclick="clearCart()">Clear</button>
-                <button type="button" class="btn btn-primary w-100" onclick="saveSale()">Save Sale</button>
             </div>
         </div>
     </div>
@@ -125,7 +309,7 @@
                 </div>
             </div>
 
-            <div class="pos-cart-box pos-cart-box-top">
+            <div class="pos-cart-box">
                 <div class="pos-cart-title">Cart Items</div>
                 <div class="pos-cart-scroll">
                     <table class="table table-sm align-middle mb-0">
@@ -133,14 +317,14 @@
                             <tr>
                                 <th style="min-width:180px;">Item Name</th>
                                 <th style="width:80px;">Qty</th>
-                                <th style="width:95px;">Price</th>
-                                <th style="width:95px;">Discount</th>
-                                <th style="width:95px;">Amt</th>
-                                <th style="width:50px;"></th>
+                                <th style="width:100px;">Price</th>
+                                <th style="width:110px;">Discount</th>
+                                <th style="width:100px;">Amount</th>
+                                <th style="width:60px;"></th>
                             </tr>
                         </thead>
                         <tbody id="cartBody">
-                            <tr id="emptyCartRow">
+                            <tr>
                                 <td colspan="6" class="text-center text-muted">Cart is empty</td>
                             </tr>
                         </tbody>
@@ -148,8 +332,10 @@
                 </div>
             </div>
 
-            <div class="pos-category-bar mb-3">
-                <button type="button" class="btn btn-primary btn-sm category-btn active" onclick="filterByCategory('all', this)">All</button>
+            <div class="pos-category-bar">
+                <button type="button" class="btn btn-primary btn-sm category-btn active" onclick="filterByCategory('all', this)">
+                    All
+                </button>
                 {% for category in categories %}
                 <button type="button"
                         class="btn btn-outline-primary btn-sm category-btn"
@@ -165,10 +351,9 @@
                      data-name="{{ item.name|lower }}"
                      data-code="{{ item.item_code|lower }}"
                      data-category="{% if item.category %}{{ item.category.name|lower }}{% else %}uncategorized{% endif %}">
-
                     <div class="pos-item-name">{{ item.name }}</div>
                     <div class="pos-item-meta">Code: {{ item.item_code }}</div>
-                    <div class="pos-item-price">Rs. {{ item.selling_price|money }}</div>
+                    <div class="pos-item-price">Rs. {{ item.selling_price }}</div>
                     <div class="pos-item-stock">
                         {% if item.is_service %}
                             Service Item
@@ -178,22 +363,22 @@
                     </div>
 
                     {% if not item.is_service and item.stock <= 0 %}
-                        <button type="button" class="btn btn-outline-danger btn-sm mt-2 w-100" disabled>
-                            Out of Stock
-                        </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm mt-2 w-100" disabled>
+                        Out of Stock
+                    </button>
                     {% else %}
-                        <button type="button"
-                                class="btn btn-outline-primary btn-sm mt-2 w-100 add-item-btn"
-                                data-id="{{ item.id }}"
-                                data-code="{{ item.item_code|escapejs }}"
-                                data-name="{{ item.name|escapejs }}"
-                                data-price="{{ item.selling_price }}"
-                                data-maxdiscount="{{ item.max_discount_value }}"
-                                data-allowdiscount="{{ item.allow_discount|yesno:'true,false' }}"
-                                data-stock="{{ item.stock }}"
-                                data-isservice="{{ item.is_service|yesno:'true,false' }}">
-                            Add
-                        </button>
+                    <button type="button"
+                            class="btn btn-outline-primary btn-sm mt-2 w-100 add-item-btn"
+                            data-id="{{ item.id }}"
+                            data-code="{{ item.item_code|escapejs }}"
+                            data-name="{{ item.name|escapejs }}"
+                            data-price="{{ item.selling_price }}"
+                            data-maxdiscount="{{ item.max_discount_value|default:0 }}"
+                            data-allowdiscount="{{ item.allow_discount|yesno:'true,false' }}"
+                            data-stock="{{ item.stock|default:0 }}"
+                            data-isservice="{{ item.is_service|yesno:'true,false' }}">
+                        Add
+                    </button>
                     {% endif %}
                 </div>
                 {% empty %}
@@ -228,8 +413,7 @@ function getCookie(name) {
 
 function toggleProjectField() {
     const saleType = document.getElementById("sale_type").value;
-    document.getElementById("project_box").style.display =
-        saleType === "project_issue" ? "block" : "none";
+    document.getElementById("project_box").style.display = saleType === "project_issue" ? "block" : "none";
 }
 
 function togglePaymentFields() {
@@ -240,23 +424,14 @@ function togglePaymentFields() {
     updateBalance();
 }
 
-function bindCustomerSelect() {
+function fillCustomerDetails() {
     const customerSelect = document.getElementById("customer_id");
-    const customerName = document.getElementById("customer_name");
-    const customerPhone = document.getElementById("customer_phone");
+    const selected = customerSelect.options[customerSelect.selectedIndex];
 
-    if (!customerSelect) return;
+    if (!selected || !selected.value) return;
 
-    customerSelect.addEventListener("change", function () {
-        const selected = customerSelect.options[customerSelect.selectedIndex];
-        if (!selected.value) {
-            customerName.value = "";
-            customerPhone.value = "";
-            return;
-        }
-        customerName.value = selected.getAttribute("data-name") || "";
-        customerPhone.value = selected.getAttribute("data-phone") || "";
-    });
+    document.getElementById("customer_name").value = selected.getAttribute("data-name") || "";
+    document.getElementById("customer_phone").value = selected.getAttribute("data-phone") || "";
 }
 
 document.addEventListener("click", function (e) {
@@ -352,7 +527,7 @@ function updateDiscount(id, value) {
     row.discount = parseFloat(value) || 0;
     if (row.discount < 0) row.discount = 0;
 
-    let allowed = row.max_discount_value * row.qty;
+    const allowed = row.max_discount_value * row.qty;
     if (row.discount > allowed) {
         alert("Max allowed discount for " + row.name + " is Rs. " + allowed.toFixed(2));
         row.discount = allowed;
@@ -362,7 +537,7 @@ function updateDiscount(id, value) {
 }
 
 function renderCart() {
-    let tbody = document.getElementById("cartBody");
+    const tbody = document.getElementById("cartBody");
     tbody.innerHTML = "";
 
     if (cart.length === 0) {
@@ -371,22 +546,21 @@ function renderCart() {
         return;
     }
 
-    for (let i = 0; i < cart.length; i++) {
-        let row = cart[i];
-        let amount = (row.qty * row.price) - (row.discount || 0);
+    cart.forEach(function(row) {
+        const amount = (row.qty * row.price) - (row.discount || 0);
 
-        let discountHtml = row.allow_discount
+        const discountHtml = row.allow_discount
             ? `<input type="number" step="0.01" value="${parseFloat(row.discount || 0).toFixed(2)}"
                       class="form-control form-control-sm"
                       oninput="updateDiscount('${row.id}', this.value)">`
             : `<input type="number" step="0.01" value="0.00"
                       class="form-control form-control-sm" readonly>`;
 
-        let tr = document.createElement("tr");
+        const tr = document.createElement("tr");
         tr.innerHTML = `
             <td>
                 <strong>${row.name}</strong><br>
-                <small style="color:#6b7280;">${row.code}</small>
+                <small class="text-muted">${row.code}</small>
             </td>
             <td>
                 <input type="number" min="1" step="1" value="${row.qty}"
@@ -406,7 +580,7 @@ function renderCart() {
             </td>
         `;
         tbody.appendChild(tr);
-    }
+    });
 
     updateTotals();
 }
@@ -418,8 +592,10 @@ function updateTotals() {
         total += (row.qty * row.price) - (row.discount || 0);
     });
 
-    let extraDiscount = parseFloat(document.getElementById("discount").value || 0);
+    const extraDiscount = parseFloat(document.getElementById("discount").value || 0);
     let grandTotal = total - extraDiscount;
+
+    if (grandTotal < 0) grandTotal = 0;
 
     document.getElementById("total").value = total.toFixed(2);
     document.getElementById("grand_total").value = grandTotal.toFixed(2);
@@ -427,9 +603,9 @@ function updateTotals() {
 }
 
 function updateBalance() {
-    let method = document.getElementById("payment_method").value;
-    let grandTotal = parseFloat(document.getElementById("grand_total").value || 0);
-    let received = parseFloat(document.getElementById("received").value || 0);
+    const method = document.getElementById("payment_method").value;
+    const grandTotal = parseFloat(document.getElementById("grand_total").value || 0);
+    const received = parseFloat(document.getElementById("received").value || 0);
 
     if (method === "cash") {
         document.getElementById("balance").value = (received - grandTotal).toFixed(2);
@@ -443,16 +619,23 @@ function updateBalance() {
 function clearCart() {
     cart = [];
     renderCart();
+}
+
+function clearCartAndForm() {
+    clearCart();
+
+    document.getElementById("sale_type").value = "retail";
+    document.getElementById("project_id").value = "";
     document.getElementById("customer_id").value = "";
     document.getElementById("customer_name").value = "";
     document.getElementById("customer_phone").value = "";
-    document.getElementById("project_id").value = "";
     document.getElementById("discount").value = "0";
+    document.getElementById("payment_method").value = "cash";
     document.getElementById("received").value = "0";
+    document.getElementById("balance").value = "0.00";
     document.getElementById("card_last4").value = "";
     document.getElementById("cheque_number").value = "";
-    document.getElementById("payment_method").value = "cash";
-    document.getElementById("sale_type").value = "retail";
+
     toggleProjectField();
     togglePaymentFields();
     updateTotals();
@@ -460,9 +643,11 @@ function clearCart() {
 
 function filterByCategory(category, btn) {
     currentCategory = category;
+
     document.querySelectorAll(".category-btn").forEach(function(el) {
         el.classList.remove("active");
     });
+
     btn.classList.add("active");
     applyFilters();
 }
@@ -474,25 +659,28 @@ function filterItems() {
 function resetItemFilters() {
     document.getElementById("itemSearch").value = "";
     currentCategory = "all";
+
     document.querySelectorAll(".category-btn").forEach(function(el) {
         el.classList.remove("active");
     });
-    let firstBtn = document.querySelector(".category-btn");
+
+    const firstBtn = document.querySelector(".category-btn");
     if (firstBtn) firstBtn.classList.add("active");
+
     applyFilters();
 }
 
 function applyFilters() {
-    let term = document.getElementById("itemSearch").value.toLowerCase().trim();
-    let cards = document.querySelectorAll(".pos-item-card");
+    const term = document.getElementById("itemSearch").value.toLowerCase().trim();
+    const cards = document.querySelectorAll(".pos-item-card");
 
     cards.forEach(function(card) {
-        let name = card.dataset.name || "";
-        let code = card.dataset.code || "";
-        let category = card.dataset.category || "";
+        const name = card.dataset.name || "";
+        const code = card.dataset.code || "";
+        const category = card.dataset.category || "";
 
-        let matchSearch = name.includes(term) || code.includes(term);
-        let matchCategory = currentCategory === "all" || category === currentCategory;
+        const matchSearch = name.includes(term) || code.includes(term);
+        const matchCategory = currentCategory === "all" || category === currentCategory;
 
         card.style.display = (matchSearch && matchCategory) ? "block" : "none";
     });
@@ -500,26 +688,63 @@ function applyFilters() {
 
 function saveSale() {
     if (cart.length === 0) {
-        alert("Cart is empty");
+        alert("Cart is empty.");
         return;
     }
 
-    let saleType = document.getElementById("sale_type").value;
-    let projectId = document.getElementById("project_id").value;
-    let paymentMethod = document.getElementById("payment_method").value;
-    let customerId = document.getElementById("customer_id").value;
+    const saleType = document.getElementById("sale_type").value;
+    const projectId = document.getElementById("project_id").value;
+    const paymentMethod = document.getElementById("payment_method").value;
+    const customerId = document.getElementById("customer_id").value;
+    const customerName = document.getElementById("customer_name").value.trim();
+    const customerPhone = document.getElementById("customer_phone").value.trim();
+    const total = document.getElementById("total").value;
+    const discount = document.getElementById("discount").value;
+    const grandTotal = document.getElementById("grand_total").value;
+    const received = document.getElementById("received").value;
+    const balance = document.getElementById("balance").value;
+    const cardLast4 = document.getElementById("card_last4").value.trim();
+    const chequeNumber = document.getElementById("cheque_number").value.trim();
 
     if (saleType === "project_issue" && !projectId) {
-        alert("Please select a project");
+        alert("Please select a project.");
         return;
     }
 
-    if (paymentMethod === "credit" && !customerId) {
-        alert("Please select a customer for credit sale");
+    if (paymentMethod === "credit") {
+        if (!customerId) {
+            alert("Please select a customer for a credit sale.");
+            return;
+        }
+
+        if (!customerName) {
+            alert("Customer name is required for a credit sale.");
+            return;
+        }
+
+        if (!chequeNumber) {
+            alert("Please enter the cheque/reference number for the credit sale.");
+            return;
+        }
+    }
+
+    if (paymentMethod === "card" && !cardLast4) {
+        alert("Please enter the last 4 digits of the card.");
         return;
     }
 
-    let payload = {
+    const firstConfirm = confirm(
+        "Please confirm this sale.\n\n" +
+        "Sale Type: " + saleType.toUpperCase() + "\n" +
+        "Payment Method: " + paymentMethod.toUpperCase() + "\n" +
+        "Customer: " + (customerName || "-") + "\n" +
+        "Grand Total: " + grandTotal + "\n\n" +
+        "Do you want to save this sale?"
+    );
+
+    if (!firstConfirm) return;
+
+    const payload = {
         items: cart.map(function(row) {
             return {
                 id: row.id,
@@ -528,17 +753,17 @@ function saveSale() {
                 discount: row.discount || 0
             };
         }),
-        total: document.getElementById("total").value,
-        discount: document.getElementById("discount").value,
-        grand_total: document.getElementById("grand_total").value,
+        total: total,
+        discount: discount,
+        grand_total: grandTotal,
         payment_method: paymentMethod,
-        received: document.getElementById("received").value,
-        balance: document.getElementById("balance").value,
-        card_last4: document.getElementById("card_last4").value,
-        cheque_number: document.getElementById("cheque_number").value,
+        received: received,
+        balance: balance,
+        card_last4: cardLast4,
+        cheque_number: chequeNumber,
         customer_id: customerId || "",
-        customer_name: document.getElementById("customer_name").value,
-        customer_phone: document.getElementById("customer_phone").value,
+        customer_name: customerName,
+        customer_phone: customerPhone,
         sale_type: saleType,
         project_id: projectId || null
     };
@@ -551,28 +776,42 @@ function saveSale() {
         },
         body: JSON.stringify(payload)
     })
-    .then(async response => {
+    .then(async function(response) {
         const data = await response.json();
+
         if (!response.ok) {
-            throw new Error(data.message || "Error saving sale");
+            throw new Error(data.message || "Error saving sale.");
         }
+
         return data;
     })
-    .then(data => {
-        if (data.status === "success") {
-            const invoiceUrl = "{% url 'invoice_page' 0 %}".replace("/0/", "/" + data.sale_id + "/");
+    .then(function(data) {
+        if (data.status !== "success") {
+            alert(data.message || "Error saving sale.");
+            return;
+        }
+
+        const invoiceUrl = "{% url 'invoice_page' 0 %}".replace("/0/", "/" + data.sale_id + "/");
+
+        const secondConfirm = confirm(
+            "Sale saved successfully.\n\n" +
+            "Invoice No: " + data.invoice_no + "\n\n" +
+            "Do you want to open the invoice now?"
+        );
+
+        if (secondConfirm) {
             window.location.href = invoiceUrl;
         } else {
-            alert(data.message || "Error saving sale");
+            clearCartAndForm();
+            alert("Sale saved successfully.");
         }
     })
-    .catch(error => {
-        alert(error.message || "Error saving sale");
+    .catch(function(error) {
         console.error(error);
+        alert(error.message || "Error saving sale.");
     });
 }
 
-bindCustomerSelect();
 toggleProjectField();
 togglePaymentFields();
 updateTotals();

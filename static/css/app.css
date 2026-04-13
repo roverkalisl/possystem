@@ -559,6 +559,32 @@ textarea.form-control {
     gap: 16px;
     align-items: start;
 }
+.pos-panel-card {
+    position: relative;
+}
+
+.pos-sticky-actions {
+    position: sticky;
+    top: 10px;
+    z-index: 20;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    background: #ffffff;
+    padding: 10px 0;
+    margin-bottom: 14px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.pos-sticky-actions .btn {
+    min-height: 42px;
+    font-weight: 600;
+}
+
+.pos-form-area,
+.pos-summary-box {
+    margin-top: 6px;
+}
 
 .simple-dashboard-card {
     background: #fff;
