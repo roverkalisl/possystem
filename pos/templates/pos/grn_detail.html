@@ -126,7 +126,7 @@
                         </span>
                     </td>
                     <td>{{ item.batch_no|default:"-" }}</td>
-                    <td>{{ item.expiry_date|date:"Y-m-d" if item.expiry_date else "-" }}</td>
+                    <td>{% if item.expiry_date %}{{ item.expiry_date|date:"Y-m-d" }}{% else %}-{% endif %}</td>
                     <td>{{ item.quality_notes|default:"-" }}</td>
                 </tr>
                 {% endfor %}

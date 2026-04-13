@@ -71,6 +71,7 @@
                             <th>Item Description</th>
                             <th>Ordered Qty</th>
                             <th>Unit Price</th>
+                            <th>Inventory Item</th>
                             <th>Received Qty</th>
                             <th>Accepted Qty</th>
                             <th>Rejected Qty</th>
@@ -87,6 +88,13 @@
                             <td>{{ item.description }}</td>
                             <td>{{ item.quantity }}</td>
                             <td>Rs. {{ item.unit_price|money }}</td>
+                            <td>
+                                {% if item.item %}
+                                <span class="badge bg-success">{{ item.item.name }}</span>
+                                {% else %}
+                                <span class="badge bg-warning">Not linked to inventory</span>
+                                {% endif %}
+                            </td>
                             <td>
                                 <input type="number" class="form-control form-control-sm" 
                                        name="qty_received_{{ item.id }}" step="0.01" min="0" 
