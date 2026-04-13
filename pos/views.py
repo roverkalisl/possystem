@@ -1368,7 +1368,7 @@ def petty_cash_ledger_report(request):
         petty_cash_qs = petty_cash_qs.filter(issue_date__lte=date_to)
 
     for pc in petty_cash_qs:
-        expenses = pc.expenses.filter(is_active=True).select_related("project", "gl_account").order_by("expense_date", "id")
+        expenses = pc.expenses.filter(is_active=True,approval_status="approved").select_related("project", "gl_account").order_by("expense_date", "id")
 
         if status_filter in ["pending", "approved", "rejected"]:
             expenses = expenses.filter(approval_status=status_filter)
