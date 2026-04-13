@@ -1291,7 +1291,8 @@ def petty_cash_ledger_report(request):
         })
 
         for exp in expenses:
-            running_balance -= Decimal(str(exp.amount or 0))
+            if exp.approval_status != "rejected":
+                running_balance -= Decimal(str(exp.amount or 0))
             ledger_rows.append({
                 "row_type": "expense",
                 "date": exp.expense_date,
@@ -1309,7 +1310,7 @@ def petty_cash_ledger_report(request):
             })
 
     total_reimbursement = sum((row["reimbursement_amount"] for row in ledger_rows), Decimal("0"))
-    total_expense = sum((row["expense_amount"] for row in ledger_rows), Decimal("0"))
+    total_expense = sum((row["expense_amount"] for row in ledger_rows if row["status"] != "rejected"), Decimal("0"))
     closing_balance = total_reimbursement - total_expense
 
     return render(request, "pos/petty_cash_ledger_report.html", {
@@ -2664,8 +2665,8 @@ def add_supplier_advance(request):
             created_by=request.user,
         )
 
-        messages.success(request, "Supplier advance saved successfully.")
-        return redirect("supplier_advance_list")
+        messages.success(request, "Supplier advance saved successfully. The form is ready for a new entry.")
+        return redirect("add_supplier_advance")
 
     return render(request, "pos/add_supplier_advance.html", context)
 
@@ -3186,3 +3187,73 @@ def supplier_settlement_list(request):
         "grand_approved_balance_due": grand_approved_balance_due,
         "grand_pending_balance_due": grand_pending_balance_due,
     })
+
+@user_passes_test(can_use_project)
+def edit_supplier_advance(request, advance_id):
+    advance = get_object_or_404(
+        SupplierAdvance.objects.select_related("supplier", "project", "po"),
+        id=advance_id,
+        is_active=True
+    )
+
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+    gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
+    purchase_orders = PurchaseOrder.objects.select_related("supplier", "project").order_by("-po_date", "-id")
+
+    context = {
+        "advance": advance,
+        "suppliers": suppliers,
+        "projects": projects,
+        "gl_list": gl_list,
+        "purchase_orders": purchase_orders,
+    }
+
+    if request.method == "POST":
+        po_id = request.POST.get("po") or None
+        supplier_id = request.POST.get("supplier") or None
+        project_id = request.POST.get("project") or None
+        advance_date = request.POST.get("advance_date") or timezone.localdate()
+        amount = to_decimal(request.POST.get("amount") or 0)
+        payment_method = request.POST.get("payment_method") or "cash"
+        paid_from_gl_id = request.POST.get("paid_from_gl") or None
+        advance_gl_id = request.POST.get("advance_gl") or None
+        note = (request.POST.get("note") or "").strip()
+
+        if po_id:
+            po = PurchaseOrder.objects.filter(id=po_id).first()
+            if po:
+                supplier_id = po.supplier_id
+                project_id = po.project_id
+
+        if not supplier_id:
+            messages.error(request, "Supplier is required.")
+            return render(request, "pos/edit_supplier_advance.html", context)
+
+        if amount <= 0:
+            messages.error(request, "Amount must be greater than 0.")
+            return render(request, "pos/edit_supplier_advance.html", context)
+
+        if not paid_from_gl_id:
+            messages.error(request, "Paid From GL is required.")
+            return render(request, "pos/edit_supplier_advance.html", context)
+
+        if not advance_gl_id:
+            messages.error(request, "Advance GL is required.")
+            return render(request, "pos/edit_supplier_advance.html", context)
+
+        advance.po_id = po_id
+        advance.supplier_id = supplier_id
+        advance.project_id = project_id
+        advance.advance_date = advance_date
+        advance.amount = amount
+        advance.payment_method = payment_method
+        advance.paid_from_gl_id = paid_from_gl_id
+        advance.advance_gl_id = advance_gl_id
+        advance.note = note
+        advance.save()
+
+        messages.success(request, "Supplier advance updated successfully.")
+        return redirect("supplier_advance_list")
+
+    return render(request, "pos/edit_supplier_advance.html", context)

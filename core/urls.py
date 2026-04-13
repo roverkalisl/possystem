@@ -153,4 +153,5 @@ path("purchase-orders/add/", views.add_purchase_order, name="add_purchase_order"
 path("purchase-orders/<int:po_id>/edit/", views.edit_purchase_order, name="edit_purchase_order"),
     path("purchase-orders/<int:po_id>/data/", views.purchase_order_data, name="purchase_order_data"),
     path("petty-cash-ledger/", views.petty_cash_ledger_report, name="petty_cash_ledger_report"),
+    path("supplier-advances/<int:advance_id>/edit/", views.edit_supplier_advance, name="edit_supplier_advance"),
    ]

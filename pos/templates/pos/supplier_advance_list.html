@@ -57,6 +57,7 @@
                         <td>{{ a.status }}</td>
                         <td class="text-center">
                             {% if a.balance_amount > 0 %}
+				<a href="{% url 'edit_supplier_advance' a.id %}" class="btn btn-sm btn-outline-primary">   Edit </a>
                                 <a href="{% url 'add_supplier_settlement_from_advance' a.id %}" class="btn btn-sm btn-outline-primary">
                                     Settle
                                 </a>

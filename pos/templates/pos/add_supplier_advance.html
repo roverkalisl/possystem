@@ -17,7 +17,7 @@
 
                 <div class="col-md-3">
                     <label class="form-label">Advance Date</label>
-                    <input type="date" name="advance_date" class="form-control">
+                    <input type="date" name="advance_date" class="form-control" value="{% now 'Y-m-d' %}">
                 </div>
 
                 <div class="col-md-6">
@@ -31,22 +31,7 @@
                             </option>
                         {% endfor %}
                     </select>
-                    <small class="text-muted">PO එකක් තෝරනවා නම් related details auto-fill වේ.</small>
-                </div>
-
-                <div class="col-md-4">
-                    <label class="form-label">Buyer Company</label>
-                    <input type="text" id="buyer_company_name" class="form-control" readonly>
-                </div>
-
-                <div class="col-md-4">
-                    <label class="form-label">Buyer Contact Person</label>
-                    <input type="text" id="buyer_contact_person" class="form-control" readonly>
-                </div>
-
-                <div class="col-md-4">
-                    <label class="form-label">Buyer Phone</label>
-                    <input type="text" id="buyer_phone" class="form-control" readonly>
+                    <small class="text-muted">If a PO is selected, related details will auto-fill.</small>
                 </div>
 
                 <div class="col-md-4">
@@ -80,7 +65,7 @@
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label">Supplier <span class="required-star">*</span></label>
+                    <label class="form-label">Supplier <span class="text-danger">*</span></label>
                     <select name="supplier" id="supplier_id" class="form-select" required>
                         <option value="">-- Select Supplier --</option>
                         {% for s in suppliers %}
@@ -105,7 +90,7 @@
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label">Amount <span class="required-star">*</span></label>
+                    <label class="form-label">Amount <span class="text-danger">*</span></label>
                     <input type="number" step="0.01" min="0" name="amount" id="amount" class="form-control" required>
                 </div>
 
@@ -120,7 +105,7 @@
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label">Paid From GL <span class="required-star">*</span></label>
+                    <label class="form-label">Paid From GL <span class="text-danger">*</span></label>
                     <select name="paid_from_gl" class="form-select" required>
                         <option value="">-- Select GL --</option>
                         {% for gl in gl_list %}
@@ -130,7 +115,7 @@
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label">Advance GL <span class="required-star">*</span></label>
+                    <label class="form-label">Advance GL <span class="text-danger">*</span></label>
                     <select name="advance_gl" class="form-select" required>
                         <option value="">-- Select GL --</option>
                         {% for gl in gl_list %}
@@ -147,12 +132,14 @@
 
             <div class="mt-4 d-flex gap-2">
                 <button type="submit" class="btn btn-primary">Save Advance</button>
-                <a href="{% url 'supplier_advance_list' %}" class="btn btn-secondary">Cancel</a>
+                <a href="{% url 'supplier_advance_list' %}" class="btn btn-secondary">Back</a>
             </div>
         </form>
     </div>
 </div>
+{% endblock %}
 
+{% block extra_js %}
 <script>
 document.addEventListener("DOMContentLoaded", function () {
     const poSelect = document.getElementById("po_id");
@@ -161,28 +148,18 @@ document.addEventListener("DOMContentLoaded", function () {
     const amountField = document.getElementById("amount");
     const noteField = document.getElementById("note");
 
-    const buyerCompanyField = document.getElementById("buyer_company_name");
-    const buyerContactField = document.getElementById("buyer_contact_person");
-    const buyerPhoneField = document.getElementById("buyer_phone");
-
     const supplierNameField = document.getElementById("supplier_name_display");
     const supplierAddressField = document.getElementById("supplier_address_display");
     const supplierContactField = document.getElementById("supplier_contact_display");
-
     const projectNameField = document.getElementById("project_name_display");
     const deliveryLocationField = document.getElementById("delivery_location_display");
     const deliveryMethodField = document.getElementById("delivery_method_display");
     const paymentPeriodField = document.getElementById("payment_period_display");
 
     function clearPoLoadedFields() {
-        if (buyerCompanyField) buyerCompanyField.value = "";
-        if (buyerContactField) buyerContactField.value = "";
-        if (buyerPhoneField) buyerPhoneField.value = "";
-
         if (supplierNameField) supplierNameField.value = "";
         if (supplierAddressField) supplierAddressField.value = "";
         if (supplierContactField) supplierContactField.value = "";
-
         if (projectNameField) projectNameField.value = "";
         if (deliveryLocationField) deliveryLocationField.value = "";
         if (deliveryMethodField) deliveryMethodField.value = "";
@@ -217,10 +194,6 @@ document.addEventListener("DOMContentLoaded", function () {
                 if (projectField) projectField.value = data.project_id || "";
                 if (amountField) amountField.value = data.amount || data.estimated_amount || "";
                 if (noteField) noteField.value = data.note || "";
-
-                if (buyerCompanyField) buyerCompanyField.value = data.buyer_company_name || "";
-                if (buyerContactField) buyerContactField.value = data.buyer_contact_person || "";
-                if (buyerPhoneField) buyerPhoneField.value = data.buyer_phone || "";
 
                 if (supplierNameField) supplierNameField.value = data.supplier_name || "";
                 if (supplierAddressField) supplierAddressField.value = data.supplier_address || "";

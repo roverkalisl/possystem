@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Edit Supplier Advance{% endblock %}
+
+{% block content %}
+<h3 class="page-title">Edit Supplier Advance</h3>
+
+<div class="card card-soft">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Advance No</label>
+                    <input type="text" class="form-control" value="{{ advance.advance_no }}" readonly>
+                </div>
+
+                <div class="col-md-3">
+                    <label class="form-label">Advance Date</label>
+                    <input type="date" name="advance_date" class="form-control" value="{{ advance.advance_date|date:'Y-m-d' }}">
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">PO Number</label>
+                    <select name="po" id="po_id" class="form-select">
+                        <option value="">-- Select PO --</option>
+                        {% for po in purchase_orders %}
+                            <option value="{{ po.id }}" {% if advance.po_id == po.id %}selected{% endif %}>
+                                {{ po.po_no }} - {{ po.supplier.name }}
+                                {% if po.project %} - {{ po.project.project_id }}{% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Supplier</label>
+                    <select name="supplier" id="supplier_id" class="form-select" required>
+                        <option value="">-- Select Supplier --</option>
+                        {% for s in suppliers %}
+                            <option value="{{ s.id }}" {% if advance.supplier_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-6">
+                    <label class="form-label">Project</label>
+                    <select name="project" id="project_id" class="form-select">
+                        <option value="">-- Select Project --</option>
+                        {% for p in projects %}
+                            <option value="{{ p.id }}" {% if advance.project_id == p.id %}selected{% endif %}>
+                                {{ p.project_id }} - {{ p.project_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Amount</label>
+                    <input type="number" step="0.01" min="0" name="amount" id="amount" class="form-control" value="{{ advance.amount }}">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Payment Method</label>
+                    <select name="payment_method" class="form-select">
+                        <option value="cash" {% if advance.payment_method == 'cash' %}selected{% endif %}>Cash</option>
+                        <option value="card" {% if advance.payment_method == 'card' %}selected{% endif %}>Card</option>
+                        <option value="bank" {% if advance.payment_method == 'bank' %}selected{% endif %}>Bank Transfer</option>
+                        <option value="cheque" {% if advance.payment_method == 'cheque' %}selected{% endif %}>Cheque</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Paid From GL</label>
+                    <select name="paid_from_gl" class="form-select" required>
+                        <option value="">-- Select GL --</option>
+                        {% for gl in gl_list %}
+                            <option value="{{ gl.id }}" {% if advance.paid_from_gl_id == gl.id %}selected{% endif %}>
+                                {{ gl.gl_code }} - {{ gl.gl_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Advance GL</label>
+                    <select name="advance_gl" class="form-select" required>
+                        <option value="">-- Select GL --</option>
+                        {% for gl in gl_list %}
+                            <option value="{{ gl.id }}" {% if advance.advance_gl_id == gl.id %}selected{% endif %}>
+                                {{ gl.gl_code }} - {{ gl.gl_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="col-md-12">
+                    <label class="form-label">Note</label>
+                    <textarea name="note" rows="3" class="form-control">{{ advance.note|default:'' }}</textarea>
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Update Advance</button>
+                <a href="{% url 'supplier_advance_list' %}" class="btn btn-secondary">Back</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
