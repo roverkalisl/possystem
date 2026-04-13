@@ -65,7 +65,6 @@
         <a href="{% url 'supplier_settlement_list' %}" class="simple-dashboard-btn">Settlement List</a>
     </div>
 </div>
-
         <div class="simple-dashboard-card">
             <h5 class="simple-dashboard-title">MASTER DATA</h5>
             <div class="simple-dashboard-links">
@@ -75,6 +74,16 @@
      		   <a href="{% url 'add_supplier' %}" class="simple-dashboard-btn">Add Supplier</a>           
                     </div>
         </div>
+{% if show_project %}
+<div class="simple-dashboard-card">
+    <h5 class="simple-dashboard-title">PROJECT / ADVANCE</h5>
+    <div class="simple-dashboard-links">
+        <a href="{% url 'purchase_order_list' %}" class="simple-dashboard-btn primary">Purchase Orders</a>
+        <a href="{% url 'supplier_advance_list' %}" class="simple-dashboard-btn">Supplier Advances</a>
+        <a href="{% url 'supplier_settlement_list' %}" class="simple-dashboard-btn">Settlement Ledger</a>
+    </div>
+</div>
+{% endif %}
 
         <div class="simple-dashboard-card">
             <h5 class="simple-dashboard-title">GL ACCOUNTS</h5>

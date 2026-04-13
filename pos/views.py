@@ -2737,30 +2737,6 @@ def add_supplier_settlement_from_advance(request, advance_id):
     return render(request, "pos/add_supplier_settlement.html", context)
 
 
-@user_passes_test(can_use_project)
-def supplier_settlement_list(request):
-    query = request.GET.get("q", "").strip()
-
-    settlements = SupplierSettlement.objects.select_related(
-        "advance", "supplier", "project", "expense_gl", "linked_project_expense", "created_by", "approved_by"
-    ).order_by("-settlement_date", "-id")
-
-    if query:
-        settlements = settlements.filter(
-            Q(settlement_no__icontains=query) |
-            Q(supplier__name__icontains=query) |
-            Q(project__project_id__icontains=query) |
-            Q(project__project_name__icontains=query) |
-            Q(description__icontains=query)
-        )
-
-    return render(request, "pos/supplier_settlement_list.html", {
-        "settlements": settlements,
-        "query": query,
-        "is_owner": is_owner(request.user),
-    })
-
-
 @user_passes_test(is_owner)
 def approve_supplier_settlement(request, settlement_id):
     settlement = get_object_or_404(
@@ -2795,13 +2771,12 @@ def approve_supplier_settlement(request, settlement_id):
         settlement.linked_project_expense = linked_project_expense
         settlement.save()
 
-        if settlement.advance.balance_amount <= 0:
+        if settlement.advance and settlement.advance.balance_amount <= 0:
             settlement.advance.status = "closed"
             settlement.advance.save()
 
     messages.success(request, "Settlement approved and posted to Project Expenses.")
     return redirect("supplier_settlement_list")
-
 
 @user_passes_test(is_owner)
 def reject_supplier_settlement(request, settlement_id):
@@ -3112,4 +3087,102 @@ def purchase_order_data(request, po_id):
         "payment_period": getattr(po, "payment_period", "") or "",
         "amount": str(amount_value or 0),
         "note": po.note or "",
+    })
+
+@user_passes_test(can_use_project)
+def supplier_settlement_list(request):
+    query = request.GET.get("q", "").strip()
+    status_filter = request.GET.get("status", "").strip()
+    supplier_id = request.GET.get("supplier", "").strip()
+
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+
+    settlements = SupplierSettlement.objects.select_related(
+        "advance", "supplier", "project", "expense_gl",
+        "linked_project_expense", "created_by", "approved_by"
+    ).order_by("-settlement_date", "-id")
+
+    if query:
+        settlements = settlements.filter(
+            Q(settlement_no__icontains=query) |
+            Q(supplier__name__icontains=query) |
+            Q(project__project_id__icontains=query) |
+            Q(project__project_name__icontains=query) |
+            Q(description__icontains=query)
+        )
+
+    if status_filter in ["pending", "approved", "rejected"]:
+        settlements = settlements.filter(approval_status=status_filter)
+
+    if supplier_id:
+        settlements = settlements.filter(supplier_id=supplier_id)
+
+    summary_suppliers = suppliers
+    if supplier_id:
+        summary_suppliers = summary_suppliers.filter(id=supplier_id)
+
+    supplier_summary = []
+
+    grand_total_advance = Decimal("0")
+    grand_approved_applied = Decimal("0")
+    grand_available_advance = Decimal("0")
+    grand_pending_actual = Decimal("0")
+    grand_approved_balance_due = Decimal("0")
+    grand_pending_balance_due = Decimal("0")
+
+    for sup in summary_suppliers:
+        advances_qs = sup.advances.filter(is_active=True)
+        settlements_qs = sup.settlements.all()
+
+        total_advance = advances_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+        approved_applied = settlements_qs.filter(
+            approval_status="approved"
+        ).aggregate(total=Sum("advance_applied"))["total"] or Decimal("0")
+
+        pending_actual = settlements_qs.filter(
+            approval_status="pending"
+        ).aggregate(total=Sum("actual_amount"))["total"] or Decimal("0")
+
+        approved_balance_due = settlements_qs.filter(
+            approval_status="approved"
+        ).aggregate(total=Sum("balance_due"))["total"] or Decimal("0")
+
+        pending_balance_due = settlements_qs.filter(
+            approval_status="pending"
+        ).aggregate(total=Sum("balance_due"))["total"] or Decimal("0")
+
+        available_advance = total_advance - approved_applied
+
+        supplier_summary.append({
+            "supplier": sup,
+            "total_advance": total_advance,
+            "approved_applied": approved_applied,
+            "available_advance": available_advance,
+            "pending_actual": pending_actual,
+            "approved_balance_due": approved_balance_due,
+            "pending_balance_due": pending_balance_due,
+        })
+
+        grand_total_advance += total_advance
+        grand_approved_applied += approved_applied
+        grand_available_advance += available_advance
+        grand_pending_actual += pending_actual
+        grand_approved_balance_due += approved_balance_due
+        grand_pending_balance_due += pending_balance_due
+
+    return render(request, "pos/supplier_settlement_list.html", {
+        "settlements": settlements,
+        "suppliers": suppliers,
+        "query": query,
+        "status_filter": status_filter,
+        "selected_supplier": supplier_id,
+        "is_owner": is_owner(request.user),
+        "supplier_summary": supplier_summary,
+        "grand_total_advance": grand_total_advance,
+        "grand_approved_applied": grand_approved_applied,
+        "grand_available_advance": grand_available_advance,
+        "grand_pending_actual": grand_pending_actual,
+        "grand_approved_balance_due": grand_approved_balance_due,
+        "grand_pending_balance_due": grand_pending_balance_due,
     })
