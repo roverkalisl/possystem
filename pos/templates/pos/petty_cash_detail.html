@@ -64,7 +64,7 @@
                 <small class="text-muted">Petty Cash Limit</small><br>
                 <strong>
                     {% if petty_cash.employee %}
-                        Rs. {{ petty_cash.employee.petty_cash_limit|money }}
+                        {{ petty_cash.employee.petty_cash_limit|money }}
                     {% else %}
                         Rs. 0.00
                     {% endif %}
@@ -74,7 +74,7 @@
                 <small class="text-muted">Outstanding</small><br>
                 <strong>
                     {% if petty_cash.employee %}
-                        Rs. {{ petty_cash.employee.petty_cash_outstanding|money }}
+                        {{ petty_cash.employee.petty_cash_outstanding|money }}
                     {% else %}
                         Rs. 0.00
                     {% endif %}
@@ -87,19 +87,19 @@
         <div class="col-md-4">
             <div class="summary-box">
                 <h6>Issued Amount</h6>
-                <p class="summary-value">Rs. {{ petty_cash.amount_issued|money }}</p>
+                <p class="summary-value">{{ petty_cash.amount_issued|money }}</p>
             </div>
         </div>
         <div class="col-md-4">
             <div class="summary-box">
                 <h6>Total Spent</h6>
-                <p class="summary-value">Rs. {{ petty_cash.total_spent|money }}</p>
+                <p class="summary-value">{{ petty_cash.total_spent|money }}</p>
             </div>
         </div>
         <div class="col-md-4">
             <div class="summary-box">
                 <h6>Balance</h6>
-                <p class="summary-value">Rs. {{ petty_cash.balance|money }}</p>
+                <p class="summary-value">{{ petty_cash.balance|money }}</p>
             </div>
         </div>
     </div>
@@ -136,7 +136,7 @@
                     <td>{% if expense.project %}{{ expense.project.project_id }}{% else %}-{% endif %}</td>
                     <td>{{ expense.description }}</td>
                     <td>{{ expense.bill_no|default:"-" }}</td>
-                    <td class="text-money">Rs. {{ expense.amount|money }}</td>
+                    <td class="text-money">{{ expense.amount|money }}</td>
                     <td>
                         {% if expense.approval_status == "approved" %}
                             <span class="badge bg-success">Approved</span>

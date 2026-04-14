@@ -10,7 +10,7 @@
         <div>
             <a href="{% url 'receive_stock' item.id %}" class="btn btn-success btn-sm">Receive Stock</a>
             <a href="{% url 'item_list' %}" class="btn btn-secondary btn-sm">Back to Items</a>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+
         </div>
     </div>
 
@@ -41,8 +41,8 @@
                     <td>{{ row.transaction.get_reference_type_display|default:"-" }}</td>
                     <td>{{ row.transaction.reference_no|default:"-" }}</td>
                     <td>{{ row.transaction.get_transaction_type_display }}</td>
-                    <td class="text-end">{{ row.receipt|floatformat:2 }}</td>
-                    <td class="text-end">{{ row.issue|floatformat:2 }}</td>
+                    <td class="text-end">{{ row.receipt|floatformat:2 }} {{ item.unit }}</td>
+                    <td class="text-end">{{ row.issue|floatformat:2 }} {{ item.unit }}</td>
                     <td class="text-end"><strong>{{ row.balance|floatformat:2 }}</strong></td>
                     <td>{{ row.transaction.notes|default:"-" }}</td>
                 </tr>

@@ -57,7 +57,7 @@
                         {% endif %}
                     </td>
                     <td>{{ sale.customer_name|default:"-" }}</td>
-                    <td class="text-money">Rs. {{ sale.grand_total|money }}</td>
+                    <td class="text-money">{{ sale.grand_total|money }}</td>
                     <td>{{ sale.get_payment_method_display }}</td>
                     <td>{% if sale.created_by %}{{ sale.created_by.username }}{% else %}-{% endif %}</td>
                     <td>
@@ -123,8 +123,8 @@
                                             <td>{{ row.item.item_code }}</td>
                                             <td>{{ row.item.name }}</td>
                                             <td>{{ row.qty }}</td>
-                                            <td class="text-money">Rs. {{ row.price|money }}</td>
-                                            <td class="text-money">Rs. {{ row.amount|money }}</td>
+                                            <td class="text-money">{{ row.price|money }}</td>
+                                            <td class="text-money">{{ row.amount|money }}</td>
                                         </tr>
                                         {% empty %}
                                         <tr>

@@ -35,7 +35,7 @@
                     <option value="">Select Employee</option>
                     {% for e in employees %}
                         <option value="{{ e.id }}" {% if petty_cash.employee.id == e.id %}selected{% endif %}>
-                            {{ e.emp_no }} - {{ e.full_name }} | Limit: Rs. {{ e.petty_cash_limit|money }}
+                            {{ e.emp_no }} - {{ e.full_name }} | Limit: {{ e.petty_cash_limit|money }}
                         </option>
                     {% endfor %}
                 </select>

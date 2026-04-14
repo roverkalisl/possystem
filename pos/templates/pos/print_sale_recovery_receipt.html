@@ -23,7 +23,7 @@
     <div class="row"><strong>Date:</strong> {{ recovery.recovery_date|date:"Y-m-d" }}</div>
     <div class="row"><strong>Invoice No:</strong> {{ sale.invoice_no }}</div>
     <div class="row"><strong>Customer:</strong> {{ sale.customer_name|default:"-" }}</div>
-    <div class="row"><strong>Recovery Amount:</strong> Rs. {{ recovery.amount|money }}</div>
+    <div class="row"><strong>Recovery Amount:</strong> {{ recovery.amount|money }}</div>
     <div class="row"><strong>Payment Method:</strong> {{ recovery.get_payment_method_display }}</div>
 
     {% if recovery.card_no %}
@@ -34,7 +34,7 @@
     <div class="row"><strong>Cheque No:</strong> {{ recovery.cheque_no }}</div>
     {% endif %}
 
-    <div class="row"><strong>Remaining Balance:</strong> Rs. {{ sale.credit_balance|money }}</div>
+    <div class="row"><strong>Remaining Balance:</strong> {{ sale.credit_balance|money }}</div>
     <div class="row"><strong>Note:</strong> {{ recovery.note|default:"-" }}</div>
 </div>
 </body>

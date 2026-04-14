@@ -13,7 +13,7 @@
             {% if is_owner %}
             <a href="{% url 'petty_cash_expense_approvals' %}" class="btn btn-outline-dark btn-sm">Approvals</a>
             {% endif %}
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+
         </div>
     </div>
 
@@ -59,7 +59,7 @@
         <div class="col-md-1 d-flex align-items-end">
             <div class="summary-box w-100 text-center">
                 <h6>Total</h6>
-                <p class="summary-value">Rs. {{ total_amount|money }}</p>
+                <p class="summary-value">{{ total_amount|money }}</p>
             </div>
         </div>
     </form>
@@ -108,7 +108,7 @@
                     </td>
                     <td>{{ expense.description }}</td>
                     <td>{{ expense.bill_no|default:"-" }}</td>
-                    <td class="text-money">Rs. {{ expense.amount|money }}</td>
+                    <td class="text-money">{{ expense.amount|money }}</td>
                     <td>
                         {% if expense.approval_status == "approved" %}
                             <span class="badge bg-success">Approved</span>

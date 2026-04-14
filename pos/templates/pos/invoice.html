@@ -1,4 +1,5 @@
 {% load static %}
+{% load currency_filters %}
 
 <!DOCTYPE html>
 <html>
@@ -210,8 +211,8 @@
                     <small>{{ row.item.item_code }}</small>
                 </td>
                 <td class="qty-col">{{ row.qty }}</td>
-                <td class="price-col">{{ row.price }}</td>
-                <td class="amt-col">{{ row.amount }}</td>
+                <td class="price-col">{{ row.price|money }}</td>
+                <td class="amt-col">{{ row.amount|money }}</td>
             </tr>
             {% empty %}
             <tr>
@@ -226,25 +227,25 @@
     <table class="totals">
         <tr>
             <td>Total</td>
-            <td>{{ sale.total }}</td>
+            <td>{{ sale.total|money }}</td>
         </tr>
         <tr>
             <td>Discount</td>
-            <td>{{ sale.discount }}</td>
+            <td>{{ sale.discount|money }}</td>
         </tr>
         <tr class="bold">
             <td>Grand Total</td>
-            <td>{{ sale.grand_total }}</td>
+            <td>{{ sale.grand_total|money }}</td>
         </tr>
 
         {% if sale.payment_method == 'cash' %}
         <tr>
             <td>Received</td>
-            <td>{{ sale.received_amount }}</td>
+            <td>{{ sale.received_amount|money }}</td>
         </tr>
         <tr>
             <td>Balance</td>
-            <td>{{ sale.balance }}</td>
+            <td>{{ sale.balance|money }}</td>
         </tr>
         {% endif %}
     </table>

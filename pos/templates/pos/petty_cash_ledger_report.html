@@ -4,7 +4,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="page-title mb-0">Petty Cash Ledger Report</h3>
-	<a href="{% url 'dashboard' %}" class="btn btn-outline-secondary"> Dashboard    </a>
+	<a href="{% url 'pos' %}" class="btn btn-outline-primary">POS</a>
     <a href="{% url 'petty_cash_list' %}" class="btn btn-secondary">Back to Petty Cash</a>
 </div>
 
@@ -139,7 +139,7 @@
                         <td class="text-end">
                             {% if row.expense_amount > 0 %}{{ row.expense_amount }}{% else %}-{% endif %}
                         </td>
-                        <td class="text-end">{{ row.balance }}</td>
+                        <td class="text-end">{{ row.balance|money }}</td>
                         <td>{{ row.status }}</td>
                     </tr>
                     {% empty %}
@@ -151,9 +151,9 @@
                 <tfoot>
                     <tr class="fw-bold">
                         <td colspan="8" class="text-end">Totals</td>
-                        <td class="text-end">{{ total_reimbursement }}</td>
-                        <td class="text-end">{{ total_expense }}</td>
-                        <td class="text-end">{{ closing_balance }}</td>
+                        <td class="text-end">{{ total_reimbursement|money }}</td>
+                        <td class="text-end">{{ total_expense|money }}</td>
+                        <td class="text-end">{{ closing_balance|money }}</td>
                         <td></td>
                     </tr>
                 </tfoot>

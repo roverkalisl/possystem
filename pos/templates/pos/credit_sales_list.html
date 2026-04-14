@@ -8,7 +8,7 @@
     <div class="app-card-header">
         <h4 class="app-page-title">Credit Sales Recovery</h4>
         <div>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+
         </div>
     </div>
 
@@ -55,9 +55,9 @@
                         <br><small class="text-muted">{{ sale.project.project_id }} - {{ sale.project.project_name }}</small>
                         {% endif %}
                     </td>
-                    <td class="text-money">Rs. {{ sale.grand_total|money }}</td>
-                    <td class="text-money">Rs. {{ sale.recovered_amount|money }}</td>
-                    <td class="text-money">Rs. {{ sale.credit_balance|money }}</td>
+                    <td class="text-money">{{ sale.grand_total|money }}</td>
+                    <td class="text-money">{{ sale.recovered_amount|money }}</td>
+                    <td class="text-money">{{ sale.credit_balance|money }}</td>
                     <td>
                         {% if sale.credit_status == "paid" %}
                             <span class="badge bg-success">Paid</span>

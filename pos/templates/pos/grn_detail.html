@@ -118,8 +118,8 @@
                     <td>{{ item.quantity_received }}</td>
                     <td>{{ item.quantity_accepted }}</td>
                     <td>{{ item.quantity_rejected }}</td>
-                    <td>Rs. {{ item.unit_price|money }}</td>
-                    <td>Rs. {{ item.line_total|money }}</td>
+                    <td>{{ item.unit_price|money }}</td>
+                    <td>{{ item.line_total|money }}</td>
                     <td>
                         <span class="badge bg-{% if item.quality_status == 'good' %}success{% elif item.quality_status == 'damaged' %}warning{% else %}danger{% endif %}">
                             {{ item.get_quality_status_display }}
@@ -138,7 +138,7 @@
                     <th>{{ grn_items|length }}</th>
                     <th>-</th>
                     <th>-</th>
-                    <th>Rs. {{ grn.total_value|money }}</th>
+                    <th>{{ grn.total_value|money }}</th>
                     <th colspan="4">-</th>
                 </tr>
             </tfoot>

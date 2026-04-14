@@ -37,7 +37,7 @@
                     <td>{{ p.get_project_type_display }}</td>
                     <td>{{ p.client_name }}</td>
                     <td>{{ p.location|default:"-" }}</td>
-                    <td class="text-money">Rs. {{ p.estimated_value|money }}</td>
+                    <td class="text-money">{{ p.estimated_value|money }}</td>
                     <td>{{ p.status|default:"active"|title }}</td>
                     {% if request.user.is_superuser or is_owner %}
                     <td>

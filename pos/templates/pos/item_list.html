@@ -9,7 +9,7 @@
         <h4 class="app-page-title">Item List</h4>
         <div>
             <a href="{% url 'add_item' %}" class="btn btn-primary btn-sm">+ Add Item</a>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+
         </div>
     </div>
 
@@ -42,7 +42,9 @@
                     <th>Unit</th>
                     <th>Cost Price</th>
                     <th>Selling Price</th>
+                    <th>Profit/Unit</th>
                     <th>Stock</th>
+                    <th>Stock Value</th>
                     <th>Type</th>
                     <th>Service</th>
                     <th>Action</th>
@@ -56,9 +58,17 @@
                     <td>{% if item.category %}{{ item.category.name }}{% else %}-{% endif %}</td>
                     <td>{% if item.supplier %}{{ item.supplier.name }}{% else %}-{% endif %}</td>
                     <td>{{ item.unit }}</td>
-                    <td class="text-money">Rs. {{ item.cost_price|money }}</td>
-                    <td class="text-money">Rs. {{ item.selling_price|money }}</td>
-                    <td>{{ item.stock }}</td>
+                    <td class="text-money">{{ item.cost_price|money }}</td>
+                    <td class="text-money">{{ item.selling_price|money }}</td>
+                    {% with profit=item.selling_price|subtract:item.cost_price %}
+                    <td class="text-money {% if profit > 0 %}text-success font-weight-bold{% elif profit < 0 %}text-danger{% endif %}">
+                        {{ profit|money }}
+                    </td>
+                    {% endwith %}
+                    <td class="text-center">{{ item.stock }}</td>
+                    {% with stock_val=item.cost_price|mul:item.stock %}
+                    <td class="text-money">{{ stock_val|money }}</td>
+                    {% endwith %}
                     <td>{{ item.get_item_type_display }}</td>
                     <td>
                         {% if item.is_service %}
@@ -75,7 +85,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="11" class="text-center">No items found</td>
+                    <td colspan="13" class="text-center">No items found</td>
                 </tr>
                 {% endfor %}
             </tbody>

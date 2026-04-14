@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load currency_filters %}
 {% block title %}Purchase Orders{% endblock %}
 
 {% block content %}
@@ -48,7 +49,7 @@
                         <td>{% if o.project %}{{ o.project.project_id }} - {{ o.project.project_name }}{% else %}-{% endif %}</td>
                         <td>{{ o.buyer_company_name|default:"-" }}</td>
                         <td>{{ o.delivery_date_required|default:"-" }}</td>
-                        <td class="text-end">{{ o.grand_total }}</td>
+                        <td class="text-end">{{ o.grand_total|money }}</td>
                         <td>{{ o.get_status_display }}</td>
                         <td class="text-center">
                             {% if o.status == 'approved' %}

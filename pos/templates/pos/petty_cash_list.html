@@ -15,7 +15,7 @@
             {% if is_owner %}
             <a href="{% url 'petty_cash_expense_approvals' %}" class="btn btn-outline-dark btn-sm">Approvals</a>
             {% endif %}
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+
         </div>
     </div>
 
@@ -59,11 +59,11 @@
                         {% endif %}
                     </td>
 
-                    <td class="text-money">Rs. {{ row.approved_limit|money }}</td>
-                    <td class="text-money">Rs. {{ row.total_issued|money }}</td>
-                    <td class="text-money">Rs. {{ row.total_spent|money }}</td>
-                    <td class="text-money">Rs. {{ row.total_balance|money }}</td>
-                    <td class="text-money">Rs. {{ row.reimbursement_required|money }}</td>
+                    <td class="text-money">{{ row.approved_limit|money }}</td>
+                    <td class="text-money">{{ row.total_issued|money }}</td>
+                    <td class="text-money">{{ row.total_spent|money }}</td>
+                    <td class="text-money">{{ row.total_balance|money }}</td>
+                    <td class="text-money">{{ row.reimbursement_required|money }}</td>
 
                     <td>{{ row.obj.note|default:"-"|truncatechars:30 }}</td>
 

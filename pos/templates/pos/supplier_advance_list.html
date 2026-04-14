@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load currency_filters %}
 {% block title %}Supplier Advances{% endblock %}
 
 {% block content %}
@@ -51,9 +52,9 @@
                                 -
                             {% endif %}
                         </td>
-                        <td class="text-end">{{ a.amount }}</td>
-                        <td class="text-end">{{ a.settled_amount }}</td>
-                        <td class="text-end">{{ a.balance_amount }}</td>
+                        <td class="text-end">{{ a.amount|money }}</td>
+                        <td class="text-end">{{ a.settled_amount|money }}</td>
+                        <td class="text-end">{{ a.balance_amount|money }}</td>
                         <td>{{ a.status }}</td>
                         <td class="text-center">
                             {% if a.balance_amount > 0 %}

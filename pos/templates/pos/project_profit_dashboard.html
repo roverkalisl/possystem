@@ -41,26 +41,26 @@
         <div class="col-md-3 mb-2">
             <div class="card shadow-sm p-3">
                 <h6>Total Income</h6>
-                <h4>Rs. {{ grand_income|money }}</h4>
+                <h4>{{ grand_income|money }}</h4>
             </div>
         </div>
         <div class="col-md-3 mb-2">
             <div class="card shadow-sm p-3">
                 <h6>Direct Expenses</h6>
-                <h4>Rs. {{ grand_direct_expense|money }}</h4>
+                <h4>{{ grand_direct_expense|money }}</h4>
             </div>
         </div>
         <div class="col-md-3 mb-2">
             <div class="card shadow-sm p-3">
                 <h6>Petty Cash Expenses</h6>
-                <h4>Rs. {{ grand_petty_cash|money }}</h4>
+                <h4>{{ grand_petty_cash|money }}</h4>
             </div>
         </div>
         <div class="col-md-3 mb-2">
             <div class="card shadow-sm p-3">
                 <h6>Net Profit</h6>
                 <h4 class="{% if grand_profit >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
-                    Rs. {{ grand_profit|money }}
+                    {{ grand_profit|money }}
                 </h4>
             </div>
         </div>
@@ -87,12 +87,12 @@
                         <td>{{ row.project.project_id }}</td>
                         <td>{{ row.project.project_name }}</td>
                         <td>{{ row.project.client_name }}</td>
-                        <td>Rs. {{ row.total_income|money }}</td>
-                        <td>Rs. {{ row.direct_expense|money }}</td>
-                        <td>Rs. {{ row.petty_cash_expense|money }}</td>
-                        <td>Rs. {{ row.total_expense|money }}</td>
+                        <td>{{ row.total_income|money }}</td>
+                        <td>{{ row.direct_expense|money }}</td>
+                        <td>{{ row.petty_cash_expense|money }}</td>
+                        <td>{{ row.total_expense|money }}</td>
                         <td class="{% if row.profit >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
-                            Rs. {{ row.profit|money }}
+                            {{ row.profit|money }}
                         </td>
                     </tr>
                     {% empty %}

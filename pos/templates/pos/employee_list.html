@@ -9,7 +9,7 @@
         <h4 class="app-page-title">Employee List</h4>
         <div>
             <a href="{% url 'add_employee' %}" class="btn btn-primary btn-sm">+ Add Employee</a>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+
         </div>
     </div>
 
@@ -35,7 +35,7 @@
                     <td>{{ employee.designation|default:"-" }}</td>
                     <td>{{ employee.tel|default:"-" }}</td>
                     <td>{% if employee.user %}{{ employee.user.username }}{% else %}-{% endif %}</td>
-                    <td class="text-money">Rs. {{ employee.petty_cash_limit|money }}</td>
+                    <td class="text-money">{{ employee.petty_cash_limit|money }}</td>
                     <td>
                         {% if employee.is_active %}
                             <span class="badge bg-success">Active</span>

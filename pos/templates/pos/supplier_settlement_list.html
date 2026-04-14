@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load currency_filters %}
 {% block title %}Supplier Settlement Ledger{% endblock %}
 
 {% block content %}
@@ -57,7 +58,7 @@
         <div class="card card-soft">
             <div class="card-body text-center">
                 <div class="fw-bold">Total Advance</div>
-                <div class="fs-6">{{ grand_total_advance }}</div>
+                <div class="fs-6">{{ grand_total_advance|money }}</div>
             </div>
         </div>
     </div>
@@ -66,7 +67,7 @@
         <div class="card card-soft">
             <div class="card-body text-center">
                 <div class="fw-bold">Approved Applied</div>
-                <div class="fs-6">{{ grand_approved_applied }}</div>
+                <div class="fs-6">{{ grand_approved_applied|money }}</div>
             </div>
         </div>
     </div>
@@ -75,7 +76,7 @@
         <div class="card card-soft">
             <div class="card-body text-center">
                 <div class="fw-bold">Available Advance</div>
-                <div class="fs-6">{{ grand_available_advance }}</div>
+                <div class="fs-6">{{ grand_available_advance|money }}</div>
             </div>
         </div>
     </div>
@@ -84,7 +85,7 @@
         <div class="card card-soft">
             <div class="card-body text-center">
                 <div class="fw-bold">Pending Actual</div>
-                <div class="fs-6">{{ grand_pending_actual }}</div>
+                <div class="fs-6">{{ grand_pending_actual|money }}</div>
             </div>
         </div>
     </div>
@@ -93,7 +94,7 @@
         <div class="card card-soft">
             <div class="card-body text-center">
                 <div class="fw-bold">Approved Due</div>
-                <div class="fs-6">{{ grand_approved_balance_due }}</div>
+                <div class="fs-6">{{ grand_approved_balance_due|money }}</div>
             </div>
         </div>
     </div>
@@ -102,7 +103,7 @@
         <div class="card card-soft">
             <div class="card-body text-center">
                 <div class="fw-bold">Pending Due</div>
-                <div class="fs-6">{{ grand_pending_balance_due }}</div>
+                <div class="fs-6">{{ grand_pending_balance_due|money }}</div>
             </div>
         </div>
     </div>
@@ -130,12 +131,12 @@
                     {% for row in supplier_summary %}
                     <tr>
                         <td>{{ row.supplier.name }}</td>
-                        <td class="text-end">{{ row.total_advance }}</td>
-                        <td class="text-end">{{ row.approved_applied }}</td>
-                        <td class="text-end">{{ row.available_advance }}</td>
-                        <td class="text-end">{{ row.pending_actual }}</td>
-                        <td class="text-end">{{ row.approved_balance_due }}</td>
-                        <td class="text-end">{{ row.pending_balance_due }}</td>
+                        <td class="text-end">{{ row.total_advance|money }}</td>
+                        <td class="text-end">{{ row.approved_applied|money }}</td>
+                        <td class="text-end">{{ row.available_advance|money }}</td>
+                        <td class="text-end">{{ row.pending_actual|money }}</td>
+                        <td class="text-end">{{ row.approved_balance_due|money }}</td>
+                        <td class="text-end">{{ row.pending_balance_due|money }}</td>
                     </tr>
                     {% empty %}
                     <tr>
@@ -148,12 +149,12 @@
                 <tfoot>
                     <tr class="fw-bold">
                         <td>Totals</td>
-                        <td class="text-end">{{ grand_total_advance }}</td>
-                        <td class="text-end">{{ grand_approved_applied }}</td>
-                        <td class="text-end">{{ grand_available_advance }}</td>
-                        <td class="text-end">{{ grand_pending_actual }}</td>
-                        <td class="text-end">{{ grand_approved_balance_due }}</td>
-                        <td class="text-end">{{ grand_pending_balance_due }}</td>
+                        <td class="text-end">{{ grand_total_advance|money }}</td>
+                        <td class="text-end">{{ grand_approved_applied|money }}</td>
+                        <td class="text-end">{{ grand_available_advance|money }}</td>
+                        <td class="text-end">{{ grand_pending_actual|money }}</td>
+                        <td class="text-end">{{ grand_approved_balance_due|money }}</td>
+                        <td class="text-end">{{ grand_pending_balance_due|money }}</td>
                     </tr>
                 </tfoot>
             </table>
@@ -204,10 +205,10 @@
                             {% endif %}
                         </td>
                         <td>{{ s.description }}</td>
-                        <td class="text-end">{{ s.actual_amount }}</td>
-                        <td class="text-end">{{ s.advance_applied }}</td>
-                        <td class="text-end">{{ s.balance_due }}</td>
-                        <td class="text-end">{{ s.excess_advance }}</td>
+                        <td class="text-end">{{ s.actual_amount|money }}</td>
+                        <td class="text-end">{{ s.advance_applied|money }}</td>
+                        <td class="text-end">{{ s.balance_due|money }}</td>
+                        <td class="text-end">{{ s.excess_advance|money }}</td>
                         <td>
                             {% if s.expense_gl %}
                                 {{ s.expense_gl.gl_code }} - {{ s.expense_gl.gl_name }}

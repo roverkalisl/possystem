@@ -21,7 +21,7 @@
                 <option value="">Select Employee</option>
                 {% for e in employees %}
                 <option value="{{ e.id }}">
-                    {{ e.emp_no }} - {{ e.full_name }} | Limit: Rs. {{ e.petty_cash_limit|money }}
+                    {{ e.emp_no }} - {{ e.full_name }} | Limit: {{ e.petty_cash_limit|money }}
                 </option>
                 {% endfor %}
             </select>

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% load currency_filters %}
 
 {% block title %}Customer List{% endblock %}
 
@@ -55,7 +56,7 @@
                                 -
                             {% endif %}
                         </td>
-                        <td class="text-end">{{ c.credit_limit }}</td>
+                        <td class="text-end">{{ c.credit_limit|money }}</td>
                         <td class="text-center">
                             <a href="{% url 'edit_customer' c.id %}" class="btn btn-sm btn-outline-primary">
                                 Edit

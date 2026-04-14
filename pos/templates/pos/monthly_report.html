@@ -9,7 +9,7 @@
         <h4 class="app-page-title">Monthly Report - {{ month }}/{{ year }}</h4>
         <div>
             <a href="{% url 'pos' %}" class="btn btn-primary btn-sm">POS</a>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+
         </div>
     </div>
 
@@ -31,25 +31,25 @@
         <div class="col-md-3">
             <div class="summary-box">
                 <h6>Total Sales</h6>
-                <p class="summary-value">Rs. {{ summary.total_sales|money }}</p>
+                <p class="summary-value">{{ summary.total_sales|money }}</p>
             </div>
         </div>
         <div class="col-md-3">
             <div class="summary-box">
                 <h6>Total Discount</h6>
-                <p class="summary-value">Rs. {{ summary.total_discount|money }}</p>
+                <p class="summary-value">{{ summary.total_discount|money }}</p>
             </div>
         </div>
         <div class="col-md-3">
             <div class="summary-box">
                 <h6>Total Cost</h6>
-                <p class="summary-value">Rs. {{ summary.total_cost|money }}</p>
+                <p class="summary-value">{{ summary.total_cost|money }}</p>
             </div>
         </div>
         <div class="col-md-3">
             <div class="summary-box">
                 <h6>Total Profit</h6>
-                <p class="summary-value">Rs. {{ summary.total_profit|money }}</p>
+                <p class="summary-value">{{ summary.total_profit|money }}</p>
             </div>
         </div>
     </div>
@@ -77,11 +77,11 @@
                     <td>{{ sale.created_at|date:"Y-m-d H:i" }}</td>
                     <td>{{ sale.get_payment_method_display }}</td>
                     <td>{% if sale.created_by %}{{ sale.created_by.username }}{% else %}-{% endif %}</td>
-                    <td class="text-money">Rs. {{ sale.total|money }}</td>
-                    <td class="text-money">Rs. {{ sale.discount|money }}</td>
-                    <td class="text-money">Rs. {{ sale.grand_total|money }}</td>
-                    <td class="text-money">Rs. {{ sale.sale_cost|money }}</td>
-                    <td class="text-money">Rs. {{ sale.sale_profit|money }}</td>
+                    <td class="text-money">{{ sale.total|money }}</td>
+                    <td class="text-money">{{ sale.discount|money }}</td>
+                    <td class="text-money">{{ sale.grand_total|money }}</td>
+                    <td class="text-money">{{ sale.sale_cost|money }}</td>
+                    <td class="text-money">{{ sale.sale_profit|money }}</td>
                     <td>
                         <a href="{% url 'invoice_page' sale.id %}" class="btn btn-sm btn-outline-primary">Invoice</a>
                     </td>

@@ -44,15 +44,15 @@
     <div class="row mb-3">
         <div class="col-md-3">
             <strong>Total Invoice Amount:</strong>
-            <span class="text-money">Rs. {{ invoice.total_amount|money }}</span>
+            <span class="text-money">{{ invoice.total_amount|money }}</span>
         </div>
         <div class="col-md-3">
             <strong>Total Payment Amount:</strong>
-            <span class="text-money">Rs. {{ invoice.paid_amount|money }}</span>
+            <span class="text-money">{{ invoice.paid_amount|money }}</span>
         </div>
         <div class="col-md-3">
             <strong>Balance:</strong>
-            <span class="text-money">Rs. {{ invoice.balance_amount|money }}</span>
+            <span class="text-money">{{ invoice.balance_amount|money }}</span>
         </div>
         <div class="col-md-3">
             <strong>Status:</strong>
@@ -99,8 +99,8 @@
                     <td>{{ row.item_code|default:"-" }}</td>
                     <td>{{ row.description }}</td>
                     <td>{{ row.qty }}</td>
-                    <td class="text-money">Rs. {{ row.price_each|money }}</td>
-                    <td class="text-money">Rs. {{ row.amount|money }}</td>
+                    <td class="text-money">{{ row.price_each|money }}</td>
+                    <td class="text-money">{{ row.amount|money }}</td>
                 </tr>
                 {% empty %}
                 <tr>
@@ -108,8 +108,8 @@
                     <td>-</td>
                     <td>{{ invoice.description }}</td>
                     <td>1</td>
-                    <td class="text-money">Rs. {{ invoice.total_amount|money }}</td>
-                    <td class="text-money">Rs. {{ invoice.total_amount|money }}</td>
+                    <td class="text-money">{{ invoice.total_amount|money }}</td>
+                    <td class="text-money">{{ invoice.total_amount|money }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -152,7 +152,7 @@
                     <td>{{ p.payment_date|date:"Y-m-d" }}</td>
                     <td>{{ p.get_payment_type_display }}</td>
                     <td>{{ p.get_payment_method_display|default:"-" }}</td>
-                    <td class="text-money">Rs. {{ p.amount|money }}</td>
+                    <td class="text-money">{{ p.amount|money }}</td>
                     <td>
                         {% if p.is_active %}
                             <span class="badge bg-success">Active</span>

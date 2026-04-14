@@ -68,9 +68,9 @@
                     <td>{{ invoice.invoice_date|date:"Y-m-d" }}</td>
                     <td>{{ invoice.project.project_id }}</td>
                     <td>{{ invoice.bill_to_name|default:"-" }}</td>
-                    <td class="text-money">Rs. {{ invoice.total_amount|money }}</td>
-                    <td class="text-money">Rs. {{ invoice.paid_amount|money }}</td>
-                    <td class="text-money">Rs. {{ invoice.balance_amount|money }}</td>
+                    <td class="text-money">{{ invoice.total_amount|money }}</td>
+                    <td class="text-money">{{ invoice.paid_amount|money }}</td>
+                    <td class="text-money">{{ invoice.balance_amount|money }}</td>
                     <td>
                         {% if invoice.payment_status == "paid" %}
                             <span class="badge status-paid">Paid</span>

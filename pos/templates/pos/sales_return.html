@@ -20,7 +20,7 @@
             <select name="sale" id="saleSelect" class="form-select form-select-sm" required>
                 <option value="">Select Invoice</option>
                 {% for sale in sales %}
-                <option value="{{ sale.id }}">{{ sale.invoice_no }} - Rs. {{ sale.grand_total|money }}</option>
+                <option value="{{ sale.id }}">{{ sale.invoice_no }} - {{ sale.grand_total|money }}</option>
                 {% endfor %}
             </select>
         </div>

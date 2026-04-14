@@ -8,7 +8,7 @@
     <div class="app-card-header">
         <h4 class="app-page-title">Petty Cash Expense Approvals</h4>
         <div>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+
         </div>
     </div>
 
@@ -49,7 +49,7 @@
                     <td>{{ expense.petty_cash.petty_cash_no }}</td>
                     <td>{{ expense.project.project_id }}</td>
                     <td>{{ expense.description }}</td>
-                    <td class="text-money">Rs. {{ expense.amount|money }}</td>
+                    <td class="text-money">{{ expense.amount|money }}</td>
                     <td>{% if expense.created_by %}{{ expense.created_by.username }}{% else %}-{% endif %}</td>
                     <td>
                         {% if expense.approval_status == "approved" %}

@@ -46,7 +46,7 @@ F{% extends "base.html" %}
                 <small class="text-muted">Available Balance</small><br>
                 <strong>
                     {% if summary %}
-                        Rs. {{ summary.total_balance|money }}
+                        {{ summary.total_balance|money }}
                     {% else %}
                         Rs. 0.00
                     {% endif %}
@@ -60,31 +60,31 @@ F{% extends "base.html" %}
         <div class="col-md-4">
             <div class="summary-box">
                 <h6>Approved Petty Cash Amount</h6>
-                <p class="summary-value">Rs. {{ summary.approved_limit|money }}</p>
+                <p class="summary-value">{{ summary.approved_limit|money }}</p>
             </div>
         </div>
         <div class="col-md-4">
             <div class="summary-box">
                 <h6>Total Issued</h6>
-                <p class="summary-value">Rs. {{ summary.total_issued|money }}</p>
+                <p class="summary-value">{{ summary.total_issued|money }}</p>
             </div>
         </div>
         <div class="col-md-4">
             <div class="summary-box">
                 <h6>Total Spent</h6>
-                <p class="summary-value">Rs. {{ summary.total_spent|money }}</p>
+                <p class="summary-value">{{ summary.total_spent|money }}</p>
             </div>
         </div>
         <div class="col-md-6">
             <div class="summary-box">
                 <h6>Total Balance</h6>
-                <p class="summary-value">Rs. {{ summary.total_balance|money }}</p>
+                <p class="summary-value">{{ summary.total_balance|money }}</p>
             </div>
         </div>
         <div class="col-md-6">
             <div class="summary-box">
                 <h6>Need To Be Reimbursement</h6>
-                <p class="summary-value">Rs. {{ summary.reimbursement_required|money }}</p>
+                <p class="summary-value">{{ summary.reimbursement_required|money }}</p>
             </div>
         </div>
     </div>

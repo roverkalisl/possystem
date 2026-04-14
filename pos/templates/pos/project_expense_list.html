@@ -9,7 +9,7 @@
         <h4 class="app-page-title">Project Expense List</h4>
         <div>
             <a href="{% url 'add_project_expense' %}" class="btn btn-primary btn-sm">+ Add Expense</a>
-            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+
         </div>
     </div>
 
@@ -56,8 +56,8 @@
                     <td>{{ expense.get_expense_type_display }}</td>
                     <td>{{ expense.description }}</td>
                     <td>{{ expense.qty }}</td>
-                    <td class="text-money">Rs. {{ expense.unit_price|money }}</td>
-                    <td class="text-money">Rs. {{ expense.amount|money }}</td>
+                    <td class="text-money">{{ expense.unit_price|money }}</td>
+                    <td class="text-money">{{ expense.amount|money }}</td>
                     <td>{% if expense.created_by %}{{ expense.created_by.username }}{% else %}-{% endif %}</td>
                     {% if is_owner %}
                     <td>
