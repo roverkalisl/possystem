@@ -37,6 +37,11 @@
                            value="{{ customer.credit_limit }}">
                 </div>
 
+                <div class="col-md-4">
+                    <label class="form-label">Registration No <span class="required-star">*</span></label>
+                    <input type="text" name="registration_no" class="form-control" value="{{ customer.registration_no|default:'' }}" required>
+                </div>
+
                 <div class="col-md-12">
                     <label class="form-label">Address</label>
                     <textarea name="address" rows="3" class="form-control">{{ customer.address|default:'' }}</textarea>

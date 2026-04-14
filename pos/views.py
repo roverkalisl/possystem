@@ -2628,10 +2628,18 @@ def add_customer(request):
         email = (request.POST.get("email") or "").strip()
         address = (request.POST.get("address") or "").strip()
         credit_limit = to_decimal(request.POST.get("credit_limit") or 0)
+        registration_no = (request.POST.get("registration_no") or "").strip()
         receivable_gl_account_id = request.POST.get("receivable_gl_account") or None
 
         if not name:
             messages.error(request, "Customer name is required.")
+            return render(request, "pos/add_customer.html", {
+                "gl_list": gl_list,
+                "next_customer_code": next_customer_code,
+            })
+
+        if not registration_no:
+            messages.error(request, "Registration number is required for all customers.")
             return render(request, "pos/add_customer.html", {
                 "gl_list": gl_list,
                 "next_customer_code": next_customer_code,
@@ -2644,6 +2652,7 @@ def add_customer(request):
             email=email or None,
             address=address or None,
             credit_limit=credit_limit,
+            registration_no=registration_no or None,
             receivable_gl_account_id=receivable_gl_account_id,
             is_active=True,
         )
@@ -2668,10 +2677,18 @@ def edit_customer(request, customer_id):
         customer.email = (request.POST.get("email") or "").strip() or None
         customer.address = (request.POST.get("address") or "").strip() or None
         customer.credit_limit = to_decimal(request.POST.get("credit_limit") or 0)
+        customer.registration_no = (request.POST.get("registration_no") or "").strip()
         customer.receivable_gl_account_id = request.POST.get("receivable_gl_account") or None
 
         if not customer.name:
             messages.error(request, "Customer name is required.")
+            return render(request, "pos/edit_customer.html", {
+                "customer": customer,
+                "gl_list": gl_list,
+            })
+
+        if not customer.registration_no:
+            messages.error(request, "Registration number is required for all customers.")
             return render(request, "pos/edit_customer.html", {
                 "customer": customer,
                 "gl_list": gl_list,
