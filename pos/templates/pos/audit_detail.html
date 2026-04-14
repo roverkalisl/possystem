@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Audit Log Detail{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header mb-3">
+        <h4 class="app-page-title">Audit Log Detail</h4>
+        <a href="{% url 'audit_trail' %}" class="btn btn-outline-secondary btn-sm">Back to Audit Trail</a>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <!-- Basic Information -->
+            <div class="card card-soft mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Change Information</h5>
+                    
+                    <div class="row mb-2">
+                        <div class="col-md-4"><strong>User:</strong></div>
+                        <div class="col-md-8">{{ log.user.username|default:"System" }}</div>
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-md-4"><strong>Action:</strong></div>
+                        <div class="col-md-8">
+                            {% if log.action == 'create' %}
+                                <span class="badge bg-success">Created</span>
+                            {% elif log.action == 'update' %}
+                                <span class="badge bg-info">Updated</span>
+                            {% elif log.action == 'delete' %}
+                                <span class="badge bg-danger">Deleted</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ log.get_action_display }}</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-md-4"><strong>Model:</strong></div>
+                        <div class="col-md-8">{{ log.model_name }}</div>
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-md-4"><strong>Record:</strong></div>
+                        <div class="col-md-8">{% if log.object_display %}{{ log.object_display }}{% else %}ID: {{ log.object_id }}{% endif %}</div>
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-md-4"><strong>IP Address:</strong></div>
+                        <div class="col-md-8">{{ log.ip_address|default:"-" }}</div>
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-md-4"><strong>Timestamp:</strong></div>
+                        <div class="col-md-8">{{ log.timestamp|date:"Y-m-d H:i:s" }}</div>
+                    </div>
+                    
+                    {% if log.notes %}
+                    <div class="row mb-2">
+                        <div class="col-md-4"><strong>Notes:</strong></div>
+                        <div class="col-md-8">{{ log.notes }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Old Values -->
+            {% if log.old_values %}
+            <div class="card card-soft mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Previous Values</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr><th>Field</th><th>Value</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for key, value in log.old_values.items %}
+                                <tr>
+                                    <td><code>{{ key }}</code></td>
+                                    <td>{{ value }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- New Values -->
+            {% if log.new_values %}
+            <div class="card card-soft">
+                <div class="card-body">
+                    <h5 class="card-title">Current Values</h5>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr><th>Field</th><th>Value</th></tr>
+                            </thead>
+                            <tbody>
+                                {% for key, value in log.new_values.items %}
+                                <tr>
+                                    <td><code>{{ key }}</code></td>
+                                    <td>{{ value }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}

@@ -166,4 +166,11 @@ path("purchase-orders/<int:po_id>/edit/", views.edit_purchase_order, name="edit_
     path("grn/create/<int:po_id>/", views.create_grn, name="create_grn_from_po"),
     path("grn/<int:grn_id>/", views.grn_detail, name="grn_detail"),
     path("grn/<int:grn_id>/update-status/", views.update_grn_status, name="update_grn_status"),
+    
+    # =========================
+    # LOGGING & AUDIT
+    # =========================
+    path("logs/user-activity/", views.user_activity_log, name="user_activity_log"),
+    path("logs/audit-trail/", views.audit_trail, name="audit_trail"),
+    path("logs/audit/<int:log_id>/", views.audit_detail, name="audit_detail"),
    ]
