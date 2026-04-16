@@ -37,8 +37,9 @@
                 </div>
 
                 <div class="col-md-4">
-                    <label class="form-label">Registration No <span class="required-star">*</span></label>
-                    <input type="text" name="registration_no" class="form-control" required>
+                    <label class="form-label">Registration No</label>
+                    <input type="text" name="registration_no" class="form-control" value="{{ next_registration_no }}">
+                    <small class="text-muted compact-note">Leave blank to auto-generate on save.</small>
                 </div>
 
                 <div class="col-md-12">

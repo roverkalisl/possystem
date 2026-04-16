@@ -50,6 +50,14 @@ def generate_customer_code():
     except Exception:
         return "CUS0001"
 
+def generate_customer_registration_no():
+    """Auto-generate registration number for credit customers"""
+    last = Customer.objects.exclude(registration_no__isnull=True).order_by("-id").first()
+    if last and last.registration_no and str(last.registration_no).replace("REG", "").isdigit():
+        next_no = int(str(last.registration_no).replace("REG", "")) + 1
+        return f"REG{next_no:05d}"
+    return "REG00001"
+
 def validate_item_gl_or_message(item):
     if not item.retail_gl_account:
         return f"Retail GL Account missing for item: {item.name}"
@@ -2621,6 +2629,7 @@ def customer_list(request):
 def add_customer(request):
     gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
     next_customer_code = generate_customer_code()
+    next_registration_no = generate_customer_registration_no()
 
     if request.method == "POST":
         name = (request.POST.get("name") or "").strip()
@@ -2636,13 +2645,7 @@ def add_customer(request):
             return render(request, "pos/add_customer.html", {
                 "gl_list": gl_list,
                 "next_customer_code": next_customer_code,
-            })
-
-        if not registration_no:
-            messages.error(request, "Registration number is required for all customers.")
-            return render(request, "pos/add_customer.html", {
-                "gl_list": gl_list,
-                "next_customer_code": next_customer_code,
+                "next_registration_no": next_registration_no,
             })
 
         Customer.objects.create(
@@ -2663,6 +2666,7 @@ def add_customer(request):
     return render(request, "pos/add_customer.html", {
         "gl_list": gl_list,
         "next_customer_code": next_customer_code,
+        "next_registration_no": next_registration_no,
     })
 
 

@@ -826,6 +826,16 @@ class Customer(models.Model):
     class Meta:
         ordering = ["name"]
 
+    def save(self, *args, **kwargs):
+        if not self.registration_no:
+            last = Customer.objects.exclude(registration_no__isnull=True).order_by("-id").first()
+            if last and last.registration_no and str(last.registration_no).replace("REG", "").isdigit():
+                next_no = int(str(last.registration_no).replace("REG", "")) + 1
+                self.registration_no = f"REG{next_no:05d}"
+            else:
+                self.registration_no = "REG00001"
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.customer_code} - {self.name}"
 
