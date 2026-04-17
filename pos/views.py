@@ -273,6 +273,50 @@ def logout_view(request):
 
 @login_required
 def dashboard(request):
+    # Calculate key financial metrics
+    today = timezone.localdate()
+    
+    # Today's Sales
+    today_sales = Sale.objects.filter(created_at__date=today)
+    total_today_sales = today_sales.aggregate(total=Sum("grand_total"))["total"] or Decimal("0")
+    
+    # Debtors (Customers with outstanding credit)
+    all_customers = Customer.objects.filter(is_active=True)
+    total_outstanding_debtors = Decimal("0")
+    debtors_count = 0
+    for customer in all_customers:
+        outstanding = get_customer_outstanding(customer)
+        if outstanding > 0:
+            total_outstanding_debtors += outstanding
+            debtors_count += 1
+    
+    # Creditors (Suppliers with outstanding payables)
+    all_suppliers = Supplier.objects.filter(is_active=True)
+    total_payable_creditors = Decimal("0")
+    creditors_count = 0
+    for supplier in all_suppliers:
+        from pos.models import PurchaseOrderItem
+        po_outstanding = PurchaseOrderItem.objects.filter(
+            purchase_order__supplier=supplier,
+            purchase_order__status__in=["draft", "approved"]
+        ).aggregate(total=Sum("line_total"))["total"] or Decimal("0")
+        
+        supplier_advances = SupplierAdvance.objects.filter(
+            supplier=supplier,
+            is_active=True
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        
+        payable = Decimal(str(po_outstanding)) - Decimal(str(supplier_advances))
+        if payable > 0:
+            total_payable_creditors += payable
+            creditors_count += 1
+    
+    # Stock value
+    low_stock_items = Item.objects.filter(
+        is_active=True,
+        stock__lte=F("reorder_level")
+    ).count()
+    
     return render(request, "pos/dashboard.html", {
         "show_pos": can_use_pos(request.user),
         "show_project": can_use_project(request.user),
@@ -281,6 +325,13 @@ def dashboard(request):
         "show_items": can_manage_items(request.user),
         "show_employees": is_owner(request.user),
         "is_owner_flag": is_owner(request.user),
+        # Financial metrics
+        "total_today_sales": total_today_sales,
+        "total_outstanding_debtors": total_outstanding_debtors,
+        "debtors_count": debtors_count,
+        "total_payable_creditors": total_payable_creditors,
+        "creditors_count": creditors_count,
+        "low_stock_items": low_stock_items,
     })
 
 
@@ -1104,6 +1155,29 @@ def daily_report(request):
         total_cost += sale_cost
         total_discount += Decimal(str(sale.discount or 0))
 
+    # Calculate total outstanding debtors
+    all_customers = Customer.objects.filter(is_active=True)
+    total_outstanding_debtors = Decimal("0")
+    for customer in all_customers:
+        total_outstanding_debtors += get_customer_outstanding(customer)
+
+    # Calculate total payable creditors
+    all_suppliers = Supplier.objects.filter(is_active=True)
+    total_payable_creditors = Decimal("0")
+    for supplier in all_suppliers:
+        from pos.models import PurchaseOrderItem
+        po_outstanding = PurchaseOrderItem.objects.filter(
+            purchase_order__supplier=supplier,
+            purchase_order__status__in=["draft", "approved"]
+        ).aggregate(total=Sum("line_total"))["total"] or Decimal("0")
+        
+        supplier_advances = SupplierAdvance.objects.filter(
+            supplier=supplier,
+            is_active=True
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        
+        total_payable_creditors += Decimal(str(po_outstanding)) - Decimal(str(supplier_advances))
+
     return render(request, "pos/daily_report.html", {
         "sales": sales,
         "today": today,
@@ -1111,6 +1185,8 @@ def daily_report(request):
         "total_cost": total_cost,
         "total_discount": total_discount,
         "total_profit": total_sales - total_cost,
+        "total_outstanding_debtors": total_outstanding_debtors,
+        "total_payable_creditors": total_payable_creditors,
     })
 
 @login_required
@@ -1149,9 +1225,18 @@ def monthly_report(request):
             sale_cost += item_cost * available_qty
 
         sale.sale_cost = sale_cost
-        sale.sale_profit = Decimal(str(sale.grand_total or 0)) - sale_cost
+        sale_net_total = Decimal(str(sale.grand_total or 0))
+        
+        # Subtract value of returned items
+        for sale_item in sale.sale_items.all():
+            returned_qty = sum(return_obj.qty for return_obj in sale_item.returns.all())
+            if returned_qty > 0:
+                returned_value = returned_qty * Decimal(str(sale_item.price or 0))
+                sale_net_total -= returned_value
+        
+        sale.sale_profit = sale_net_total - sale_cost
 
-        total_sales += Decimal(str(sale.grand_total or 0))
+        total_sales += sale_net_total
         total_discount += Decimal(str(sale.discount or 0))
         total_cost += sale_cost
         total_profit += sale.sale_profit
@@ -1163,11 +1248,36 @@ def monthly_report(request):
         "total_profit": total_profit,
     }
 
+    # Calculate total outstanding debtors
+    all_customers = Customer.objects.filter(is_active=True)
+    total_outstanding_debtors = Decimal("0")
+    for customer in all_customers:
+        total_outstanding_debtors += get_customer_outstanding(customer)
+
+    # Calculate total payable creditors
+    all_suppliers = Supplier.objects.filter(is_active=True)
+    total_payable_creditors = Decimal("0")
+    for supplier in all_suppliers:
+        from pos.models import PurchaseOrderItem
+        po_outstanding = PurchaseOrderItem.objects.filter(
+            purchase_order__supplier=supplier,
+            purchase_order__status__in=["draft", "approved"]
+        ).aggregate(total=Sum("line_total"))["total"] or Decimal("0")
+        
+        supplier_advances = SupplierAdvance.objects.filter(
+            supplier=supplier,
+            is_active=True
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        
+        total_payable_creditors += Decimal(str(po_outstanding)) - Decimal(str(supplier_advances))
+
     return render(request, "pos/monthly_report.html", {
         "sales": sales,
         "year": year,
         "month": month,
         "summary": summary,
+        "total_outstanding_debtors": total_outstanding_debtors,
+        "total_payable_creditors": total_payable_creditors,
     })
 # =========================
 # GL MASTER
@@ -2577,6 +2687,105 @@ def petty_cash_expense_list(request):
         "total_amount": total_amount,
         "is_owner": is_owner(request.user),
     })
+
+# =========================
+# DEBTORS & CREDITORS LISTS
+# =========================
+@user_passes_test(can_use_pos)
+def debtors_list(request):
+    """List of Debtors (Customers with outstanding credit)"""
+    query = request.GET.get("q", "").strip()
+    
+    customers = Customer.objects.filter(is_active=True).select_related(
+        "receivable_gl_account"
+    ).order_by("name")
+
+    # Calculate outstanding for each customer
+    customer_data = []
+    for customer in customers:
+        outstanding = get_customer_outstanding(customer)
+        if outstanding > 0:  # Only show customers with outstanding balance
+            customer_data.append({
+                'customer': customer,
+                'outstanding': outstanding,
+            })
+    
+    if query:
+        customer_data = [
+            cd for cd in customer_data if 
+            query.lower() in cd['customer'].name.lower() or
+            query.lower() in (cd['customer'].customer_code or '').lower() or
+            query.lower() in (cd['customer'].phone or '').lower()
+        ]
+    
+    # Sort by outstanding amount (highest first)
+    customer_data.sort(key=lambda x: x['outstanding'], reverse=True)
+    
+    total_outstanding = sum(cd['outstanding'] for cd in customer_data)
+
+    return render(request, "pos/debtors_list.html", {
+        "customer_data": customer_data,
+        "query": query,
+        "total_outstanding": total_outstanding,
+        "total_debtors": len(customer_data),
+    })
+
+
+@user_passes_test(can_manage_items)
+def creditors_list(request):
+    """List of Creditors (Suppliers with outstanding payables)"""
+    query = request.GET.get("q", "").strip()
+    
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+
+    # Calculate outstanding for each supplier (from POs and settlements)
+    supplier_data = []
+    for supplier in suppliers:
+        # Outstanding PO amount (created but not fully received)
+        from pos.models import PurchaseOrderItem
+        po_outstanding = PurchaseOrderItem.objects.filter(
+            purchase_order__supplier=supplier,
+            purchase_order__status__in=["draft", "approved"]
+        ).aggregate(total=Sum("line_total"))["total"] or Decimal("0")
+        
+        # Supplier advances given
+        supplier_advances = SupplierAdvance.objects.filter(
+            supplier=supplier,
+            is_active=True
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        
+        total_payable = Decimal(str(po_outstanding)) - Decimal(str(supplier_advances))
+        
+        if total_payable > 0:  # Only show suppliers with outstanding payables
+            supplier_data.append({
+                'supplier': supplier,
+                'po_outstanding': po_outstanding,
+                'advances_given': supplier_advances,
+                'total_payable': total_payable,
+            })
+    
+    if query:
+        supplier_data = [
+            sd for sd in supplier_data if 
+            query.lower() in sd['supplier'].name.lower() or
+            query.lower() in (sd['supplier'].contact_person or '').lower() or
+            query.lower() in (sd['supplier'].phone_1 or '').lower()
+        ]
+    
+    # Sort by payable amount (highest first)
+    supplier_data.sort(key=lambda x: x['total_payable'], reverse=True)
+    
+    total_payable = sum(sd['total_payable'] for sd in supplier_data)
+    total_advances = sum(sd['advances_given'] for sd in supplier_data)
+
+    return render(request, "pos/creditors_list.html", {
+        "supplier_data": supplier_data,
+        "query": query,
+        "total_payable": total_payable,
+        "total_advances": total_advances,
+        "total_creditors": len(supplier_data),
+    })
+
 @user_passes_test(can_use_pos)
 def customer_list(request):
     query = request.GET.get("q", "").strip()

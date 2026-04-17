@@ -1,9 +1,49 @@
 {% extends "base.html" %}
 {% load static %}
+{% load currency_filters %}
 
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
+<!-- Financial Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card card-soft bg-light-primary">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Today's Sales</p>
+                <h4 class="mb-0 text-primary">{{ total_today_sales|money }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft bg-light-danger">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Debtors Outstanding</p>
+                <h4 class="mb-0 text-danger">{{ total_outstanding_debtors|money }}</h4>
+                <small class="text-muted">({{ debtors_count }} customers)</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft bg-light-success">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Creditors Payable</p>
+                <h4 class="mb-0 text-success">{{ total_payable_creditors|money }}</h4>
+                <small class="text-muted">({{ creditors_count }} suppliers)</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft bg-light-warning">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Low Stock Items</p>
+                <h4 class="mb-0 text-warning">{{ low_stock_items }}</h4>
+                <small class="text-muted">Need reorder</small>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="simple-dashboard-wrap">
 
     <div class="simple-dashboard-grid">
@@ -66,6 +106,15 @@
 		<a href="{% url 'supplier_list' %}" class="simple-dashboard-btn">Supplier List</a>
      		   <a href="{% url 'add_supplier' %}" class="simple-dashboard-btn">Add Supplier</a>           
                     </div>
+        </div>
+
+        <div class="simple-dashboard-card">
+            <h5 class="simple-dashboard-title">FINANCIAL STATUS</h5>
+            <div class="simple-dashboard-links">
+                <a href="{% url 'debtors_list' %}" class="simple-dashboard-btn primary">Debtors List</a>
+                <a href="{% url 'creditors_list' %}" class="simple-dashboard-btn">Creditors List</a>
+                <a href="{% url 'credit_sales_list' %}" class="simple-dashboard-btn">Credit Recovery</a>
+            </div>
         </div>
 {% if show_project %}
 <div class="simple-dashboard-card">
