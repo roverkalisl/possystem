@@ -788,65 +788,38 @@ def sales_return(request):
                     qty=qty,
                 )
 
-            recalculate_sale_totals_after_return(sale)
-
-        messages.success(request, f"Sales return saved successfully. Return No: {r.return_no}")
-        return redirect("return_receipt", return_id=r.id)
-
-    return render(request, "pos/sales_return.html", {"sales": sales})
-
-@user_passes_test(can_use_pos)
-def sales_return(request):
-    sales = Sale.objects.filter(grand_total__gt=0).order_by("-id")
-
-    if request.method == "POST":
-        sale_id = request.POST.get("sale")
-        sale_item_id = request.POST.get("sale_item")
-        qty = to_decimal(request.POST.get("qty"))
-        return_type = request.POST.get("return_type") or "refund"
-        reason = (request.POST.get("reason") or "").strip()
-
-        sale = get_object_or_404(Sale, id=sale_id)
-        sale_item = get_object_or_404(SaleItem, id=sale_item_id, sale=sale)
-
-        if qty <= 0:
-            messages.error(request, "Return quantity must be greater than 0.")
-            return redirect("sales_return")
-
-        available_qty = get_available_qty_for_sale_item(sale_item)
-
-        if available_qty <= 0:
-            messages.error(request, "This item has already been fully returned.")
-            return redirect("sales_return")
-
-        if qty > available_qty:
-            messages.error(request, f"Return quantity exceeds available quantity. Available: {available_qty}")
-            return redirect("sales_return")
-
-        return_no = f"RET{SalesReturn.objects.count() + 1:05d}"
-
-        with transaction.atomic():
-            r = SalesReturn.objects.create(
-                return_no=return_no,
-                sale=sale,
-                sale_item=sale_item,
-                qty=qty,
-                return_type=return_type,
-                reason=reason,
-                created_by=request.user,
-            )
-
-            item = sale_item.item
-            if not item.is_service:
-                item.stock = Decimal(str(item.stock or 0)) + qty
-                item.updated_by = request.user
-                item.save()
-
-                StockTransaction.objects.create(
+            # Reverse Project Expenses if this is an approved project issue
+            if sale.sale_type == "project_issue" and sale.is_posted_to_project_expense:
+                project_expenses = ProjectExpense.objects.filter(
+                    source_sale=sale,
                     item=item,
-                    transaction_type="return_in",
-                    qty=qty,
+                    is_active=True
                 )
+                
+                for pe in project_expenses:
+                    # Calculate the proportion of quantity being returned
+                    original_qty = Decimal(str(pe.qty or 0))
+                    returned_qty = Decimal(str(qty))
+                    
+                    if returned_qty >= original_qty:
+                        # Mark entire expense as inactive
+                        pe.is_active = False
+                        pe.inactive_at = timezone.now()
+                        pe.inactive_by = request.user
+                        pe.inactive_reason = f"Reversed due to sales return {return_no}"
+                        pe.save()
+                    else:
+                        # Reduce the original expense quantity and amount
+                        reduction_amount = returned_qty * Decimal(str(pe.unit_price or 0))
+                        
+                        pe.qty = original_qty - returned_qty
+                        pe.amount = Decimal(str(pe.amount or 0)) - reduction_amount
+                        
+                        if pe.description and "[Adjusted" not in pe.description:
+                            pe.description += f"\n[Adjusted: Qty reduced by {returned_qty} due to return {return_no}]"
+                        elif not pe.description:
+                            pe.description = f"[Adjusted: Qty reduced by {returned_qty} due to return {return_no}]"
+                        pe.save()
 
             recalculate_sale_totals_after_return(sale)
 
@@ -854,6 +827,7 @@ def sales_return(request):
         return redirect("return_receipt", return_id=r.id)
 
     return render(request, "pos/sales_return.html", {"sales": sales})
+
 
 @user_passes_test(can_use_pos)
 def return_receipt(request, return_id):
