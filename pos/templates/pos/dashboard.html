@@ -7,7 +7,7 @@
 {% block content %}
 <!-- Financial Summary Cards -->
 <div class="row mb-4">
-    <div class="col-md-3">
+    <div class="col-md-2">
         <div class="card card-soft bg-light-primary">
             <div class="card-body">
                 <p class="text-muted mb-1 small">Today's Sales</p>
@@ -15,7 +15,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
         <div class="card card-soft bg-light-danger">
             <div class="card-body">
                 <p class="text-muted mb-1 small">Debtors Outstanding</p>
@@ -24,7 +24,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
         <div class="card card-soft bg-light-success">
             <div class="card-body">
                 <p class="text-muted mb-1 small">Creditors Payable</p>
@@ -33,7 +33,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
         <div class="card card-soft bg-light-warning">
             <div class="card-body">
                 <p class="text-muted mb-1 small">Low Stock Items</p>
@@ -42,7 +42,100 @@
             </div>
         </div>
     </div>
+    <div class="col-md-2">
+        <div class="card card-soft bg-light-info">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Pending Project Issues</p>
+                <h4 class="mb-0 text-info">{{ pending_project_issues_count }}</h4>
+                <small class="text-muted">Awaiting approval</small>
+            </div>
+        </div>
+    </div>
 </div>
+
+<!-- Top Debtors Section -->
+{% if top_debtors %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card card-soft">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-person-check"></i> Top Debtors
+                    <a href="{% url 'debtors_list' %}" class="btn btn-sm btn-outline-primary float-end">View All</a>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-borderless">
+                        <thead>
+                            <tr>
+                                <th>Customer</th>
+                                <th class="text-end">Outstanding</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for cd in top_debtors %}
+                            <tr>
+                                <td>
+                                    <strong>{{ cd.customer.customer_code }}</strong> - {{ cd.customer.name }}
+                                </td>
+                                <td class="text-end">
+                                    <span class="badge bg-danger">{{ cd.outstanding|money }}</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Pending Project Issues Section -->
+{% if pending_project_issues %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card card-soft">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-clipboard-check"></i> Pending Project Issues
+                    <a href="{% url 'project_issue_approval_list' %}" class="btn btn-sm btn-outline-primary float-end">View All</a>
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-borderless">
+                        <thead>
+                            <tr>
+                                <th>Invoice</th>
+                                <th>Project</th>
+                                <th>Created By</th>
+                                <th class="text-end">Amount</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sale in pending_project_issues %}
+                            <tr>
+                                <td>
+                                    <strong>{{ sale.invoice_no }}</strong>
+                                </td>
+                                <td>{{ sale.project.project_id|default:"N/A" }} - {{ sale.project.name|default:"" }}</td>
+                                <td>{{ sale.created_by.username }}</td>
+                                <td class="text-end">
+                                    <span class="badge bg-warning">{{ sale.grand_total|money }}</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <div class="simple-dashboard-wrap">
 

@@ -284,11 +284,20 @@ def dashboard(request):
     all_customers = Customer.objects.filter(is_active=True)
     total_outstanding_debtors = Decimal("0")
     debtors_count = 0
+    customer_data = []
     for customer in all_customers:
         outstanding = get_customer_outstanding(customer)
         if outstanding > 0:
             total_outstanding_debtors += outstanding
             debtors_count += 1
+            customer_data.append({
+                'customer': customer,
+                'outstanding': outstanding,
+            })
+    
+    # Sort by outstanding amount (highest first) and take top 5
+    customer_data.sort(key=lambda x: x['outstanding'], reverse=True)
+    top_debtors = customer_data[:5]
     
     # Creditors (Suppliers with outstanding payables)
     all_suppliers = Supplier.objects.filter(is_active=True)
@@ -317,6 +326,13 @@ def dashboard(request):
         stock__lte=F("reorder_level")
     ).count()
     
+    # Pending project issues
+    pending_project_issues = Sale.objects.filter(
+        sale_type="project_issue",
+        approval_status="pending"
+    ).select_related("project", "created_by").order_by("-created_at")[:5]
+    pending_project_issues_count = pending_project_issues.count()
+    
     return render(request, "pos/dashboard.html", {
         "show_pos": can_use_pos(request.user),
         "show_project": can_use_project(request.user),
@@ -329,9 +345,12 @@ def dashboard(request):
         "total_today_sales": total_today_sales,
         "total_outstanding_debtors": total_outstanding_debtors,
         "debtors_count": debtors_count,
+        "top_debtors": top_debtors,
         "total_payable_creditors": total_payable_creditors,
         "creditors_count": creditors_count,
         "low_stock_items": low_stock_items,
+        "pending_project_issues": pending_project_issues,
+        "pending_project_issues_count": pending_project_issues_count,
     })
 
 
