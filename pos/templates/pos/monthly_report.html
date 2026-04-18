@@ -9,7 +9,6 @@
         <h4 class="app-page-title">Monthly Report - {{ month }}/{{ year }}</h4>
         <div>
             <a href="{% url 'pos' %}" class="btn btn-primary btn-sm">POS</a>
-
         </div>
     </div>
 
@@ -28,16 +27,22 @@
     </form>
 
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
+        <div class="col-md-2">
             <div class="summary-box">
                 <h6>Total Sales</h6>
                 <p class="summary-value">{{ summary.total_sales|money }}</p>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <div class="summary-box">
                 <h6>Total Discount</h6>
                 <p class="summary-value">{{ summary.total_discount|money }}</p>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="summary-box">
+                <h6>Total Sales Return</h6>
+                <p class="summary-value">{{ summary.total_sales_return|money }}</p>
             </div>
         </div>
         <div class="col-md-3">
@@ -60,10 +65,10 @@
                 <tr>
                     <th>Invoice</th>
                     <th>Date</th>
-                    <th>Payment</th>
                     <th>Cashier</th>
                     <th>Selling</th>
                     <th>Discount</th>
+                    <th>Sales Return</th>
                     <th>Net Sale</th>
                     <th>Cost</th>
                     <th>Profit</th>
@@ -75,10 +80,10 @@
                 <tr>
                     <td>{{ sale.invoice_no }}</td>
                     <td>{{ sale.created_at|date:"Y-m-d H:i" }}</td>
-                    <td>{{ sale.get_payment_method_display }}</td>
                     <td>{% if sale.created_by %}{{ sale.created_by.username }}{% else %}-{% endif %}</td>
                     <td class="text-money">{{ sale.total|money }}</td>
                     <td class="text-money">{{ sale.discount|money }}</td>
+                    <td class="text-money">{{ sale.sale_return_amount|money }}</td>
                     <td class="text-money">{{ sale.grand_total|money }}</td>
                     <td class="text-money">{{ sale.sale_cost|money }}</td>
                     <td class="text-money">{{ sale.sale_profit|money }}</td>

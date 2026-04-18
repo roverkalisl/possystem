@@ -1212,73 +1212,54 @@ def monthly_report(request):
     total_discount = Decimal("0")
     total_cost = Decimal("0")
     total_profit = Decimal("0")
+    total_sales_return = Decimal("0")
 
     for sale in sales:
         sale_cost = Decimal("0")
+        sale_return_amount = Decimal("0")
 
         for row in sale.sale_items.all():
-            available_qty = get_available_qty_for_sale_item(row)
-            if available_qty <= 0:
-                continue
+            sold_qty = Decimal(str(row.qty or 0))
+            returned_qty = Decimal(str(get_returned_qty_for_sale_item(row) or 0))
+            available_qty = sold_qty - returned_qty
 
-            item_cost = Decimal(str(row.item.cost_price or 0))
-            sale_cost += item_cost * available_qty
+            if sold_qty > 0:
+                unit_net = Decimal(str(row.net_amount or 0)) / sold_qty
+            else:
+                unit_net = Decimal("0")
 
-        sale.sale_cost = sale_cost
-        sale_net_total = Decimal(str(sale.grand_total or 0))
-        
-        # Subtract value of returned items
-        for sale_item in sale.sale_items.all():
-            returned_qty = sum(return_obj.qty for return_obj in sale_item.returns.all())
             if returned_qty > 0:
-                returned_value = returned_qty * Decimal(str(sale_item.price or 0))
-                sale_net_total -= returned_value
-        
-        sale.sale_profit = sale_net_total - sale_cost
+                sale_return_amount += unit_net * returned_qty
 
-        total_sales += sale_net_total
+            if available_qty > 0:
+                item_cost = Decimal(str(row.item.cost_price or 0))
+                sale_cost += item_cost * available_qty
+
+        sale.sale_return_amount = sale_return_amount
+        sale.sale_cost = sale_cost
+        sale.sale_profit = Decimal(str(sale.grand_total or 0)) - sale_cost
+
+        total_sales += Decimal(str(sale.grand_total or 0))
         total_discount += Decimal(str(sale.discount or 0))
         total_cost += sale_cost
         total_profit += sale.sale_profit
+        total_sales_return += sale_return_amount
 
     summary = {
         "total_sales": total_sales,
         "total_discount": total_discount,
         "total_cost": total_cost,
         "total_profit": total_profit,
+        "total_sales_return": total_sales_return,
     }
-
-    # Calculate total outstanding debtors
-    all_customers = Customer.objects.filter(is_active=True)
-    total_outstanding_debtors = Decimal("0")
-    for customer in all_customers:
-        total_outstanding_debtors += get_customer_outstanding(customer)
-
-    # Calculate total payable creditors
-    all_suppliers = Supplier.objects.filter(is_active=True)
-    total_payable_creditors = Decimal("0")
-    for supplier in all_suppliers:
-        from pos.models import PurchaseOrderItem
-        po_outstanding = PurchaseOrderItem.objects.filter(
-            purchase_order__supplier=supplier,
-            purchase_order__status__in=["draft", "approved"]
-        ).aggregate(total=Sum("line_total"))["total"] or Decimal("0")
-        
-        supplier_advances = SupplierAdvance.objects.filter(
-            supplier=supplier,
-            is_active=True
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-        
-        total_payable_creditors += Decimal(str(po_outstanding)) - Decimal(str(supplier_advances))
 
     return render(request, "pos/monthly_report.html", {
         "sales": sales,
         "year": year,
         "month": month,
         "summary": summary,
-        "total_outstanding_debtors": total_outstanding_debtors,
-        "total_payable_creditors": total_payable_creditors,
     })
+
 # =========================
 # GL MASTER
 # =========================
