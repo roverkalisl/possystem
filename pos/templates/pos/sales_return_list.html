@@ -40,12 +40,22 @@
                 <tbody>
                     {% for r in returns %}
                     <tr>
-                        <td>{{ r.return_no }}</td>
+                        <td>
+                            <span class="badge bg-danger">{{ r.return_no }}</span>
+                        </td>
                         <td>{{ r.created_at|date:"Y-m-d H:i" }}</td>
-                        <td>{{ r.sale.invoice_no }}</td>
+                        <td>
+                            <span class="badge bg-secondary">{{ r.sale.invoice_no }}</span>
+                        </td>
                         <td>{{ r.sale_item.item.name }}</td>
                         <td class="text-end">{{ r.qty }}</td>
-                        <td>{{ r.get_return_type_display }}</td>
+                        <td>
+                            {% if r.return_type == 'refund' %}
+                                <span class="badge bg-danger">{{ r.get_return_type_display }}</span>
+                            {% else %}
+                                <span class="badge bg-warning">{{ r.get_return_type_display }}</span>
+                            {% endif %}
+                        </td>
                         <td>{{ r.reason|default:"-" }}</td>
                         <td>{{ r.created_by.username|default:"-" }}</td>
                     </tr>

@@ -14,27 +14,39 @@
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
+        <div class="col-md-2">
             <div class="summary-box">
                 <h6>Total Sales</h6>
                 <p class="summary-value">{{ total_sales|money }}</p>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
+            <div class="summary-box">
+                <h6>Total Returns</h6>
+                <p class="summary-value text-danger">{{ total_returns|money }}</p>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="summary-box">
+                <h6>Net Sales</h6>
+                <p class="summary-value">{{ total_sales|sub:total_returns|money }}</p>
+            </div>
+        </div>
+        <div class="col-md-2">
             <div class="summary-box">
                 <h6>Total Cost</h6>
                 <p class="summary-value">{{ total_cost|money }}</p>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <div class="summary-box">
                 <h6>Total Discount</h6>
                 <p class="summary-value">{{ total_discount|money }}</p>
             </div>
         </div>
-        <div class="col-md-3">
+        <div class="col-md-2">
             <div class="summary-box">
-                <h6>Total Profit</h6>
+                <h6>Net Profit</h6>
                 <p class="summary-value">{{ total_profit|money }}</p>
             </div>
         </div>
@@ -51,6 +63,7 @@
                     <th>Selling</th>
                     <th>Discount</th>
                     <th>Net Sale</th>
+                    <th>Returns</th>
                     <th>Cost</th>
                     <th>Profit</th>
                     <th>View</th>
@@ -66,6 +79,7 @@
                     <td class="text-money">{{ sale.total|money }}</td>
                     <td class="text-money">{{ sale.discount|money }}</td>
                     <td class="text-money">{{ sale.grand_total|money }}</td>
+                    <td class="text-money text-danger">{{ sale.sale_returns|money }}</td>
                     <td class="text-money">{{ sale.sale_cost|money }}</td>
                     <td class="text-money">{{ sale.sale_profit|money }}</td>
                     <td>
@@ -74,11 +88,90 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="10" class="text-center">No sales found today</td>
+                    <td colspan="11" class="text-center">No sales found today</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
+
+    <!-- Sales Returns Section -->
+    {% if sales_returns %}
+    <div class="card p-3 p-md-4 mt-4">
+        <div class="app-card-header mb-3">
+            <h4 class="app-page-title">Sales Returns - {{ today }}</h4>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-4">
+                <div class="summary-box">
+                    <h6>Total Returns</h6>
+                    <p class="summary-value text-danger">{{ total_returns|money }}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="summary-box">
+                    <h6>Total Return Count</h6>
+                    <p class="summary-value">{{ sales_returns|length }}</p>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="summary-box">
+                    <h6>Action Required</h6>
+                    <p class="summary-value text-warning">Review & Process</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped bg-white align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Return No</th>
+                        <th>Invoice</th>
+                        <th>Item</th>
+                        <th>Type</th>
+                        <th class="text-end">Qty</th>
+                        <th class="text-end">Amount</th>
+                        <th>Reason</th>
+                        <th>Suggestion</th>
+                        <th>Created By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sr in sales_returns %}
+                    <tr>
+                        <td>
+                            <span class="badge bg-danger">{{ sr.return_no }}</span>
+                        </td>
+                        <td>
+                            <a href="{% url 'invoice_page' sr.sale.id %}" class="badge bg-secondary">{{ sr.sale.invoice_no }}</a>
+                        </td>
+                        <td>{{ sr.sale_item.item.name }}</td>
+                        <td>
+                            {% if sr.return_type == 'refund' %}
+                                <span class="badge bg-danger">Refund</span>
+                            {% else %}
+                                <span class="badge bg-warning">Exchange</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">{{ sr.qty }}</td>
+                        <td class="text-end text-danger fw-bold">{{ sr.return_amount|money }}</td>
+                        <td><small>{{ sr.reason|default:"-" }}</small></td>
+                        <td>
+                            {% if sr.return_type == 'refund' %}
+                                <span class="badge bg-info">Process Refund</span>
+                            {% else %}
+                                <span class="badge bg-info">Prepare Exchange</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ sr.created_by.username|default:"-" }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}

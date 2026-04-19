@@ -49,6 +49,15 @@ def mul(value, arg):
 
 
 @register.filter
+def sub(value, arg):
+    """Subtract two numbers"""
+    try:
+        return Decimal(str(value)) - Decimal(str(arg))
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal("0")
+
+
+@register.filter
 def subtract(value, arg):
     """Subtract two numbers (value - arg)"""
     try:

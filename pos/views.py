@@ -1155,9 +1155,11 @@ def daily_report(request):
     total_sales = Decimal("0")
     total_cost = Decimal("0")
     total_discount = Decimal("0")
+    total_returns = Decimal("0")
 
     for sale in sales:
         sale_cost = Decimal("0")
+        sale_returns = Decimal("0")
 
         for row in sale.sale_items.all():
             available_qty = get_available_qty_for_sale_item(row)
@@ -1167,12 +1169,20 @@ def daily_report(request):
             item_cost = Decimal(str(row.item.cost_price or 0))
             sale_cost += item_cost * available_qty
 
+            # Calculate returns for this sale item
+            returned_qty = Decimal(str(get_returned_qty_for_sale_item(row) or 0))
+            if returned_qty > 0:
+                unit_net = Decimal(str(row.net_amount or 0)) / Decimal(str(row.qty or 1))
+                sale_returns += unit_net * returned_qty
+
         sale.sale_cost = sale_cost
-        sale.sale_profit = Decimal(str(sale.grand_total or 0)) - sale_cost
+        sale.sale_returns = sale_returns
+        sale.sale_profit = Decimal(str(sale.grand_total or 0)) - sale_cost - sale_returns
 
         total_sales += Decimal(str(sale.grand_total or 0))
         total_cost += sale_cost
         total_discount += Decimal(str(sale.discount or 0))
+        total_returns += sale_returns
 
     # Calculate total outstanding debtors
     all_customers = Customer.objects.filter(is_active=True)
@@ -1197,15 +1207,30 @@ def daily_report(request):
         
         total_payable_creditors += Decimal(str(po_outstanding)) - Decimal(str(supplier_advances))
 
+    # Get sales returns for today (for the separate returns section)
+    sales_returns = SalesReturn.objects.filter(created_at__date=today).select_related(
+        "sale", "sale_item__item", "created_by"
+    ).order_by("-created_at")
+    
+    returns_total = Decimal("0")
+    for sr in sales_returns:
+        unit_net = Decimal(str(sr.sale_item.net_amount or 0)) / Decimal(str(sr.sale_item.qty or 1))
+        return_amount = unit_net * sr.qty
+        sr.return_amount = return_amount
+        returns_total += return_amount
+
     return render(request, "pos/daily_report.html", {
         "sales": sales,
         "today": today,
         "total_sales": total_sales,
         "total_cost": total_cost,
         "total_discount": total_discount,
-        "total_profit": total_sales - total_cost,
+        "total_returns": total_returns,
+        "total_profit": total_sales - total_cost - total_returns,
         "total_outstanding_debtors": total_outstanding_debtors,
         "total_payable_creditors": total_payable_creditors,
+        "sales_returns": sales_returns,
+        "returns_total": returns_total,
     })
 
 @login_required
@@ -1256,7 +1281,7 @@ def monthly_report(request):
 
         sale.sale_return_amount = sale_return_amount
         sale.sale_cost = sale_cost
-        sale.sale_profit = Decimal(str(sale.grand_total or 0)) - sale_cost
+        sale.sale_profit = Decimal(str(sale.grand_total or 0)) - sale_cost - sale_return_amount
 
         total_sales += Decimal(str(sale.grand_total or 0))
         total_discount += Decimal(str(sale.discount or 0))
@@ -1272,11 +1297,25 @@ def monthly_report(request):
         "total_sales_return": total_sales_return,
     }
 
+    # Get sales returns for the month
+    sales_returns = SalesReturn.objects.filter(
+        created_at__year=year,
+        created_at__month=month
+    ).select_related(
+        "sale", "sale_item__item", "created_by"
+    ).order_by("-created_at")
+    
+    for sr in sales_returns:
+        unit_net = Decimal(str(sr.sale_item.net_amount or 0)) / Decimal(str(sr.sale_item.qty or 1))
+        return_amount = unit_net * sr.qty
+        sr.return_amount = return_amount
+
     return render(request, "pos/monthly_report.html", {
         "sales": sales,
         "year": year,
         "month": month,
         "summary": summary,
+        "sales_returns": sales_returns,
     })
 
 # =========================
@@ -1970,7 +2009,7 @@ def add_project_income(request):
             messages.success(request, "Project income added successfully.")
             return redirect("project_income_list")
 
-    return render(request, "project/add_project_income.html", {
+    return render(request, "pos/add_project_income.html", {
         "projects": projects,
         "gl_list": gl_list,
     })
