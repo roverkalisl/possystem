@@ -29,32 +29,32 @@
     <div class="row g-3 mb-4">
         <div class="col-md-2">
             <div class="summary-box">
-                <h6>Total Sales</h6>
-                <p class="summary-value">{{ summary.total_sales|money }}</p>
+                <h6>Gross Sales</h6>
+                <p class="summary-value">{{ summary.total_gross_sales|money }}</p>
             </div>
         </div>
         <div class="col-md-2">
             <div class="summary-box">
                 <h6>Total Returns</h6>
-                <p class="summary-value text-danger">{{ summary.total_sales_return|money }}</p>
+                <p class="summary-value text-danger">{{ summary.total_returns|money }}</p>
             </div>
         </div>
         <div class="col-md-2">
             <div class="summary-box">
                 <h6>Net Sales</h6>
-                <p class="summary-value">{{ summary.total_sales|sub:summary.total_sales_return|money }}</p>
+                <p class="summary-value">{{ summary.total_net_sales|money }}</p>
             </div>
         </div>
         <div class="col-md-2">
             <div class="summary-box">
-                <h6>Total Cost</h6>
-                <p class="summary-value">{{ summary.total_cost|money }}</p>
+                <h6>COGS</h6>
+                <p class="summary-value">{{ summary.total_cogs|money }}</p>
             </div>
         </div>
         <div class="col-md-2">
             <div class="summary-box">
-                <h6>Total Discount</h6>
-                <p class="summary-value">{{ summary.total_discount|money }}</p>
+                <h6>Returned Stock Value</h6>
+                <p class="summary-value text-warning">{{ summary.total_returned_stock_value|money }}</p>
             </div>
         </div>
         <div class="col-md-2">
@@ -72,11 +72,11 @@
                     <th>Invoice</th>
                     <th>Date</th>
                     <th>Cashier</th>
-                    <th>Selling</th>
+                    <th>Gross Sale</th>
                     <th>Discount</th>
                     <th>Net Sale</th>
-                    <th>Returns</th>
-                    <th>Cost</th>
+                    <th>COGS</th>
+                    <th>Returned Stock Value</th>
                     <th>Profit</th>
                     <th>View</th>
                 </tr>
@@ -93,11 +93,11 @@
                     </td>
                     <td>{{ sale.created_at|date:"Y-m-d H:i" }}</td>
                     <td>{% if sale.created_by %}{{ sale.created_by.username }}{% else %}-{% endif %}</td>
-                    <td class="text-money">{{ sale.total|money }}</td>
+                    <td class="text-money">{{ sale.sale_gross_total|money }}</td>
                     <td class="text-money">{{ sale.discount|money }}</td>
-                    <td class="text-money">{{ sale.grand_total|money }}</td>
-                    <td class="text-money text-danger">{{ sale.sale_return_amount|money }}</td>
+                    <td class="text-money">{{ sale.sale_net_total|money }}</td>
                     <td class="text-money">{{ sale.sale_cost|money }}</td>
+                    <td class="text-money text-warning">{{ sale.sale_returned_stock_value|money }}</td>
                     <td class="text-money">{{ sale.sale_profit|money }}</td>
                     <td>
                         <a href="{% url 'invoice_page' sale.id %}" class="btn btn-sm btn-outline-primary">Invoice</a>
@@ -105,92 +105,12 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="10" class="text-center">No sales found</td>
+                    <td colspan="11" class="text-center">No sales found</td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
 
-    <!-- Sales Returns Section -->
-    {% if sales_returns %}
-    <div class="card p-3 p-md-4 mt-4">
-        <div class="app-card-header mb-3">
-            <h4 class="app-page-title">Sales Returns - {{ month }}/{{ year }}</h4>
-        </div>
-
-        <div class="row g-3 mb-4">
-            <div class="col-md-4">
-                <div class="summary-box">
-                    <h6>Total Returns</h6>
-                    <p class="summary-value text-danger">{{ summary.total_sales_return|money }}</p>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="summary-box">
-                    <h6>Return Transactions</h6>
-                    <p class="summary-value">{{ sales_returns|length }}</p>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="summary-box">
-                    <h6>Adjustment Needed</h6>
-                    <p class="summary-value text-warning">Review Pending</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="table-responsive">
-            <table class="table table-bordered table-striped bg-white align-middle">
-                <thead class="table-dark">
-                    <tr>
-                        <th>Return No</th>
-                        <th>Invoice</th>
-                        <th>Date</th>
-                        <th>Item</th>
-                        <th>Type</th>
-                        <th class="text-end">Qty</th>
-                        <th class="text-end">Amount</th>
-                        <th>Reason</th>
-                        <th>Suggestion</th>
-                        <th>Created By</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for sr in sales_returns %}
-                    <tr>
-                        <td>
-                            <span class="badge bg-danger">{{ sr.return_no }}</span>
-                        </td>
-                        <td>
-                            <a href="{% url 'invoice_page' sr.sale.id %}" class="badge bg-secondary">{{ sr.sale.invoice_no }}</a>
-                        </td>
-                        <td>{{ sr.created_at|date:"Y-m-d H:i" }}</td>
-                        <td>{{ sr.sale_item.item.name }}</td>
-                        <td>
-                            {% if sr.return_type == 'refund' %}
-                                <span class="badge bg-danger">Refund</span>
-                            {% else %}
-                                <span class="badge bg-warning">Exchange</span>
-                            {% endif %}
-                        </td>
-                        <td class="text-end">{{ sr.qty }}</td>
-                        <td class="text-end text-danger fw-bold">{{ sr.return_amount|money }}</td>
-                        <td><small>{{ sr.reason|default:"-" }}</small></td>
-                        <td>
-                            {% if sr.return_type == 'refund' %}
-                                <span class="badge bg-info">Process Refund</span>
-                            {% else %}
-                                <span class="badge bg-info">Prepare Exchange</span>
-                            {% endif %}
-                        </td>
-                        <td>{{ sr.created_by.username|default:"-" }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% endif %}
 </div>
 {% endblock %}

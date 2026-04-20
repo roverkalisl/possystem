@@ -49,6 +49,27 @@ def mul(value, arg):
 
 
 @register.filter
+def split(value, separator):
+    """Split a string by a separator"""
+    if not value:
+        return []
+    return str(value).split(separator)
+
+
+@register.filter
+def div(value, arg):
+    """Divide value by arg"""
+    try:
+        numerator = Decimal(str(value)) if value is not None else Decimal("0")
+        denominator = Decimal(str(arg)) if arg is not None else Decimal("0")
+        if denominator == 0:
+            return Decimal("0")
+        return numerator / denominator
+    except (InvalidOperation, ValueError, TypeError):
+        return Decimal("0")
+
+
+@register.filter
 def sub(value, arg):
     """Subtract two numbers"""
     try:

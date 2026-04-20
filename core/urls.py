@@ -106,6 +106,7 @@ urlpatterns = [
     # PROJECT PROFIT
     # =========================
     path('project-profit/', views.project_profit_dashboard, name='project_profit_dashboard'),
+    path('retail-vs-project-profit/', views.retail_vs_project_profit_dashboard, name='retail_vs_project_profit_dashboard'),
 
     # =========================
     # EMPLOYEES
@@ -155,6 +156,7 @@ path("supplier-settlements/<int:settlement_id>/reject/", views.reject_supplier_s
 path("purchase-orders/add/", views.add_purchase_order, name="add_purchase_order"),
 path("purchase-orders/<int:po_id>/edit/", views.edit_purchase_order, name="edit_purchase_order"),
     path("purchase-orders/<int:po_id>/data/", views.purchase_order_data, name="purchase_order_data"),
+    path("purchase-orders/<int:po_id>/print/", views.print_purchase_order_receipt, name="print_purchase_order_receipt"),
     path("petty-cash-ledger/", views.petty_cash_ledger_report, name="petty_cash_ledger_report"),
     path("supplier-advances/<int:advance_id>/edit/", views.edit_supplier_advance, name="edit_supplier_advance"),
     path("sales-return-list/", views.sales_return_list, name="sales_return_list"),

@@ -55,6 +55,7 @@
                             {% if o.status == 'approved' %}
                             <a href="{% url 'create_grn_from_po' o.id %}" class="btn btn-sm btn-success">Create GRN</a>
                             {% endif %}
+                            <a href="{% url 'print_purchase_order_receipt' o.id %}" class="btn btn-sm btn-outline-secondary" target="_blank">Print</a>
                             <a href="{% url 'edit_purchase_order' o.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
                         </td>
                     </tr>

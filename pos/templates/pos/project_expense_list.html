@@ -41,7 +41,10 @@
                     <th>Qty</th>
                     <th>Unit Price</th>
                     <th>Amount</th>
+                    <th>Return No</th>
+                    <th>Invoice No</th>
                     <th>Created By</th>
+                    <th>Return Details</th>
                     {% if is_owner %}
                     <th>Action</th>
                     {% endif %}
@@ -57,8 +60,11 @@
                     <td>{{ expense.description }}</td>
                     <td>{{ expense.qty }}</td>
                     <td class="text-money">{{ expense.unit_price|money }}</td>
-                    <td class="text-money">{{ expense.amount|money }}</td>
+                    <td class="text-money {% if expense.amount < 0 %}text-danger{% endif %}">{{ expense.amount|money }}</td>
+                    <td>{% if expense.expense_no and expense.expense_no|slice:"0:4" == "RET-" %}{{ expense.expense_no|slice:"4:" }}{% else %}-{% endif %}</td>
+                    <td>{% if expense.source_sale %}{{ expense.source_sale.invoice_no }}{% else %}-{% endif %}</td>
                     <td>{% if expense.created_by %}{{ expense.created_by.username }}{% else %}-{% endif %}</td>
+                    <td>{% if expense.expense_no and expense.expense_no|slice:"0:4" == "RET-" %}{{ expense.expense_no|slice:"4:" }}{% else %}-{% endif %}</td>
                     {% if is_owner %}
                     <td>
                         <a href="{% url 'delete_project_expense' expense.id %}"
@@ -69,7 +75,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="{% if is_owner %}10{% else %}9{% endif %}" class="text-center">No expenses found</td>
+                    <td colspan="{% if is_owner %}12{% else %}11{% endif %}" class="text-center">No expenses found</td>
                 </tr>
                 {% endfor %}
             </tbody>

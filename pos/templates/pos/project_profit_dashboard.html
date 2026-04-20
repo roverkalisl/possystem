@@ -38,25 +38,37 @@
     </div>
 
     <div class="row mb-3">
-        <div class="col-md-3 mb-2">
+        <div class="col-md-2 mb-2">
             <div class="card shadow-sm p-3">
                 <h6>Total Income</h6>
                 <h4>{{ grand_income|money }}</h4>
             </div>
         </div>
-        <div class="col-md-3 mb-2">
+        <div class="col-md-2 mb-2">
             <div class="card shadow-sm p-3">
                 <h6>Direct Expenses</h6>
                 <h4>{{ grand_direct_expense|money }}</h4>
             </div>
         </div>
-        <div class="col-md-3 mb-2">
+        <div class="col-md-2 mb-2">
             <div class="card shadow-sm p-3">
-                <h6>Petty Cash Expenses</h6>
+                <h6>Returns Credit</h6>
+                <h4 class="text-success">{{ grand_returns_credit|money }}</h4>
+            </div>
+        </div>
+        <div class="col-md-2 mb-2">
+            <div class="card shadow-sm p-3">
+                <h6>Petty Cash</h6>
                 <h4>{{ grand_petty_cash|money }}</h4>
             </div>
         </div>
-        <div class="col-md-3 mb-2">
+        <div class="col-md-2 mb-2">
+            <div class="card shadow-sm p-3">
+                <h6>Net Expenses</h6>
+                <h4>{{ grand_net_expense|money }}</h4>
+            </div>
+        </div>
+        <div class="col-md-2 mb-2">
             <div class="card shadow-sm p-3">
                 <h6>Net Profit</h6>
                 <h4 class="{% if grand_profit >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
@@ -76,8 +88,9 @@
                         <th>Client</th>
                         <th>Total Income</th>
                         <th>Direct Expense</th>
+                        <th>Returns Credit</th>
                         <th>Petty Cash</th>
-                        <th>Total Expense</th>
+                        <th>Net Expense</th>
                         <th>Profit / Loss</th>
                     </tr>
                 </thead>
@@ -89,15 +102,16 @@
                         <td>{{ row.project.client_name }}</td>
                         <td>{{ row.total_income|money }}</td>
                         <td>{{ row.direct_expense|money }}</td>
+                        <td class="text-success">{{ row.returns_credit|money }}</td>
                         <td>{{ row.petty_cash_expense|money }}</td>
-                        <td>{{ row.total_expense|money }}</td>
+                        <td>{{ row.net_expense|money }}</td>
                         <td class="{% if row.profit >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
                             {{ row.profit|money }}
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="8" class="text-center">No project data found</td>
+                        <td colspan="9" class="text-center">No project data found</td>
                     </tr>
                     {% endfor %}
                 </tbody>

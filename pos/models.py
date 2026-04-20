@@ -386,6 +386,10 @@ class SalesReturn(models.Model):
     class Meta:
         ordering = ["-created_at", "-id"]
 
+    @property
+    def return_invoice_id(self):
+        return self.sale.invoice_no if self.sale else ""
+
     def __str__(self):
         return self.return_no
 # =========================

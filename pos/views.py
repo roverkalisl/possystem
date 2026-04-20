@@ -858,38 +858,83 @@ def sales_return(request):
                     qty=qty,
                 )
 
-            # Reverse Project Expenses if this is an approved project issue
-            if sale.sale_type == "project_issue" and sale.is_posted_to_project_expense:
+            # Reverse/Adjust Project Expenses if this is a project issue
+            # This applies regardless of is_posted_to_project_expense flag
+            if sale.sale_type == "project_issue":
+                # Find all project expenses related to this sale, by item or source_sale
                 project_expenses = ProjectExpense.objects.filter(
-                    source_sale=sale,
-                    item=item,
-                    is_active=True
-                )
+                    Q(source_sale=sale, is_active=True) |
+                    Q(source_sale=sale, item=item, is_active=True)
+                ).distinct()
+                
+                if not project_expenses.exists() and item:
+                    # Also try to find by item if no source_sale match
+                    project_expenses = ProjectExpense.objects.filter(
+                        item=item,
+                        project=sale.project,
+                        is_active=True,
+                        expense_type="inventory"
+                    )
+                
+                returned_qty = Decimal(str(qty))
                 
                 for pe in project_expenses:
-                    # Calculate the proportion of quantity being returned
                     original_qty = Decimal(str(pe.qty or 0))
-                    returned_qty = Decimal(str(qty))
+                    original_amount = Decimal(str(pe.amount or 0))
                     
                     if returned_qty >= original_qty:
-                        # Mark entire expense as inactive
+                        # Mark entire expense as inactive if return qty >= expense qty
                         pe.is_active = False
                         pe.inactive_at = timezone.now()
                         pe.inactive_by = request.user
-                        pe.inactive_reason = f"Reversed due to sales return {return_no}"
+                        pe.inactive_reason = f"Reversed due to sales return {return_no} (Qty: {returned_qty})"
                         pe.save()
+                        
+                        # Create a separate return entry (credit) for transparency
+                        ProjectExpense.objects.create(
+                            expense_no=f"RET-{return_no}",
+                            project=sale.project,
+                            expense_type="inventory",
+                            expense_date=timezone.now().date(),
+                            item=item,
+                            description=f"Return: {pe.description} (Return No: {return_no})",
+                            qty=returned_qty,
+                            unit_price=Decimal(str(pe.unit_price or 0)),
+                            amount=Decimal("0") - (returned_qty * Decimal(str(pe.unit_price or 0))),  # Negative amount (credit)
+                            gl_account=pe.gl_account,
+                            source_sale=sale,
+                            created_by=request.user,
+                        )
                     else:
-                        # Reduce the original expense quantity and amount
+                        # Reduce the expense quantity and amount if return qty < expense qty
                         reduction_amount = returned_qty * Decimal(str(pe.unit_price or 0))
                         
                         pe.qty = original_qty - returned_qty
-                        pe.amount = Decimal(str(pe.amount or 0)) - reduction_amount
+                        pe.amount = original_amount - reduction_amount
                         
-                        if pe.description and "[Adjusted" not in pe.description:
-                            pe.description += f"\n[Adjusted: Qty reduced by {returned_qty} due to return {return_no}]"
-                        elif not pe.description:
-                            pe.description = f"[Adjusted: Qty reduced by {returned_qty} due to return {return_no}]"
+                        note = f"[Adjusted: Qty reduced by {returned_qty} due to return {return_no}]"
+                        if pe.description:
+                            if "[Adjusted" not in pe.description:
+                                pe.description += f"\n{note}"
+                        else:
+                            pe.description = note
                         pe.save()
+                        
+                        # Create a separate return entry (credit) for transparency
+                        ProjectExpense.objects.create(
+                            expense_no=f"RET-{return_no}",
+                            project=sale.project,
+                            expense_type="inventory",
+                            expense_date=timezone.now().date(),
+                            item=item,
+                            description=f"Return: {pe.description} (Return No: {return_no})",
+                            qty=returned_qty,
+                            unit_price=Decimal(str(pe.unit_price or 0)),
+                            amount=Decimal("0") - reduction_amount,  # Negative amount (credit)
+                            gl_account=pe.gl_account,
+                            source_sale=sale,
+                            created_by=request.user,
+                        )
 
             recalculate_sale_totals_after_return(sale)
 
@@ -1152,37 +1197,52 @@ def daily_report(request):
     today = timezone.localdate()
     sales = Sale.objects.filter(created_at__date=today).prefetch_related("sale_items__item", "sale_items__returns")
 
-    total_sales = Decimal("0")
-    total_cost = Decimal("0")
-    total_discount = Decimal("0")
+    total_gross_sales = Decimal("0")
     total_returns = Decimal("0")
+    total_net_sales = Decimal("0")
+    total_cogs = Decimal("0")
+    total_returned_stock_value = Decimal("0")
+    total_discount = Decimal("0")
 
     for sale in sales:
         sale_cost = Decimal("0")
-        sale_returns = Decimal("0")
+        sale_return_amount = Decimal("0")
+        sale_returned_stock_value = Decimal("0")
 
         for row in sale.sale_items.all():
-            available_qty = get_available_qty_for_sale_item(row)
-            if available_qty <= 0:
-                continue
-
-            item_cost = Decimal(str(row.item.cost_price or 0))
-            sale_cost += item_cost * available_qty
-
-            # Calculate returns for this sale item
+            sold_qty = Decimal(str(row.qty or 0))
             returned_qty = Decimal(str(get_returned_qty_for_sale_item(row) or 0))
+            available_qty = sold_qty - returned_qty
+
+            # Calculate original gross sales (before returns)
+            unit_net = Decimal(str(row.net_amount or 0)) / sold_qty if sold_qty > 0 else Decimal("0")
+            gross_sale_amount = unit_net * sold_qty
+            return_amount = unit_net * returned_qty
+            
+            # Calculate COGS only for items that were actually sold (not returned)
+            if available_qty > 0:
+                item_cost = Decimal(str(row.item.cost_price or 0))
+                sale_cost += item_cost * available_qty
+            
+            # Calculate returned stock value (cost of returned items)
             if returned_qty > 0:
-                unit_net = Decimal(str(row.net_amount or 0)) / Decimal(str(row.qty or 1))
-                sale_returns += unit_net * returned_qty
+                item_cost = Decimal(str(row.item.cost_price or 0))
+                sale_returned_stock_value += item_cost * returned_qty
+                sale_return_amount += return_amount
 
+        sale.sale_gross_total = Decimal(str(sale.total or 0))  # Original total before returns
+        sale.sale_return_amount = sale_return_amount
+        sale.sale_net_total = Decimal(str(sale.grand_total or 0))  # Already adjusted for returns
         sale.sale_cost = sale_cost
-        sale.sale_returns = sale_returns
-        sale.sale_profit = Decimal(str(sale.grand_total or 0)) - sale_cost - sale_returns
+        sale.sale_returned_stock_value = sale_returned_stock_value
+        sale.sale_profit = sale.sale_net_total - sale_cost
 
-        total_sales += Decimal(str(sale.grand_total or 0))
-        total_cost += sale_cost
+        total_gross_sales += sale.sale_gross_total
+        total_returns += sale_return_amount
+        total_net_sales += sale.sale_net_total
+        total_cogs += sale_cost
+        total_returned_stock_value += sale_returned_stock_value
         total_discount += Decimal(str(sale.discount or 0))
-        total_returns += sale_returns
 
     # Calculate total outstanding debtors
     all_customers = Customer.objects.filter(is_active=True)
@@ -1222,11 +1282,13 @@ def daily_report(request):
     return render(request, "pos/daily_report.html", {
         "sales": sales,
         "today": today,
-        "total_sales": total_sales,
-        "total_cost": total_cost,
-        "total_discount": total_discount,
+        "total_gross_sales": total_gross_sales,
         "total_returns": total_returns,
-        "total_profit": total_sales - total_cost - total_returns,
+        "total_net_sales": total_net_sales,
+        "total_cogs": total_cogs,
+        "total_returned_stock_value": total_returned_stock_value,
+        "total_discount": total_discount,
+        "total_profit": total_net_sales - total_cogs,
         "total_outstanding_debtors": total_outstanding_debtors,
         "total_payable_creditors": total_payable_creditors,
         "sales_returns": sales_returns,
@@ -1252,49 +1314,63 @@ def monthly_report(request):
         created_at__month=month
     ).prefetch_related("sale_items__item", "sale_items__returns").order_by("-created_at")
 
-    total_sales = Decimal("0")
+    total_gross_sales = Decimal("0")
+    total_returns = Decimal("0")
+    total_net_sales = Decimal("0")
+    total_cogs = Decimal("0")
+    total_returned_stock_value = Decimal("0")
     total_discount = Decimal("0")
-    total_cost = Decimal("0")
     total_profit = Decimal("0")
-    total_sales_return = Decimal("0")
 
     for sale in sales:
         sale_cost = Decimal("0")
         sale_return_amount = Decimal("0")
+        sale_returned_stock_value = Decimal("0")
 
         for row in sale.sale_items.all():
             sold_qty = Decimal(str(row.qty or 0))
             returned_qty = Decimal(str(get_returned_qty_for_sale_item(row) or 0))
             available_qty = sold_qty - returned_qty
 
-            if sold_qty > 0:
-                unit_net = Decimal(str(row.net_amount or 0)) / sold_qty
-            else:
-                unit_net = Decimal("0")
-
-            if returned_qty > 0:
-                sale_return_amount += unit_net * returned_qty
-
+            # Calculate original gross sales (before returns)
+            unit_net = Decimal(str(row.net_amount or 0)) / sold_qty if sold_qty > 0 else Decimal("0")
+            gross_sale_amount = unit_net * sold_qty
+            return_amount = unit_net * returned_qty
+            
+            # Calculate COGS only for items that were actually sold (not returned)
             if available_qty > 0:
                 item_cost = Decimal(str(row.item.cost_price or 0))
                 sale_cost += item_cost * available_qty
+            
+            # Calculate returned stock value (cost of returned items)
+            if returned_qty > 0:
+                item_cost = Decimal(str(row.item.cost_price or 0))
+                sale_returned_stock_value += item_cost * returned_qty
+                sale_return_amount += return_amount
 
+        sale.sale_gross_total = Decimal(str(sale.total or 0))  # Original total before returns
         sale.sale_return_amount = sale_return_amount
+        sale.sale_net_total = Decimal(str(sale.grand_total or 0))  # Already adjusted for returns
         sale.sale_cost = sale_cost
-        sale.sale_profit = Decimal(str(sale.grand_total or 0)) - sale_cost - sale_return_amount
+        sale.sale_returned_stock_value = sale_returned_stock_value
+        sale.sale_profit = sale.sale_net_total - sale_cost
 
-        total_sales += Decimal(str(sale.grand_total or 0))
+        total_gross_sales += sale.sale_gross_total
+        total_returns += sale_return_amount
+        total_net_sales += sale.sale_net_total
+        total_cogs += sale_cost
+        total_returned_stock_value += sale_returned_stock_value
         total_discount += Decimal(str(sale.discount or 0))
-        total_cost += sale_cost
         total_profit += sale.sale_profit
-        total_sales_return += sale_return_amount
 
     summary = {
-        "total_sales": total_sales,
+        "total_gross_sales": total_gross_sales,
+        "total_returns": total_returns,
+        "total_net_sales": total_net_sales,
+        "total_cogs": total_cogs,
+        "total_returned_stock_value": total_returned_stock_value,
         "total_discount": total_discount,
-        "total_cost": total_cost,
         "total_profit": total_profit,
-        "total_sales_return": total_sales_return,
     }
 
     # Get sales returns for the month
@@ -1414,7 +1490,7 @@ def edit_project(request, project_id):
 @user_passes_test(can_use_project)
 def project_expense_list(request):
     expenses = ProjectExpense.objects.filter(is_active=True).select_related(
-        "project", "gl_account", "item", "created_by"
+        "project", "gl_account", "item", "created_by", "source_sale"
     ).order_by("-expense_date", "-id")
 
     project_id = request.GET.get("project")
@@ -1635,7 +1711,7 @@ def petty_cash_ledger_report(request):
             "description": pc.note or "Petty cash issued",
             "bill_no": "",
             "reimbursement_amount": Decimal(str(pc.amount_issued or 0)),
-            "expense_amount": Decimal("0"),
+            "expense_amount": Decimal('0'),
             "balance": running_balance,
             "status": "issued",
         })
@@ -2022,9 +2098,19 @@ def project_profit_dashboard(request):
     project_rows = []
 
     for project in projects:
-        direct_expense = project.expenses.filter(is_active=True).aggregate(
-            total=Sum("amount")
-        )["total"] or Decimal("0")
+        # Calculate direct expenses (positive amounts only - debits)
+        direct_expense = project.expenses.filter(
+            is_active=True, 
+            amount__gt=0
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+        # Calculate returns (negative amounts - credits that reduce expenses)
+        returns_credit = project.expenses.filter(
+            is_active=True,
+            amount__lt=0,
+            expense_type="inventory"
+        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        returns_credit = abs(returns_credit)  # Convert to positive for display
 
         petty_cash_expense = ProjectPettyCashExpense.objects.filter(
             project=project,
@@ -2038,31 +2124,203 @@ def project_profit_dashboard(request):
             is_active=True
         ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
-        total_expense = Decimal(str(direct_expense)) + Decimal(str(petty_cash_expense))
-        profit = Decimal(str(total_income)) - total_expense
+        # Net expenses = direct expenses - returns (returns reduce expenses)
+        net_expense = Decimal(str(direct_expense)) + Decimal(str(petty_cash_expense)) - Decimal(str(returns_credit))
+        profit = Decimal(str(total_income)) - net_expense
 
         project_rows.append({
             "project": project,
             "total_income": Decimal(str(total_income)),
             "direct_expense": Decimal(str(direct_expense)),
+            "returns_credit": Decimal(str(returns_credit)),
             "petty_cash_expense": Decimal(str(petty_cash_expense)),
-            "total_expense": total_expense,
+            "net_expense": net_expense,
             "profit": profit,
         })
 
     grand_income = sum((row["total_income"] for row in project_rows), Decimal("0"))
     grand_direct_expense = sum((row["direct_expense"] for row in project_rows), Decimal("0"))
+    grand_returns_credit = sum((row["returns_credit"] for row in project_rows), Decimal("0"))
     grand_petty_cash = sum((row["petty_cash_expense"] for row in project_rows), Decimal("0"))
-    grand_total_expense = sum((row["total_expense"] for row in project_rows), Decimal("0"))
+    grand_net_expense = sum((row["net_expense"] for row in project_rows), Decimal("0"))
     grand_profit = sum((row["profit"] for row in project_rows), Decimal("0"))
 
     return render(request, "pos/project_profit_dashboard.html", {
         "project_rows": project_rows,
         "grand_income": grand_income,
         "grand_direct_expense": grand_direct_expense,
+        "grand_returns_credit": grand_returns_credit,
         "grand_petty_cash": grand_petty_cash,
-        "grand_total_expense": grand_total_expense,
+        "grand_net_expense": grand_net_expense,
         "grand_profit": grand_profit,
+    })
+
+
+# =========================
+# RETAIL VS PROJECT PROFIT DASHBOARD
+# =========================
+@login_required
+def retail_vs_project_profit_dashboard(request):
+    # Get date range (default to current month)
+    today = timezone.localdate()
+    
+    try:
+        year_param = request.GET.get("year", "").strip()
+        year = int(year_param) if year_param else today.year
+    except (TypeError, ValueError):
+        year = today.year
+
+    try:
+        month_param = request.GET.get("month", "").strip()
+        month = int(month_param) if month_param else today.month
+    except (TypeError, ValueError):
+        month = today.month
+
+    # Determine if we should filter by month/year or show all
+    filter_by_month = bool(month_param)
+    filter_by_year = bool(year_param)
+
+    # Calculate Retail Sales and Returns
+    retail_sales_query = Sale.objects.filter(sale_type="retail").prefetch_related("sale_items__item", "sale_items__returns")
+    
+    if filter_by_year:
+        retail_sales_query = retail_sales_query.filter(created_at__year=year)
+    if filter_by_month:
+        retail_sales_query = retail_sales_query.filter(created_at__month=month)
+    
+    retail_sales = retail_sales_query
+
+    retail_gross_sales = Decimal("0")
+    retail_returns = Decimal("0")
+    retail_net_sales = Decimal("0")
+    retail_cogs = Decimal("0")
+
+    for sale in retail_sales:
+        sale_cost = Decimal("0")
+        sale_return_amount = Decimal("0")
+
+        for row in sale.sale_items.all():
+            sold_qty = Decimal(str(row.qty or 0))
+            returned_qty = Decimal(str(get_returned_qty_for_sale_item(row) or 0))
+            available_qty = sold_qty - returned_qty
+
+            # Calculate original gross sales (before returns)
+            unit_net = Decimal(str(row.net_amount or 0)) / sold_qty if sold_qty > 0 else Decimal("0")
+            return_amount = unit_net * returned_qty
+            
+            # Calculate COGS only for items that were actually sold (not returned)
+            if available_qty > 0:
+                item_cost = Decimal(str(row.item.cost_price or 0))
+                sale_cost += item_cost * available_qty
+            
+            if returned_qty > 0:
+                sale_return_amount += return_amount
+
+        retail_gross_sales += Decimal(str(sale.total or 0))
+        retail_returns += sale_return_amount
+        retail_net_sales += Decimal(str(sale.grand_total or 0))
+        retail_cogs += sale_cost
+
+    retail_profit = retail_net_sales - retail_cogs
+
+    # Calculate Project Sales and Returns
+    project_sales_query = Sale.objects.filter(
+        sale_type="project_issue"
+    ).prefetch_related("sale_items__item", "sale_items__returns")
+    
+    if filter_by_year:
+        project_sales_query = project_sales_query.filter(created_at__year=year)
+    if filter_by_month:
+        project_sales_query = project_sales_query.filter(created_at__month=month)
+    
+    project_sales = project_sales_query
+
+    project_gross_sales = Decimal("0")
+    project_returns = Decimal("0")
+    project_net_sales = Decimal("0")
+    project_cogs = Decimal("0")
+
+    for sale in project_sales:
+        sale_cost = Decimal("0")
+        sale_return_amount = Decimal("0")
+
+        for row in sale.sale_items.all():
+            sold_qty = Decimal(str(row.qty or 0))
+            returned_qty = Decimal(str(get_returned_qty_for_sale_item(row) or 0))
+            available_qty = sold_qty - returned_qty
+
+            # Calculate original gross sales (before returns)
+            unit_net = Decimal(str(row.net_amount or 0)) / sold_qty if sold_qty > 0 else Decimal("0")
+            return_amount = unit_net * returned_qty
+            
+            # Calculate COGS only for items that were actually sold (not returned)
+            if available_qty > 0:
+                item_cost = Decimal(str(row.item.cost_price or 0))
+                sale_cost += item_cost * available_qty
+            
+            if returned_qty > 0:
+                sale_return_amount += return_amount
+
+        project_gross_sales += Decimal(str(sale.total or 0))
+        project_returns += sale_return_amount
+        project_net_sales += Decimal(str(sale.grand_total or 0))
+        project_cogs += sale_cost
+
+    # Calculate Project Expenses (including returns credit)
+    project_expenses_query = ProjectExpense.objects.filter(is_active=True)
+    
+    if filter_by_year:
+        project_expenses_query = project_expenses_query.filter(created_at__year=year)
+    if filter_by_month:
+        project_expenses_query = project_expenses_query.filter(created_at__month=month)
+    
+    project_expenses = project_expenses_query.aggregate(
+        total_expenses=Sum("amount", filter=Q(amount__gt=0)),
+        total_returns=Sum("amount", filter=Q(amount__lt=0))
+    )
+
+    project_expenses_total = project_expenses["total_expenses"] or Decimal("0")
+    project_returns_credit = abs(project_expenses["total_returns"] or Decimal("0"))
+    project_net_expenses = project_expenses_total - project_returns_credit
+
+    # Calculate Project Income
+    project_income_query = ProjectInvoicePayment.objects.filter(invoice__is_active=True)
+    
+    if filter_by_year:
+        project_income_query = project_income_query.filter(created_at__year=year)
+    if filter_by_month:
+        project_income_query = project_income_query.filter(created_at__month=month)
+    
+    project_income = project_income_query.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    project_profit = project_income - project_net_expenses
+
+    # Prepare data for charts
+    retail_data = {
+        "gross_sales": retail_gross_sales,
+        "returns": retail_returns,
+        "net_sales": retail_net_sales,
+        "cogs": retail_cogs,
+        "profit": retail_profit,
+    }
+
+    project_data = {
+        "gross_sales": project_gross_sales,
+        "returns": project_returns,
+        "net_sales": project_net_sales,
+        "cogs": project_cogs,
+        "income": project_income,
+        "expenses": project_expenses_total,
+        "returns_credit": project_returns_credit,
+        "net_expenses": project_net_expenses,
+        "profit": project_profit,
+    }
+
+    return render(request, "pos/retail_vs_project_profit_dashboard.html", {
+        "year": year,
+        "month": month,
+        "retail_data": retail_data,
+        "project_data": project_data,
     })
 
 
@@ -3550,6 +3808,20 @@ def purchase_order_data(request, po_id):
         "payment_period": getattr(po, "payment_period", "") or "",
         "amount": str(amount_value or 0),
         "note": po.note or "",
+    })
+
+@user_passes_test(can_use_project)
+def print_purchase_order_receipt(request, po_id):
+    po = get_object_or_404(
+        PurchaseOrder.objects.select_related("supplier", "project", "created_by"),
+        id=po_id
+    )
+
+    po_items = po.items.all()
+
+    return render(request, "pos/print_purchase_order_receipt.html", {
+        "po": po,
+        "po_items": po_items,
     })
 
 @user_passes_test(can_use_project)
