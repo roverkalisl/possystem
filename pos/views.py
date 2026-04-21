@@ -1175,6 +1175,13 @@ def stock_history(request):
             item = Item.objects.get(id=item_id)
             transactions = StockTransaction.objects.filter(item=item).order_by("created_at")
             
+            # Get initial stock transaction
+            initial_stock_tx = None
+            for tx in transactions:
+                if tx.reference_type == "manual" and tx.transaction_type == "grn" and tx.reference_no and "INIT-" in tx.reference_no:
+                    initial_stock_tx = tx
+                    break
+            
             # Calculate running balance
             balance = Decimal("0")
             rows = []
@@ -1199,7 +1206,8 @@ def stock_history(request):
             
             return render(request, "pos/bin_card.html", {
                 "item": item,
-                "rows": rows
+                "rows": rows,
+                "initial_stock_tx": initial_stock_tx
             })
         except Item.DoesNotExist:
             pass

@@ -20,6 +20,38 @@
         <strong>Unit:</strong> {{ item.unit }}
     </div>
 
+    <!-- Initial Stock Section -->
+    {% if initial_stock_tx %}
+    <div class="alert alert-info mb-4">
+        <h5 class="alert-heading mb-2">
+            <i class="bi bi-inbox"></i> Initial Stock (Manually Added)
+        </h5>
+        <div class="row">
+            <div class="col-md-3">
+                <strong>Initial Quantity:</strong><br>
+                <span class="badge bg-primary p-2">{{ initial_stock_tx.qty|floatformat:2 }} {{ item.unit }}</span>
+            </div>
+            <div class="col-md-3">
+                <strong>Added On:</strong><br>
+                {{ initial_stock_tx.created_at|date:"Y-m-d H:i" }}
+            </div>
+            <div class="col-md-3">
+                <strong>Added By:</strong><br>
+                {{ initial_stock_tx.created_by.username|default:"System" }}
+            </div>
+            <div class="col-md-3">
+                <strong>Reference:</strong><br>
+                {{ initial_stock_tx.reference_no }}
+            </div>
+        </div>
+        {% if initial_stock_tx.notes %}
+        <div class="mt-2">
+            <strong>Notes:</strong> {{ initial_stock_tx.notes }}
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
     <div class="table-responsive">
         <table class="table table-bordered table-striped bg-white align-middle">
             <thead class="table-dark">
