@@ -1204,10 +1204,20 @@ def stock_history(request):
                     "transaction": tx
                 })
             
+            # Get final balance from transactions
+            final_calculated_balance = balance
+            current_stock = Decimal(str(item.stock or 0))
+            discrepancy = current_stock - final_calculated_balance
+            has_discrepancy = abs(discrepancy) > Decimal("0.01")  # Account for rounding
+            
             return render(request, "pos/bin_card.html", {
                 "item": item,
                 "rows": rows,
-                "initial_stock_tx": initial_stock_tx
+                "initial_stock_tx": initial_stock_tx,
+                "final_calculated_balance": final_calculated_balance,
+                "current_stock": current_stock,
+                "discrepancy": discrepancy,
+                "has_discrepancy": has_discrepancy,
             })
         except Item.DoesNotExist:
             pass
