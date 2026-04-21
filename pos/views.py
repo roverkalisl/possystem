@@ -280,7 +280,7 @@ def dashboard(request):
     today_sales = Sale.objects.filter(created_at__date=today)
     total_today_sales = today_sales.aggregate(total=Sum("grand_total"))["total"] or Decimal("0")
     
-    # Debtors (Customers with outstanding credit)
+    # Debtors (Customers with outstanding credit and Projects with unpaid invoices)
     all_customers = Customer.objects.filter(is_active=True)
     total_outstanding_debtors = Decimal("0")
     debtors_count = 0
@@ -291,8 +291,28 @@ def dashboard(request):
             total_outstanding_debtors += outstanding
             debtors_count += 1
             customer_data.append({
-                'customer': customer,
+                'type': 'customer',
+                'entity': customer,
                 'outstanding': outstanding,
+                'name': customer.name,
+                'code': customer.customer_code,
+            })
+    
+    # Add project debtors
+    all_projects = Project.objects.filter(is_active=True)
+    for project in all_projects:
+        outstanding = Decimal("0")
+        for invoice in project.invoices.filter(is_active=True):
+            outstanding += invoice.balance_amount
+        if outstanding > 0:
+            total_outstanding_debtors += outstanding
+            debtors_count += 1
+            customer_data.append({
+                'type': 'project',
+                'entity': project,
+                'outstanding': outstanding,
+                'name': project.client_name or project.project_name,
+                'code': project.project_id,
             })
     
     # Sort by outstanding amount (highest first) and take top 5
@@ -2990,41 +3010,66 @@ def petty_cash_expense_list(request):
 # =========================
 @user_passes_test(can_use_pos)
 def debtors_list(request):
-    """List of Debtors (Customers with outstanding credit)"""
+    """List of Debtors (Customers with outstanding credit and Projects with unpaid invoices)"""
     query = request.GET.get("q", "").strip()
     
+    # Get customer debtors
     customers = Customer.objects.filter(is_active=True).select_related(
         "receivable_gl_account"
     ).order_by("name")
 
-    # Calculate outstanding for each customer
     customer_data = []
     for customer in customers:
         outstanding = get_customer_outstanding(customer)
-        if outstanding > 0:  # Only show customers with outstanding balance
+        if outstanding > 0:
             customer_data.append({
-                'customer': customer,
+                'type': 'customer',
+                'entity': customer,
                 'outstanding': outstanding,
+                'name': customer.name,
+                'code': customer.customer_code,
+                'phone': customer.phone,
             })
     
+    # Get project debtors
+    projects = Project.objects.filter(is_active=True).order_by("project_id")
+    project_data = []
+    for project in projects:
+        # Calculate total outstanding from unpaid project invoices
+        outstanding = Decimal("0")
+        for invoice in project.invoices.filter(is_active=True):
+            outstanding += invoice.balance_amount
+        if outstanding > 0:
+            project_data.append({
+                'type': 'project',
+                'entity': project,
+                'outstanding': outstanding,
+                'name': project.client_name or project.project_name,
+                'code': project.project_id,
+                'phone': None,
+            })
+    
+    # Combine and filter by query
+    all_debtors = customer_data + project_data
+    
     if query:
-        customer_data = [
-            cd for cd in customer_data if 
-            query.lower() in cd['customer'].name.lower() or
-            query.lower() in (cd['customer'].customer_code or '').lower() or
-            query.lower() in (cd['customer'].phone or '').lower()
+        all_debtors = [
+            debtor for debtor in all_debtors if 
+            query.lower() in debtor['name'].lower() or
+            query.lower() in (debtor['code'] or '').lower() or
+            query.lower() in (debtor['phone'] or '').lower()
         ]
     
     # Sort by outstanding amount (highest first)
-    customer_data.sort(key=lambda x: x['outstanding'], reverse=True)
+    all_debtors.sort(key=lambda x: x['outstanding'], reverse=True)
     
-    total_outstanding = sum(cd['outstanding'] for cd in customer_data)
+    total_outstanding = sum(debtor['outstanding'] for debtor in all_debtors)
 
     return render(request, "pos/debtors_list.html", {
-        "customer_data": customer_data,
+        "all_debtors": all_debtors,
         "query": query,
         "total_outstanding": total_outstanding,
-        "total_debtors": len(customer_data),
+        "total_debtors": len(all_debtors),
     })
 
 

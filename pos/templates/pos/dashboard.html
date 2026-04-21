@@ -69,18 +69,26 @@
                     <table class="table table-sm table-borderless">
                         <thead>
                             <tr>
-                                <th>Customer</th>
+                                <th>Type</th>
+                                <th>Debtor</th>
                                 <th class="text-end">Outstanding</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {% for cd in top_debtors %}
+                            {% for debtor in top_debtors %}
                             <tr>
                                 <td>
-                                    <strong>{{ cd.customer.customer_code }}</strong> - {{ cd.customer.name }}
+                                    {% if debtor.type == 'customer' %}
+                                        <span class="badge bg-primary">Customer</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Project</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <strong>{{ debtor.code }}</strong> - {{ debtor.name }}
                                 </td>
                                 <td class="text-end">
-                                    <span class="badge bg-danger">{{ cd.outstanding|money }}</span>
+                                    <span class="badge bg-danger">{{ debtor.outstanding|money }}</span>
                                 </td>
                             </tr>
                             {% endfor %}
