@@ -87,8 +87,20 @@
                     <td>{{ row.transaction.get_reference_type_display|default:"-" }}</td>
                     <td>{{ row.transaction.reference_no|default:"-" }}</td>
                     <td>{{ row.transaction.get_transaction_type_display }}</td>
-                    <td class="text-end">{{ row.receipt|floatformat:2 }} {{ item.unit }}</td>
-                    <td class="text-end">{{ row.issue|floatformat:2 }} {{ item.unit }}</td>
+                    <td class="text-end">
+                        {% if row.receipt > 0 %}
+                            {{ row.receipt|floatformat:2 }} {{ item.unit }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td class="text-end">
+                        {% if row.issue > 0 %}
+                            {{ row.issue|floatformat:2 }} {{ item.unit }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
                     <td class="text-end">
                         <strong>
                             {% if row.balance < 0 %}
