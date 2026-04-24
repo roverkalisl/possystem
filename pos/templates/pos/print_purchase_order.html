@@ -1,0 +1,361 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purchase Order - {{ order.po_no }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            color: #111;
+            margin: 0;
+            padding: 0;
+            background: #fff;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 0 auto;
+            padding: 14mm;
+            box-sizing: border-box;
+            background: #fff;
+        }
+
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid #222;
+            padding-bottom: 12px;
+            margin-bottom: 18px;
+        }
+
+        .company-wrap {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+        }
+
+        .logo-box {
+            width: 90px;
+            height: 90px;
+            border: 1px solid #ddd;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+
+        .logo-box img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .company-details h1 {
+            margin: 0 0 6px 0;
+            font-size: 24px;
+            letter-spacing: 0.5px;
+        }
+
+        .company-details p {
+            margin: 2px 0;
+            font-size: 13px;
+            color: #333;
+        }
+
+        .po-title-box {
+            text-align: right;
+        }
+
+        .po-title-box h2 {
+            margin: 0;
+            font-size: 30px;
+            letter-spacing: 1px;
+        }
+
+        .po-title-box p {
+            margin: 6px 0 0 0;
+            font-size: 13px;
+        }
+
+        .section {
+            margin-bottom: 18px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #dcdcdc;
+            text-transform: uppercase;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 18px;
+        }
+
+        .info-box {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px 12px;
+            min-height: 110px;
+        }
+
+        .info-box p {
+            margin: 4px 0;
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .info-box strong {
+            color: #000;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .items-table th,
+        .items-table td {
+            border: 1px solid #cfcfcf;
+            padding: 8px 10px;
+            font-size: 13px;
+            vertical-align: top;
+        }
+
+        .items-table th {
+            background: #f4f4f4;
+            text-align: left;
+        }
+
+        .text-end {
+            text-align: right;
+        }
+
+        .totals-box {
+            width: 320px;
+            margin-left: auto;
+            margin-top: 14px;
+        }
+
+        .totals-box table td {
+            border: 1px solid #d8d8d8;
+            padding: 8px 10px;
+            font-size: 13px;
+        }
+
+        .totals-box .label {
+            background: #fafafa;
+            font-weight: 700;
+        }
+
+        .totals-box .grand {
+            font-size: 15px;
+            font-weight: 700;
+        }
+
+        .terms-box,
+        .auth-box {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 10px 12px;
+        }
+
+        .terms-box p,
+        .auth-box p {
+            margin: 5px 0;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .signature-area {
+            margin-top: 38px;
+            display: flex;
+            justify-content: space-between;
+            align-items: end;
+        }
+
+        .sign-line {
+            width: 260px;
+            border-top: 1px solid #333;
+            padding-top: 6px;
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .print-actions {
+            width: 210mm;
+            margin: 18px auto 0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .btn {
+            border: 1px solid #333;
+            background: #fff;
+            padding: 8px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+
+        @media print {
+            .print-actions {
+                display: none;
+            }
+
+            .page {
+                margin: 0;
+                width: auto;
+                min-height: auto;
+                padding: 10mm;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="print-actions">
+    <button class="btn" onclick="window.history.back()">Back</button>
+    <button class="btn" onclick="window.print()">Print</button>
+</div>
+
+<div class="page">
+    <div class="top-bar">
+        <div class="company-wrap">
+            <div class="logo-box">
+                <img src="{% static 'logo.png' %}" alt="Company Logo">
+            </div>
+
+            <div class="company-details">
+                <h1>{{ company_info.name }}</h1>
+                <p>{{ company_info.address }}</p>
+                <p>Phone: {{ company_info.phone }}</p>
+                <p>Email: {{ company_info.email }}</p>
+            </div>
+        </div>
+
+        <div class="po-title-box">
+            <h2>PURCHASE ORDER</h2>
+            <p><strong>PO No:</strong> {{ order.po_no }}</p>
+            <p><strong>PO Date:</strong> {{ order.po_date }}</p>
+            <p><strong>Delivery Date:</strong> {{ order.delivery_date_required|default:"-" }}</p>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="grid-2">
+            <div>
+                <div class="section-title">Supplier Information</div>
+                <div class="info-box">
+                    <p><strong>Supplier:</strong> {{ order.supplier.name }}</p>
+                    <p><strong>Address:</strong> {{ order.supplier_address|default:order.supplier.address|default:"-" }}</p>
+                    <p><strong>Contact:</strong> {{ order.supplier_contact_details|default:"-" }}</p>
+                    <p><strong>Project:</strong>
+                        {% if order.project %}
+                            {{ order.project.project_id }} - {{ order.project.project_name }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Item Details</div>
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 6%;">#</th>
+                    <th>Description</th>
+                    <th style="width: 12%;" class="text-end">Qty</th>
+                    <th style="width: 15%;" class="text-end">Unit Price</th>
+                    <th style="width: 17%;" class="text-end">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in items %}
+                <tr>
+                    <td>{{ forloop.counter }}</td>
+                    <td>{{ row.description }}</td>
+                    <td class="text-end">{{ row.quantity }}</td>
+                    <td class="text-end">{{ row.unit_price }}</td>
+                    <td class="text-end">{{ row.line_total }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="text-end">No items found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+
+        <div class="totals-box">
+            <table>
+                <tr>
+                    <td class="label">Grand Total</td>
+                    <td class="text-end grand">{{ grand_total }}</td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="grid-2">
+            <div>
+                <div class="section-title">Payment & Delivery</div>
+                <div class="info-box">
+                    <p><strong>Payment Method:</strong> {{ order.payment_method|default:"-" }}</p>
+                    <p><strong>Payment Period:</strong> {{ order.payment_period|default:"-" }}</p>
+                    <p><strong>Delivery Location:</strong> {{ order.delivery_location|default:"-" }}</p>
+                    <p><strong>Delivery Method:</strong> {{ order.delivery_method|default:"-" }}</p>
+                    <p><strong>Special Instructions:</strong> {{ order.special_instructions|default:"-" }}</p>
+                </div>
+            </div>
+
+            <div>
+                <div class="section-title">Terms & Conditions</div>
+                <div class="terms-box">
+                    <p><strong>Terms:</strong> {{ order.terms_and_conditions|default:"-" }}</p>
+                    <p><strong>Warranty:</strong> {{ order.warranty_details|default:"-" }}</p>
+                    <p><strong>Return Policy:</strong> {{ order.return_policy|default:"-" }}</p>
+                    <p><strong>Penalties / Conditions:</strong> {{ order.penalties_conditions|default:"-" }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Authorization</div>
+        <div class="auth-box">
+            <p><strong>Authorized Person:</strong> {{ order.authorized_person_name|default:"-" }}</p>
+            <p><strong>Signature Text:</strong> {{ order.signature_text|default:"-" }}</p>
+            <p><strong>Status:</strong> {{ order.status|default:"-" }}</p>
+            <p><strong>Note:</strong> {{ order.note|default:"-" }}</p>
+        </div>
+
+        <div class="signature-area">
+            <div class="sign-line">
+                Supplier Signature
+            </div>
+            <div class="sign-line">
+                Authorized Signature / Company Seal
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>

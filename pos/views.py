@@ -3834,6 +3834,33 @@ def edit_purchase_order(request, po_id):
         return redirect("purchase_order_list")
 
     return render(request, "pos/edit_purchase_order.html", context)
+@user_passes_test(can_use_project)
+def print_purchase_order(request, po_id):
+    order = get_object_or_404(
+        PurchaseOrder.objects.select_related("supplier", "project", "created_by").prefetch_related("items"),
+        id=po_id
+    )
+
+    items = order.items.all()
+    grand_total = Decimal("0")
+
+    for row in items:
+        row.line_total = Decimal(str(row.quantity or 0)) * Decimal(str(row.unit_price or 0))
+        grand_total += row.line_total
+
+    company_info = {
+        "name": "P&I CONSTRUCTIONS",
+        "address": "Your Company Address Here",
+        "phone": "+94 77 123 4567",
+        "email": "info@yourcompany.com",
+    }
+
+    return render(request, "pos/print_purchase_order.html", {
+        "order": order,
+        "items": items,
+        "grand_total": grand_total,
+        "company_info": company_info,
+    })
 
 @user_passes_test(can_use_project)
 def purchase_order_data(request, po_id):
@@ -4430,3 +4457,31 @@ def audit_detail(request, log_id):
     }
     
     return render(request, 'pos/audit_detail.html', context)
+
+@user_passes_test(can_use_project)
+def print_purchase_order(request, po_id):
+    order = get_object_or_404(
+        PurchaseOrder.objects.select_related("supplier", "project", "created_by").prefetch_related("items"),
+        id=po_id
+    )
+
+    items = order.items.all()
+    grand_total = Decimal("0")
+
+    for row in items:
+        row.line_total = Decimal(str(row.quantity or 0)) * Decimal(str(row.unit_price or 0))
+        grand_total += row.line_total
+
+    company_info = {
+        "name": "P&I CONSTRUCTIONS",
+        "address": "Your Company Address Here",
+        "phone": "+94 77 123 4567",
+        "email": "info@yourcompany.com",
+    }
+
+    return render(request, "pos/print_purchase_order.html", {
+        "order": order,
+        "items": items,
+        "grand_total": grand_total,
+        "company_info": company_info,
+    })

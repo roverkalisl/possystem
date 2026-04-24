@@ -1,19 +1,23 @@
 {% extends "base.html" %}
-{% load currency_filters %}
 {% block title %}Purchase Orders{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
     <h3 class="page-title mb-0">Purchase Orders</h3>
-<a href="{% url 'dashboard' %}" class="btn btn-outline-secondary"> Dashboard    </a>
-    <a href="{% url 'add_purchase_order' %}" class="btn btn-primary">Add PO</a>
+    <div class="d-flex gap-2">
+        <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Dashboard</a>
+        <a href="{% url 'add_purchase_order' %}" class="btn btn-primary">Add Purchase Order</a>
+    </div>
 </div>
 
 <div class="card card-soft mb-3">
     <div class="card-body">
         <form method="get" class="row g-2">
             <div class="col-md-10">
-                <input type="text" name="q" value="{{ query }}" class="form-control"
+                <input type="text"
+                       name="q"
+                       value="{{ query }}"
+                       class="form-control"
                        placeholder="Search by PO No / Supplier / Project / Buyer">
             </div>
             <div class="col-md-2 d-grid">
@@ -37,31 +41,58 @@
                         <th>Delivery Date</th>
                         <th class="text-end">Total</th>
                         <th>Status</th>
-                        <th class="text-center" style="width:90px;">Action</th>
+                        <th class="text-center" style="min-width: 180px;">Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for o in orders %}
                     <tr>
-                        <td>{{ o.po_no }}</td>
+                        <td><strong>{{ o.po_no }}</strong></td>
                         <td>{{ o.po_date }}</td>
                         <td>{{ o.supplier.name }}</td>
-                        <td>{% if o.project %}{{ o.project.project_id }} - {{ o.project.project_name }}{% else %}-{% endif %}</td>
+                        <td>
+                            {% if o.project %}
+                                {{ o.project.project_id }} - {{ o.project.project_name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
                         <td>{{ o.buyer_company_name|default:"-" }}</td>
                         <td>{{ o.delivery_date_required|default:"-" }}</td>
-                        <td class="text-end">{{ o.grand_total|money }}</td>
-                        <td>{{ o.get_status_display }}</td>
-                        <td class="text-center">
-                            {% if o.status == 'approved' %}
-                            <a href="{% url 'create_grn_from_po' o.id %}" class="btn btn-sm btn-success">Create GRN</a>
+                        <td class="text-end">
+                            {% if o.grand_total %}
+                                {{ o.grand_total }}
+                            {% else %}
+                                -
                             {% endif %}
-                            <a href="{% url 'print_purchase_order_receipt' o.id %}" class="btn btn-sm btn-outline-secondary" target="_blank">Print</a>
-                            <a href="{% url 'edit_purchase_order' o.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
+                        </td>
+                        <td>
+                            {% if o.status == "draft" %}
+                                <span class="badge bg-secondary">Draft</span>
+                            {% elif o.status == "approved" %}
+                                <span class="badge bg-success">Approved</span>
+                            {% elif o.status == "closed" %}
+                                <span class="badge bg-dark">Closed</span>
+                            {% else %}
+                                <span class="badge bg-light text-dark">{{ o.status }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <div class="d-flex gap-1 justify-content-center">
+                                <a href="{% url 'edit_purchase_order' o.id %}" class="btn btn-sm btn-outline-primary">
+                                    Edit
+                                </a>
+                                <a href="{% url 'print_purchase_order' o.id %}" class="btn btn-sm btn-outline-dark" target="_blank">
+                                    Print
+                                </a>
+                            </div>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="9" class="text-center text-muted py-4">No purchase orders found.</td>
+                        <td colspan="9" class="text-center text-muted py-4">
+                            No purchase orders found.
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>

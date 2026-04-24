@@ -1,398 +1,504 @@
-{% load currency_filters %}
+{% load static %}
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Project Invoice</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Purchase Order - {{ order.po_no }}</title>
     <style>
-        @page { size: A4; margin: 12mm; }
-
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            color: #222;
-            background: #fff;
+        :root {
+            --primary: #1f3c88;
+            --dark: #1f2937;
+            --muted: #6b7280;
+            --line: #d9dee7;
+            --soft: #f5f7fb;
+            --white: #ffffff;
         }
 
-        .page { width: 100%; }
+        * {
+            box-sizing: border-box;
+        }
 
-        .print-btn {
-            margin: 14px;
-            padding: 10px 18px;
-            border: none;
-            background: #1e2a78;
-            color: #fff;
-            border-radius: 6px;
-            font-size: 14px;
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #eef2f7;
+            color: var(--dark);
+        }
+
+        .print-toolbar {
+            width: 210mm;
+            margin: 18px auto 0;
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        .toolbar-btn {
+            border: 1px solid #cfd6e2;
+            background: var(--white);
+            color: var(--dark);
+            padding: 9px 16px;
+            border-radius: 8px;
             cursor: pointer;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .toolbar-btn:hover {
+            background: #f8fafc;
+        }
+
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 16px auto 24px;
+            background: var(--white);
+            padding: 14mm;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
         }
 
         .header {
             display: flex;
             justify-content: space-between;
             align-items: flex-start;
-            margin-bottom: 22px;
+            gap: 20px;
+            padding-bottom: 16px;
+            border-bottom: 2px solid var(--primary);
         }
 
-        .company { width: 48%; }
-
-        .company h1 {
-            margin: 0 0 10px 0;
-            font-size: 28px;
-            line-height: 1.2;
-            color: #1e2a78;
-            font-weight: 800;
-            text-transform: uppercase;
-        }
-
-        .company .details {
-            font-size: 14px;
-            line-height: 1.7;
-        }
-
-        .right-head {
-            width: 36%;
-            text-align: right;
+        .company-block {
+            display: flex;
+            gap: 14px;
+            align-items: flex-start;
+            flex: 1;
         }
 
         .logo-box {
-            margin-bottom: 10px;
+            width: 86px;
+            height: 86px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: #fbfcfe;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            flex-shrink: 0;
         }
 
         .logo-box img {
-            max-width: 180px;
-            max-height: 90px;
+            max-width: 100%;
+            max-height: 100%;
             object-fit: contain;
         }
 
-        .invoice-title {
-            font-size: 38px;
-            color: #1e2a78;
-            font-weight: 800;
-            margin: 8px 0 0 0;
+        .company-details h1 {
+            margin: 0 0 6px 0;
+            font-size: 24px;
+            color: var(--primary);
+            letter-spacing: 0.4px;
         }
 
-        .top-grid {
-            display: flex;
-            justify-content: space-between;
-            gap: 18px;
-            margin-bottom: 18px;
-        }
-
-        .bill-to, .meta, .project-box, .notes-box, .total-box {
-            border: 1.5px solid #cfd5e3;
-            border-radius: 8px;
-            background: #fff;
-        }
-
-        .bill-to, .project-box {
-            padding: 12px 14px;
-        }
-
-        .bill-to {
-            width: 48%;
-        }
-
-        .meta {
-            width: 32%;
-            padding: 10px 14px;
-        }
-
-        .section-title {
+        .company-details p {
+            margin: 3px 0;
             font-size: 13px;
-            font-weight: 700;
-            color: #1e2a78;
-            margin-bottom: 8px;
-            text-transform: uppercase;
-            letter-spacing: .3px;
+            color: #374151;
+            line-height: 1.45;
         }
 
-        .bill-text, .project-text, .meta-table {
-            font-size: 14px;
-            line-height: 1.7;
-        }
-
-        .meta-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .meta-table td {
-            padding: 4px 0;
-            vertical-align: top;
-        }
-
-        .meta-table td:first-child {
-            width: 42%;
-            font-weight: 700;
-        }
-
-        .project-box {
-            margin-bottom: 16px;
-        }
-
-        .items-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 16px;
-        }
-
-        .items-table th {
-            background: #1e2a78;
-            color: #fff;
-            font-size: 13px;
-            font-weight: 700;
-            padding: 10px 8px;
-            border: 1px solid #cfd5e3;
-            text-align: center;
-        }
-
-        .items-table td {
-            border: 1px solid #cfd5e3;
-            padding: 10px 8px;
-            font-size: 14px;
-            vertical-align: top;
-        }
-
-        .center {
-            text-align: center;
-        }
-
-        .right {
+        .po-block {
+            min-width: 250px;
             text-align: right;
-            white-space: nowrap;
         }
 
-        .bottom-grid {
+        .po-title {
+            margin: 0 0 10px 0;
+            font-size: 30px;
+            font-weight: 800;
+            color: var(--dark);
+            letter-spacing: 1.2px;
+        }
+
+        .po-meta {
+            display: inline-grid;
+            gap: 8px;
+            width: 100%;
+        }
+
+        .po-meta-row {
             display: flex;
             justify-content: space-between;
             gap: 16px;
-            margin-top: 6px;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 8px 10px;
+            font-size: 13px;
+            background: var(--soft);
         }
 
-        .left-bottom {
-            width: 64%;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
+        .po-meta-row span:first-child {
+            color: var(--muted);
+            font-weight: 600;
         }
 
-        .notes-box {
-            min-height: 92px;
+        .po-meta-row span:last-child {
+            font-weight: 700;
+            color: var(--dark);
+        }
+
+        .section {
+            margin-top: 18px;
+        }
+
+        .section-title {
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--primary);
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .info-card {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: #fcfdff;
+            padding: 12px 14px;
+            min-height: 128px;
+        }
+
+        .info-card p {
+            margin: 5px 0;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .info-card strong {
+            color: var(--dark);
+        }
+
+        .items-wrap {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .items-table thead th {
+            background: var(--primary);
+            color: var(--white);
+            font-size: 13px;
+            font-weight: 700;
+            padding: 10px 10px;
+            border-right: 1px solid rgba(255,255,255,0.18);
+            text-align: left;
+        }
+
+        .items-table thead th:last-child {
+            border-right: none;
+        }
+
+        .items-table tbody td {
+            border-top: 1px solid var(--line);
+            padding: 10px 10px;
+            font-size: 13px;
+            vertical-align: top;
+        }
+
+        .items-table tbody tr:nth-child(even) {
+            background: #fafcff;
+        }
+
+        .text-end {
+            text-align: right;
+        }
+
+        .totals-box {
+            width: 320px;
+            margin-left: auto;
+            margin-top: 14px;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .totals-box table td {
+            padding: 10px 12px;
+            font-size: 13px;
+            border-top: 1px solid var(--line);
+        }
+
+        .totals-box table tr:first-child td {
+            border-top: none;
+        }
+
+        .totals-box .label {
+            background: var(--soft);
+            font-weight: 700;
+            color: var(--dark);
+            width: 55%;
+        }
+
+        .totals-box .value {
+            text-align: right;
+            font-weight: 700;
+        }
+
+        .totals-box .grand .label,
+        .totals-box .grand .value {
+            background: var(--primary);
+            color: var(--white);
+            font-size: 15px;
+        }
+
+        .terms-card,
+        .auth-card,
+        .note-card {
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: #fcfdff;
             padding: 12px 14px;
         }
 
-        .note-text {
-            font-size: 14px;
-            line-height: 1.6;
+        .terms-card p,
+        .auth-card p,
+        .note-card p {
+            margin: 6px 0;
+            font-size: 13px;
+            line-height: 1.55;
         }
 
-        .total-box {
-            width: 32%;
-            overflow: hidden;
-            height: fit-content;
-        }
-
-        .total-row {
+        .signature-row {
+            margin-top: 36px;
             display: flex;
             justify-content: space-between;
-            align-items: center;
-            padding: 14px 16px;
-            font-size: 15px;
-            border-bottom: 1px solid #cfd5e3;
+            gap: 24px;
         }
 
-        .total-row:last-child {
-            border-bottom: none;
-        }
-
-        .total-row.grand {
-            background: #f4f7ff;
-            font-size: 14px;
-            font-weight: 700;
-            color: #1e2a78;
-        }
-
-        .footer {
-            margin-top: 34px;
-        }
-
-        .signatures {
-            display: flex;
-            gap: 40px;
-        }
-
-        .sign-box {
-            width: 180px;
+        .signature-box {
+            flex: 1;
             text-align: center;
-            font-size: 13px;
         }
 
-        .sign-line {
-            border-top: 1px solid #444;
-            margin-top: 30px;
-            padding-top: 6px;
+        .signature-line {
+            border-top: 1px solid #2f2f2f;
+            margin-top: 42px;
+            padding-top: 7px;
+            font-size: 13px;
+            font-weight: 600;
         }
 
         .footer-note {
-            margin-top: 12px;
+            margin-top: 18px;
             text-align: center;
-            font-size: 2px;
-            font-weight: 200;
-            color: #1e2a78;
+            font-size: 12px;
+            color: var(--muted);
         }
 
         @media print {
-            .print-btn { display: none; }
             body {
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
+                background: #fff;
+            }
+
+            .print-toolbar {
+                display: none;
+            }
+
+            .page {
+                width: auto;
+                min-height: auto;
+                margin: 0;
+                box-shadow: none;
+                padding: 10mm;
             }
         }
     </style>
 </head>
 <body>
-<button class="print-btn" onclick="printAndBack()">Print Invoice</button>
+
+<div class="print-toolbar">
+    <button class="toolbar-btn" onclick="window.history.back()">Back</button>
+    <button class="toolbar-btn" onclick="window.print()">Print</button>
+</div>
 
 <div class="page">
     <div class="header">
-        <div class="company">
-            <h1>P &amp; I Constructions (Pvt) Ltd.</h1>
-            <div class="details">
-                Matara Road<br>
-                Magalla, Galle<br>
-                Tel :+94 91 222 4030 /+94 74 147 1213/+94 74 195 1213<br>
-				E-Mail :contact@pandiconstructions.lk<br>
-				Web : www.pandiconstructions.lk<br>
-                P.V 00301745
+        <div class="company-block">
+            <div class="logo-box">
+                <img src="{% static 'img/logo.png' %}" alt="Company Logo">
+            </div>
+
+            <div class="company-details">
+                <h1>{{ company_info.name }}</h1>
+                <p>{{ company_info.address }}</p>
+                <p>Phone: {{ company_info.phone }}</p>
+                <p>Email: {{ company_info.email }}</p>
             </div>
         </div>
 
-        <div class="right-head">
-            <div class="logo-box">
-                <img src="/static/logo.png" alt="Company Logo">
+        <div class="po-block">
+            <h2 class="po-title">PURCHASE ORDER</h2>
+
+            <div class="po-meta">
+                <div class="po-meta-row">
+                    <span>PO No</span>
+                    <span>{{ order.po_no }}</span>
+                </div>
+                <div class="po-meta-row">
+                    <span>PO Date</span>
+                    <span>{{ order.po_date }}</span>
+                </div>
+                <div class="po-meta-row">
+                    <span>Delivery Date</span>
+                    <span>{{ order.delivery_date_required|default:"-" }}</span>
+                </div>
+                <div class="po-meta-row">
+                    <span>Status</span>
+                    <span>{{ order.status|default:"-"|title }}</span>
+                </div>
             </div>
-            <div class="invoice-title">INVOICE</div>
         </div>
     </div>
 
-    <div class="top-grid">
-        <div class="bill-to">
-            <div class="section-title">Bill To</div>
-            <div class="bill-text">
-                {{ invoice.bill_to_name|default:"-" }}<br>
-                {{ invoice.bill_to_address|linebreaksbr|default:"-" }}
+    <div class="section">
+        <div class="grid-2">
+            <div>
+                <div class="section-title">Buyer Information</div>
+                <div class="info-card">
+                    <p><strong>Company:</strong> {{ order.buyer_company_name|default:company_info.name }}</p>
+                    <p><strong>Contact Person:</strong> {{ order.buyer_contact_person|default:"-" }}</p>
+                    <p><strong>Phone:</strong> {{ order.buyer_phone|default:"-" }}</p>
+                    <p><strong>Email:</strong> {{ order.buyer_email|default:"-" }}</p>
+                    <p><strong>Address:</strong> {{ order.buyer_address|default:company_info.address }}</p>
+                </div>
+            </div>
+
+            <div>
+                <div class="section-title">Supplier Information</div>
+                <div class="info-card">
+                    <p><strong>Supplier:</strong> {{ order.supplier.name }}</p>
+                    <p><strong>Address:</strong> {{ order.supplier_address|default:order.supplier.address|default:"-" }}</p>
+                    <p><strong>Contact:</strong> {{ order.supplier_contact_details|default:"-" }}</p>
+                    <p><strong>Project:</strong>
+                        {% if order.project %}
+                            {{ order.project.project_id }} - {{ order.project.project_name }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </p>
+                </div>
             </div>
         </div>
+    </div>
 
-        <div class="meta">
-            <div class="section-title">Invoice Details</div>
-            <table class="meta-table">
-                <tr>
-                    <td>Invoice No</td>
-                    <td>{{ invoice.invoice_no }}</td>
-                </tr>
-                <tr>
-                    <td>Date</td>
-                    <td>{{ invoice.invoice_date|date:"d/m/Y" }}</td>
-                </tr>
-                <tr>
-                    <td>Project No</td>
-                    <td>{{ invoice.project.project_id }}</td>
+    <div class="section">
+        <div class="section-title">Item Details</div>
+        <div class="items-wrap">
+            <table class="items-table">
+                <thead>
+                    <tr>
+                        <th style="width: 6%;">#</th>
+                        <th>Description of Goods / Services</th>
+                        <th style="width: 12%;" class="text-end">Qty</th>
+                        <th style="width: 16%;" class="text-end">Unit Price</th>
+                        <th style="width: 18%;" class="text-end">Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in items %}
+                    <tr>
+                        <td>{{ forloop.counter }}</td>
+                        <td>{{ row.description }}</td>
+                        <td class="text-end">{{ row.quantity }}</td>
+                        <td class="text-end">{{ row.unit_price }}</td>
+                        <td class="text-end">{{ row.line_total }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-end">No items found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="totals-box">
+            <table>
+                <tr class="grand">
+                    <td class="label">Grand Total</td>
+                    <td class="value">{{ grand_total }}</td>
                 </tr>
             </table>
         </div>
     </div>
 
-    <div class="project-box">
-        <div class="section-title">Project Details</div>
-        <div class="project-text">
-            <strong>Project No:</strong> {{ invoice.project.project_id }}<br>
-            <strong>Project Name:</strong> {{ invoice.project.project_name }}<br>
-            <strong>Client Name:</strong> {{ invoice.project.client_name }}<br>
-               </div>
-    </div>
-
-    <table class="items-table">
-        <thead>
-            <tr>
-                <th style="width:7%;">SN</th>
-                <th style="width:16%;">Item Code</th>
-                <th style="width:37%;">Description</th>
-                <th style="width:10%;">Qty</th>
-                <th style="width:15%;">Unit Price</th>
-                <th style="width:15%;">Amount</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in invoice_items %}
-            <tr>
-                <td class="center">{{ forloop.counter }}</td>
-                <td class="center">{{ row.item_code|default:"-" }}</td>
-                <td>{{ row.description }}</td>
-                <td class="center">{{ row.qty }}</td>
-                <td class="right">{{ row.price_each|money }}</td>
-                <td class="right">{{ row.amount|money }}</td>
-            </tr>
-            {% empty %}
-            <tr>
-                <td class="center">1</td>
-                <td class="center">-</td>
-                <td>{{ invoice.description }}</td>
-                <td class="center">1</td>
-                <td class="right">{{ invoice.total_amount|money }}</td>
-                <td class="right">{{ invoice.total_amount|money }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-
-    <div class="bottom-grid">
-        <div class="left-bottom">
-            <div class="notes-box">
-                <div class="section-title">Special Notes</div>
-                <div class="note-text">{{ invoice.note|default:"-" }}</div>
+    <div class="section">
+        <div class="grid-2">
+            <div>
+                <div class="section-title">Payment & Delivery</div>
+                <div class="info-card">
+                    <p><strong>Payment Method:</strong> {{ order.payment_method|default:"-" }}</p>
+                    <p><strong>Payment Period:</strong> {{ order.payment_period|default:"-" }}</p>
+                    <p><strong>Delivery Location:</strong> {{ order.delivery_location|default:"-" }}</p>
+                    <p><strong>Delivery Method:</strong> {{ order.delivery_method|default:"-" }}</p>
+                    <p><strong>Special Instructions:</strong> {{ order.special_instructions|default:"-" }}</p>
+                </div>
             </div>
 
-            <div class="notes-box">
-                <div class="section-title">Account Details</div>
-                <div class="note-text">
-                    <strong>Account Name:</strong> P &amp; I CONSTRUCTIONS (PVT) LTD<br>
-                    <strong>Account Number:</strong> 1000896303<br>
-                    <strong>Bank:</strong> Commercial Bank<br>
-                    <strong>Branch:</strong> 5 - Galle Fort Branch
+            <div>
+                <div class="section-title">Terms & Conditions</div>
+                <div class="terms-card">
+                    <p><strong>Terms:</strong> {{ order.terms_and_conditions|default:"-" }}</p>
+                    <p><strong>Warranty:</strong> {{ order.warranty_details|default:"-" }}</p>
+                    <p><strong>Return Policy:</strong> {{ order.return_policy|default:"-" }}</p>
+                    <p><strong>Penalties / Conditions:</strong> {{ order.penalties_conditions|default:"-" }}</p>
                 </div>
             </div>
         </div>
+    </div>
 
-        <div class="total-box">
-            <div class="total-row grand">
-                <span>Total</span>
-                <span>LKR {{ invoice.total_amount|money }}</span>
+    {% if order.note %}
+    <div class="section">
+        <div class="section-title">Note</div>
+        <div class="note-card">
+            <p>{{ order.note }}</p>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="section">
+        <div class="section-title">Authorization</div>
+        <div class="auth-card">
+            <p><strong>Authorized Person:</strong> {{ order.authorized_person_name|default:"-" }}</p>
+            <p><strong>Signature Text:</strong> {{ order.signature_text|default:"-" }}</p>
+        </div>
+
+        <div class="signature-row">
+            <div class="signature-box">
+                <div class="signature-line">Supplier Signature</div>
+            </div>
+            <div class="signature-box">
+                <div class="signature-line">Authorized Signature / Company Seal</div>
             </div>
         </div>
     </div>
 
-    <div class="footer">
-        <div class="signatures">
-            <div class="sign-box">
-                <div class="sign-line">Authorized Signature</div>
-            </div>
-            <div class="sign-box">
-                <div class="sign-line">Date</div>
-            </div>
-        </div>
-
-        </div>
+    <div class="footer-note">
+        This document was generated electronically and is intended for internal purchasing and supplier communication.
+    </div>
 </div>
-<script>
-function printAndBack() {
-    window.print();
-    setTimeout(function () {
-        window.location.href = "{% url 'project_invoice_list' %}";
-    }, 1200);
-}
-</script>
 
 </body>
 </html>
