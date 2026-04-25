@@ -1468,7 +1468,10 @@ def add_gl(request):
 # =========================
 @user_passes_test(can_use_project)
 def project_list(request):
-    projects = Project.objects.filter(is_active=True).order_by("-id")
+    if is_owner(request.user):
+        projects = Project.objects.order_by("-id")
+    else:
+        projects = Project.objects.filter(is_active=True).order_by("-id")
     return render(request, "pos/project_list.html", {"projects": projects})
 
 
@@ -1510,6 +1513,7 @@ def edit_project(request, project_id):
         project.location = (request.POST.get("location") or "").strip()
         project.estimated_value = to_decimal(request.POST.get("estimated_value"))
         project.status = request.POST.get("status") or project.status
+        project.is_active = request.POST.get("is_active") == "on"
         project.updated_by = request.user
         project.save()
 

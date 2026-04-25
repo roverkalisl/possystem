@@ -15,6 +15,11 @@
     <div class="info-box mb-3">
         <small class="text-muted">Project ID</small><br>
         <strong>{{ project.project_id }}</strong>
+        <div class="mt-2">
+            <span class="badge {% if project.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                {% if project.is_active %}Active{% else %}Closed{% endif %}
+            </span>
+        </div>
     </div>
 
     <form method="POST">
@@ -57,6 +62,17 @@
             <div class="col-md-6">
                 <label class="form-label">Status</label>
                 <input type="text" name="status" class="form-control form-control-sm" value="{{ project.status }}">
+            </div>
+        </div>
+
+        <div class="row g-2 mt-1">
+            <div class="col-md-12">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="is_active" id="is_active" {% if project.is_active %}checked{% endif %}>
+                    <label class="form-check-label" for="is_active">
+                        Keep this project active
+                    </label>
+                </div>
             </div>
         </div>
 

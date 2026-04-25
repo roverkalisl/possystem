@@ -38,7 +38,14 @@
                     <td>{{ p.client_name }}</td>
                     <td>{{ p.location|default:"-" }}</td>
                     <td class="text-money">{{ p.estimated_value|money }}</td>
-                    <td>{{ p.status|default:"active"|title }}</td>
+                    <td>
+                        {% if p.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Closed</span>
+                        {% endif %}
+                        <div class="small mt-1 text-muted">{{ p.status|title }}</div>
+                    </td>
                     {% if request.user.is_superuser or is_owner %}
                     <td>
                         <a href="{% url 'edit_project' p.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
