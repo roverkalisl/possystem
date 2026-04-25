@@ -1552,7 +1552,7 @@ def project_expense_list(request):
 @user_passes_test(can_add_expenses)
 def add_project_expense(request):
     projects = Project.objects.filter(is_active=True).order_by("-id")
-    expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
+    expense_gls = GLMaster.objects.filter(is_active=True).order_by("gl_code")
 
     if request.method == "POST":
         project_id = request.POST.get("project")
@@ -1612,7 +1612,7 @@ def add_project_expense(request):
 def edit_project_expense(request, expense_id):
     expense = get_object_or_404(ProjectExpense, id=expense_id)
     projects = Project.objects.filter(is_active=True).order_by("-id")
-    expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
+    expense_gls = GLMaster.objects.filter(is_active=True).order_by("gl_code")
     items = Item.objects.filter(is_active=True).order_by("name")
 
     context = {
