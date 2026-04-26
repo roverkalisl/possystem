@@ -1,9 +1,14 @@
 {% extends "base.html" %}
-{% block title %}Purchase Orders{% endblock %}
+{% block title %}Purchase Assets{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="page-title mb-0">Purchase Orders</h3>
+    <div>
+        <h3 class="page-title mb-0">Purchase Assets</h3>
+        {% if is_owner %}
+            <p class="small text-muted mb-0">Owner can approve or reject pending purchase assets from the list.</p>
+        {% endif %}
+    </div>
     <div class="d-flex gap-2">
         <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Dashboard</a>
         <a href="{% url 'add_purchase_order' %}" class="btn btn-primary">Add Purchase Order</a>
@@ -13,12 +18,22 @@
 <div class="card card-soft mb-3">
     <div class="card-body">
         <form method="get" class="row g-2">
-            <div class="col-md-10">
+            <div class="col-md-6">
                 <input type="text"
                        name="q"
                        value="{{ query }}"
                        class="form-control"
                        placeholder="Search by PO No / Supplier / Project / Buyer">
+            </div>
+            <div class="col-md-4">
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+                    <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Pending</option>
+                    <option value="approved" {% if status_filter == 'approved' %}selected{% endif %}>Approved</option>
+                    <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Rejected</option>
+                    <option value="closed" {% if status_filter == 'closed' %}selected{% endif %}>Closed</option>
+                </select>
             </div>
             <div class="col-md-2 d-grid">
                 <button type="submit" class="btn btn-outline-primary">Search</button>
@@ -69,8 +84,12 @@
                         <td>
                             {% if o.status == "draft" %}
                                 <span class="badge bg-secondary">Draft</span>
+                            {% elif o.status == "pending" %}
+                                <span class="badge bg-warning text-dark">Pending</span>
                             {% elif o.status == "approved" %}
                                 <span class="badge bg-success">Approved</span>
+                            {% elif o.status == "rejected" %}
+                                <span class="badge bg-danger">Rejected</span>
                             {% elif o.status == "closed" %}
                                 <span class="badge bg-dark">Closed</span>
                             {% else %}
@@ -78,13 +97,30 @@
                             {% endif %}
                         </td>
                         <td class="text-center">
-                            <div class="d-flex gap-1 justify-content-center">
+                            <div class="d-flex gap-1 justify-content-center flex-wrap">
                                 <a href="{% url 'edit_purchase_order' o.id %}" class="btn btn-sm btn-outline-primary">
                                     Edit
                                 </a>
                                 <a href="{% url 'print_purchase_order' o.id %}" class="btn btn-sm btn-outline-dark" target="_blank">
                                     Print
                                 </a>
+
+                                {% if is_owner and o.status == 'pending' %}
+                                <form method="post" action="{% url 'approve_purchase_order' o.id %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                                </form>
+                                <form method="post" action="{% url 'reject_purchase_order' o.id %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-danger">Reject</button>
+                                </form>
+
+                                {% elif is_owner and o.status == 'rejected' %}
+                                <form method="post" action="{% url 'approve_purchase_order' o.id %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-sm btn-success">Approve</button>
+                                </form>
+                                {% endif %}
                             </div>
                         </td>
                     </tr>

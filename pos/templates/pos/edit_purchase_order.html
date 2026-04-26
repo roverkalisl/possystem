@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% block title %}Edit Purchase Order{% endblock %}
+{% block title %}Edit Purchase Asset{% endblock %}
 
 {% block content %}
-<h3 class="page-title">Edit Purchase Order</h3>
+<h3 class="page-title">Edit Purchase Asset</h3>
 
 <div class="card card-soft">
     <div class="card-body">
@@ -29,7 +29,9 @@
                     <label class="form-label">Status</label>
                     <select name="status" class="form-select">
                         <option value="draft" {% if order.status == 'draft' %}selected{% endif %}>Draft</option>
+                        <option value="pending" {% if order.status == 'pending' %}selected{% endif %}>Pending</option>
                         <option value="approved" {% if order.status == 'approved' %}selected{% endif %}>Approved</option>
+                        <option value="rejected" {% if order.status == 'rejected' %}selected{% endif %}>Rejected</option>
                         <option value="closed" {% if order.status == 'closed' %}selected{% endif %}>Closed</option>
                     </select>
                 </div>

@@ -1036,7 +1036,9 @@ class PurchaseOrder(models.Model):
 
     STATUS_CHOICES = [
         ("draft", "Draft"),
+        ("pending", "Pending"),
         ("approved", "Approved"),
+        ("rejected", "Rejected"),
         ("closed", "Closed"),
     ]
 

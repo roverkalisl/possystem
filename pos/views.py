@@ -353,6 +353,8 @@ def dashboard(request):
     ).select_related("project", "created_by").order_by("-created_at")[:5]
     pending_project_issues_count = pending_project_issues.count()
     
+    pending_purchase_assets_count = PurchaseOrder.objects.filter(status="pending").count()
+
     return render(request, "pos/dashboard.html", {
         "show_pos": can_use_pos(request.user),
         "show_project": can_use_project(request.user),
@@ -371,6 +373,7 @@ def dashboard(request):
         "low_stock_items": low_stock_items,
         "pending_project_issues": pending_project_issues,
         "pending_project_issues_count": pending_project_issues_count,
+        "pending_purchase_assets_count": pending_purchase_assets_count,
     })
 
 
@@ -3588,6 +3591,7 @@ def reject_supplier_settlement(request, settlement_id):
 @user_passes_test(can_use_project)
 def purchase_order_list(request):
     query = request.GET.get("q", "").strip()
+    status_filter = request.GET.get("status", "").strip()
 
     orders = PurchaseOrder.objects.select_related(
         "supplier", "project", "created_by"
@@ -3602,11 +3606,47 @@ def purchase_order_list(request):
             Q(buyer_company_name__icontains=query)
         )
 
+    if status_filter in ["draft", "pending", "approved", "rejected", "closed"]:
+        orders = orders.filter(status=status_filter)
+
     return render(request, "pos/purchase_order_list.html", {
         "orders": orders,
         "query": query,
+        "status_filter": status_filter,
         "is_owner": is_owner(request.user),
     })
+
+@user_passes_test(is_owner)
+def approve_purchase_order(request, po_id):
+    order = get_object_or_404(PurchaseOrder, id=po_id)
+
+    if request.method != "POST":
+        return redirect("purchase_order_list")
+
+    if order.status == "approved":
+        messages.warning(request, "Purchase order is already approved.")
+        return redirect("purchase_order_list")
+
+    order.status = "approved"
+    order.save()
+    messages.success(request, f"Purchase Order {order.po_no} approved successfully.")
+    return redirect("purchase_order_list")
+
+@user_passes_test(is_owner)
+def reject_purchase_order(request, po_id):
+    order = get_object_or_404(PurchaseOrder, id=po_id)
+
+    if request.method != "POST":
+        return redirect("purchase_order_list")
+
+    if order.status == "approved":
+        messages.error(request, "Approved purchase orders cannot be rejected.")
+        return redirect("purchase_order_list")
+
+    order.status = "rejected"
+    order.save()
+    messages.success(request, f"Purchase Order {order.po_no} rejected.")
+    return redirect("purchase_order_list")
 
 @user_passes_test(can_use_project)
 def add_purchase_order(request):
@@ -3650,7 +3690,7 @@ def add_purchase_order(request):
 
         authorized_person_name = (request.POST.get("authorized_person_name") or "").strip()
         signature_text = (request.POST.get("signature_text") or "").strip()
-        status = request.POST.get("status") or "draft"
+        status = request.POST.get("status") or "pending"
         note = (request.POST.get("note") or "").strip()
 
         descriptions = request.POST.getlist("item_description[]")

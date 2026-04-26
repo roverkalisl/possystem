@@ -221,7 +221,9 @@
 <div class="simple-dashboard-card">
     <h5 class="simple-dashboard-title">PROJECT / ADVANCE</h5>
     <div class="simple-dashboard-links">
-        <a href="{% url 'purchase_order_list' %}" class="simple-dashboard-btn primary">Purchase Orders</a>
+        <a href="{% url 'purchase_order_list' %}" class="simple-dashboard-btn primary">
+            Purchase Assets{% if pending_purchase_assets_count %} ({{ pending_purchase_assets_count }} pending){% endif %}
+        </a>
         <a href="{% url 'supplier_advance_list' %}" class="simple-dashboard-btn">Supplier Advances</a>
         <a href="{% url 'supplier_settlement_list' %}" class="simple-dashboard-btn">Settlement Ledger</a>
     </div>
