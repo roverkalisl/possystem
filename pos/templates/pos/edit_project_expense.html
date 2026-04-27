@@ -31,13 +31,8 @@
 
             <div class="mb-3">
                 <label class="form-label">Project</label>
-                <select name="project" class="form-select" required>
-                    {% for p in projects %}
-                        <option value="{{ p.id }}" {% if expense.project.id == p.id %}selected{% endif %}>
-                            {{ p.project_id }} - {{ p.project_name }}{% if p.location %} | {{ p.location }}{% endif %}
-                        </option>
-                    {% endfor %}
-                </select>
+                <input type="text" class="form-control" value="{{ expense.project.project_id }} - {{ expense.project.project_name }}{% if expense.project.location %} | {{ expense.project.location }}{% endif %}" readonly>
+                <input type="hidden" name="project" value="{{ expense.project.id }}">
             </div>
 
             <div class="mb-3">

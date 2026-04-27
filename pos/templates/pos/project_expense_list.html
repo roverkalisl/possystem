@@ -78,6 +78,8 @@
                     <td>{% if expense.expense_no and expense.expense_no|slice:"0:4" == "RET-" %}{{ expense.expense_no|slice:"4:" }}{% else %}-{% endif %}</td>
                     {% if is_owner %}
                     <td>
+                        <a href="{% url 'add_project_transfer' %}?type=expense&original_id={{ expense.id }}"
+                           class="btn btn-sm btn-outline-secondary me-1">Transfer</a>
                         <a href="{% url 'delete_project_expense' expense.id %}"
                            class="btn btn-sm btn-outline-danger"
                            onclick="return confirm('Deactivate this expense?')">Deactivate</a>

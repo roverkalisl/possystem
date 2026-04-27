@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+{% block title %}Project Transfers{% endblock %}
+{% block page_title %}Project Transfers{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4>Project Transfers</h4>
+        <div>
+            <a href="{% url 'add_project_transfer' %}" class="btn btn-primary btn-sm">+ New Transfer</a>
+        </div>
+    </div>
+
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-6">
+            <select name="project" class="form-select form-select-sm">
+                <option value="">All Projects</option>
+                {% for p in projects %}
+                    <option value="{{ p.id }}" {% if selected_project == p.id|stringformat:"s" %}selected{% endif %}>
+                        {{ p.project_id }} - {{ p.project_name }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4">
+            <select name="transfer_type" class="form-select form-select-sm">
+                <option value="">All Types</option>
+                <option value="expense" {% if selected_transfer_type == "expense" %}selected{% endif %}>Expense</option>
+                <option value="income" {% if selected_transfer_type == "income" %}selected{% endif %}>Income</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button class="btn btn-dark btn-sm w-100">Filter</button>
+        </div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Transfer No</th>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>From Project</th>
+                    <th>To Project</th>
+                    <th>Original Entry</th>
+                    <th>Amount</th>
+                    <th>Created By</th>
+                    <th>Approved By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for transfer in transfers %}
+                <tr>
+                    <td>{{ transfer.transfer_no }}</td>
+                    <td>{{ transfer.transfer_date|date:"Y-m-d" }}</td>
+                    <td>{{ transfer.get_transfer_type_display }}</td>
+                    <td>{{ transfer.from_project.project_id }}</td>
+                    <td>{{ transfer.to_project.project_id }}</td>
+                    <td>
+                        {% if transfer.transfer_type == 'expense' and transfer.original_project_expense %}
+                            {{ transfer.original_project_expense.expense_no }}
+                        {% elif transfer.transfer_type == 'income' and transfer.original_project_income %}
+                            INCOME {{ transfer.original_project_income.id }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td class="text-money">{{ transfer.transfer_amount|money }}</td>
+                    <td>{% if transfer.created_by %}{{ transfer.created_by.username }}{% else %}-{% endif %}</td>
+                    <td>{% if transfer.approved_by %}{{ transfer.approved_by.username }}{% else %}-{% endif %}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="9" class="text-center">No transfers found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

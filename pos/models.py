@@ -471,6 +471,20 @@ class ProjectExpense(models.Model):
     inactive_reason = models.TextField(blank=True, null=True)
 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+    transfer = models.ForeignKey(
+        "ProjectTransfer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="project_expense_entries"
+    )
+    original_expense = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="transfer_adjustments"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -486,6 +500,20 @@ class ProjectIncome(models.Model):
     description = models.CharField(max_length=255, blank=True, null=True)
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True)
+    transfer = models.ForeignKey(
+        "ProjectTransfer",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="project_income_entries"
+    )
+    original_income = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="transfer_adjustments"
+    )
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -494,6 +522,76 @@ class ProjectIncome(models.Model):
 
     def __str__(self):
         return f"{self.project.project_id} - {self.amount}"
+
+
+class ProjectTransfer(models.Model):
+    TRANSFER_TYPE_CHOICES = [
+        ("expense", "Expense"),
+        ("income", "Income"),
+    ]
+
+    transfer_no = models.CharField(max_length=20, unique=True, blank=True, null=True)
+    transfer_type = models.CharField(max_length=20, choices=TRANSFER_TYPE_CHOICES)
+    from_project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name="outgoing_transfers"
+    )
+    to_project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name="incoming_transfers"
+    )
+    original_project_expense = models.ForeignKey(
+        ProjectExpense,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="expense_transfers"
+    )
+    original_project_income = models.ForeignKey(
+        ProjectIncome,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="income_transfers"
+    )
+    transfer_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    transfer_date = models.DateField(default=timezone.now)
+    reason = models.TextField(blank=True, null=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_project_transfers"
+    )
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_project_transfers"
+    )
+    notes = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-transfer_date", "-id"]
+
+    def save(self, *args, **kwargs):
+        if not self.transfer_no:
+            last = ProjectTransfer.objects.exclude(transfer_no__isnull=True).order_by("-id").first()
+            if last and last.transfer_no and str(last.transfer_no).replace("TRF", "").isdigit():
+                next_no = int(str(last.transfer_no).replace("TRF", "")) + 1
+                self.transfer_no = f"TRF{next_no:06d}"
+            else:
+                self.transfer_no = "TRF000001"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.transfer_no or f"Transfer {self.id}"
 
 
 # =========================

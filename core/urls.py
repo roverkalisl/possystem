@@ -101,6 +101,8 @@ urlpatterns = [
     # =========================
     path('project-income/', views.project_income_list, name='project_income_list'),
     path('project-income/add/', views.add_project_income, name='add_project_income'),
+    path('project-transfers/', views.project_transfer_list, name='project_transfer_list'),
+    path('project-transfers/add/', views.add_project_transfer, name='add_project_transfer'),
 
     # =========================
     # PROJECT PROFIT
