@@ -570,12 +570,12 @@ def save_sale(request):
 
             if payment_method == "credit":
                 if not customer:
-                    return JsonResponse({"status": "error", "message": "Please select a customer for credit sale."}, status=400)
+                    return JsonResponse({"status": "error", "message": "Please select an approved customer for credit sale."}, status=400)
 
-                if not customer.registration_no:
+                if not customer.registration_no or not customer.credit_limit or customer.credit_limit <= 0:
                     return JsonResponse({
                         "status": "error",
-                        "message": f"Customer registration number is required for credit sale. Please update customer: {customer.name}"
+                        "message": "Selected customer is not authorized for credit sales. Please choose an approved customer."
                     }, status=400)
 
             if sale_type == "project_issue" and not customer_name and project:

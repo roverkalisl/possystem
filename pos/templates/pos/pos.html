@@ -229,12 +229,13 @@
                         {% for c in customers %}
                         <option value="{{ c.id }}"
                                 data-name="{{ c.name|default:''|escapejs }}"
-                                data-phone="{{ c.phone|default:''|escapejs }}">
+                                data-phone="{{ c.phone|default:''|escapejs }}"
+                                data-credit-approved="{% if c.registration_no and c.credit_limit and c.credit_limit > 0 %}true{% else %}false{% endif %}">
                             {{ c.customer_code }} - {{ c.name }}
                         </option>
                         {% endfor %}
                     </select>
-                    <small class="text-muted compact-note">Required for credit sales.</small>
+                    <small class="text-muted compact-note">Required for credit sales. Credit sales may only use authorized customers.</small>
                 </div>
 
                 <div class="mb-2">
@@ -416,19 +417,83 @@ function toggleProjectField() {
     document.getElementById("project_box").style.display = saleType === "project_issue" ? "block" : "none";
 }
 
+let customerOptions = [];
+
 function togglePaymentFields() {
     const method = document.getElementById("payment_method").value;
     document.getElementById("cash_fields").style.display = method === "cash" ? "flex" : "none";
     document.getElementById("card_field").style.display = method === "card" ? "block" : "none";
     document.getElementById("credit_field").style.display = method === "credit" ? "block" : "none";
+    refreshCustomerOptions();
+    setCustomerFieldsReadOnly(method === "credit");
     updateBalance();
+}
+
+function initCustomerOptions() {
+    const customerSelect = document.getElementById("customer_id");
+    customerOptions = Array.from(customerSelect.options).map(function(option) {
+        return {
+            value: option.value,
+            text: option.textContent,
+            name: option.dataset.name || "",
+            phone: option.dataset.phone || "",
+            creditApproved: option.dataset.creditApproved === "true"
+        };
+    });
+    refreshCustomerOptions();
+}
+
+function refreshCustomerOptions() {
+    const customerSelect = document.getElementById("customer_id");
+    const paymentMethod = document.getElementById("payment_method").value;
+    const approvedOnly = paymentMethod === "credit";
+    const selectedValue = customerSelect.value;
+
+    customerSelect.innerHTML = '<option value="">Select Customer</option>';
+
+    customerOptions.forEach(function(opt) {
+        if (!approvedOnly || opt.creditApproved) {
+            const option = document.createElement("option");
+            option.value = opt.value;
+            option.textContent = opt.text;
+            option.dataset.name = opt.name;
+            option.dataset.phone = opt.phone;
+            option.dataset.creditApproved = opt.creditApproved;
+            customerSelect.appendChild(option);
+        }
+    });
+
+    if (approvedOnly && selectedValue) {
+        const selectedOption = Array.from(customerSelect.options).find(function(option) {
+            return option.value === selectedValue;
+        });
+        if (selectedOption) {
+            customerSelect.value = selectedValue;
+        } else {
+            document.getElementById("customer_name").value = "";
+            document.getElementById("customer_phone").value = "";
+        }
+    }
+}
+
+function setCustomerFieldsReadOnly(isReadOnly) {
+    const nameField = document.getElementById("customer_name");
+    const phoneField = document.getElementById("customer_phone");
+    nameField.readOnly = isReadOnly;
+    phoneField.readOnly = isReadOnly;
+    nameField.classList.toggle("readonly-box", isReadOnly);
+    phoneField.classList.toggle("readonly-box", isReadOnly);
 }
 
 function fillCustomerDetails() {
     const customerSelect = document.getElementById("customer_id");
     const selected = customerSelect.options[customerSelect.selectedIndex];
 
-    if (!selected || !selected.value) return;
+    if (!selected || !selected.value) {
+        document.getElementById("customer_name").value = "";
+        document.getElementById("customer_phone").value = "";
+        return;
+    }
 
     document.getElementById("customer_name").value = selected.getAttribute("data-name") || "";
     document.getElementById("customer_phone").value = selected.getAttribute("data-phone") || "";
@@ -812,6 +877,7 @@ function saveSale() {
     });
 }
 
+initCustomerOptions();
 toggleProjectField();
 togglePaymentFields();
 updateTotals();
