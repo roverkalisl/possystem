@@ -754,10 +754,15 @@ def credit_sales_list(request):
         if status_filter == "all" or status == status_filter:
             filtered_sales.append(sale)
 
+    total_recovered_amount = sum((sale.recovered_amount or Decimal("0")) for sale in filtered_sales)
+    total_balance_amount = sum((sale.credit_balance or Decimal("0")) for sale in filtered_sales)
+
     return render(request, "pos/credit_sales_list.html", {
         "sales": filtered_sales,
         "status_filter": status_filter,
         "query": query,
+        "total_recovered_amount": total_recovered_amount,
+        "total_balance_amount": total_balance_amount,
     })
 
 
@@ -1475,7 +1480,12 @@ def project_list(request):
         projects = Project.objects.order_by("-id")
     else:
         projects = Project.objects.filter(is_active=True).order_by("-id")
-    return render(request, "pos/project_list.html", {"projects": projects})
+
+    total_estimated_value = projects.aggregate(total=Sum("estimated_value"))["total"] or Decimal("0")
+    return render(request, "pos/project_list.html", {
+        "projects": projects,
+        "total_estimated_value": total_estimated_value,
+    })
 
 
 @user_passes_test(can_use_project)
@@ -1543,11 +1553,13 @@ def project_expense_list(request):
         expenses = expenses.filter(project_id=project_id)
 
     projects = Project.objects.filter(is_active=True).order_by("-id")
+    total_amount = expenses.aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
     return render(request, "pos/project_expense_list.html", {
         "expenses": expenses,
         "projects": projects,
         "selected_project": project_id,
+        "total_amount": total_amount,
         "is_owner": is_owner(request.user),
     })
 
@@ -1697,8 +1709,17 @@ def petty_cash_list(request):
             "reimbursement_required": reimbursement_required,
         })
 
+    total_approved_limit = sum(row["approved_limit"] for row in petty_cashes)
+    total_issued = sum(row["total_issued"] for row in petty_cashes)
+    total_spent = sum(row["total_spent"] for row in petty_cashes)
+    total_balance = sum(row["total_balance"] for row in petty_cashes)
+
     return render(request, "pos/petty_cash_list.html", {
         "petty_cashes": petty_cashes,
+        "total_approved_limit": total_approved_limit,
+        "total_issued": total_issued,
+        "total_spent": total_spent,
+        "total_balance": total_balance,
         "is_owner": is_owner(request.user),
     })
 
@@ -2040,9 +2061,14 @@ def petty_cash_expense_approvals(request):
     if status_filter in ["pending", "approved", "rejected"]:
         expenses = expenses.filter(approval_status=status_filter)
 
+    total_requested_amount = expenses.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    total_approved_amount = expenses.filter(approval_status="approved").aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
     return render(request, "pos/petty_cash_expense_approvals.html", {
         "expenses": expenses,
         "status_filter": status_filter,
+        "total_requested_amount": total_requested_amount,
+        "total_approved_amount": total_approved_amount,
     })
 
 
@@ -2467,12 +2493,24 @@ def project_invoice_list(request):
     if project_id:
         invoices = invoices.filter(project_id=project_id)
 
+    show_inactive = request.GET.get("show_inactive") == "1"
+    if show_inactive:
+        invoices = invoices.filter(is_active=False)
+
     projects = Project.objects.filter(is_active=True).order_by("-id")
+
+    total_invoice_amount = sum((invoice.total_amount or Decimal("0")) for invoice in invoices)
+    total_paid_amount = sum(invoice.paid_amount for invoice in invoices)
+    total_balance_amount = sum(invoice.balance_amount for invoice in invoices)
 
     return render(request, "pos/project_invoice_list.html", {
         "invoices": invoices,
         "projects": projects,
         "selected_project": project_id,
+        "show_inactive": show_inactive,
+        "total_invoice_amount": total_invoice_amount,
+        "total_paid_amount": total_paid_amount,
+        "total_balance_amount": total_balance_amount,
     })
 
 
@@ -3401,10 +3439,21 @@ def supplier_advance_list(request):
             Q(project__project_name__icontains=query)
         )
 
+    total_amount = Decimal("0")
+    total_settled = Decimal("0")
+    total_balance = Decimal("0")
+    for advance in advances:
+        total_amount += Decimal(str(advance.amount or 0))
+        total_settled += Decimal(str(advance.settled_amount or 0))
+        total_balance += Decimal(str(advance.balance_amount or 0))
+
     return render(request, "pos/supplier_advance_list.html", {
         "advances": advances,
         "query": query,
         "is_owner": is_owner(request.user),
+        "total_amount": total_amount,
+        "total_settled": total_settled,
+        "total_balance": total_balance,
     })
 @user_passes_test(can_use_project)
 def add_supplier_advance(request):

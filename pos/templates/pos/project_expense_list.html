@@ -29,6 +29,17 @@
         </div>
     </form>
 
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Total Expense Amount</div>
+                    <div class="fs-5 text-money">{{ total_amount|money }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="table-responsive">
         <table class="table table-bordered table-striped bg-white align-middle">
             <thead class="table-dark">

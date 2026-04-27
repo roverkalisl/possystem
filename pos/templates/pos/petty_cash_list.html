@@ -19,6 +19,41 @@
         </div>
     </div>
 
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Total Approved Limit</div>
+                    <div class="fs-5 text-money">{{ total_approved_limit|money }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Total Issued</div>
+                    <div class="fs-5 text-money">{{ total_issued|money }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Total Spent</div>
+                    <div class="fs-5 text-money">{{ total_spent|money }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Total Balance</div>
+                    <div class="fs-5 text-money">{{ total_balance|money }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="table-responsive">
         <table class="table table-bordered table-striped bg-white align-middle">
             <thead class="table-dark">
