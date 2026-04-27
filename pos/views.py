@@ -2702,10 +2702,25 @@ def print_project_invoice(request, invoice_id):
         is_active=True
     )
     invoice_items = invoice.items.all()
+    grand_total = Decimal("0")
+
+    for row in invoice_items:
+        row.line_total = Decimal(str(row.qty or 0)) * Decimal(str(row.price_each or 0))
+        grand_total += Decimal(str(row.line_total))
+
+    company_info = {
+        "name": "P&I CONSTRUCTIONS",
+        "address": "Matara Road, Magalla, Galle",
+        "phone": " Tel :+94 91 222 4030 /+94 74 147 1213/+94 74 195 1213",
+        "email": "contact@pandiconstructions.lk",
+    }
 
     return render(request, "pos/print_project_invoice.html", {
         "invoice": invoice,
         "invoice_items": invoice_items,
+        "items": invoice_items,
+        "grand_total": grand_total,
+        "company_info": company_info,
     })
 
 
@@ -4518,9 +4533,9 @@ def print_purchase_order(request, po_id):
 
     company_info = {
         "name": "P&I CONSTRUCTIONS",
-        "address": "Your Company Address Here",
-        "phone": "+94 77 123 4567",
-        "email": "info@yourcompany.com",
+        "address": "Matara Road, Magalla, Galle",
+        "phone": " Tel :+94 91 222 4030 /+94 74 147 1213/+94 74 195 1213",
+        "email": "contact@pandiconstructions.lk",
     }
 
     return render(request, "pos/print_purchase_order.html", {

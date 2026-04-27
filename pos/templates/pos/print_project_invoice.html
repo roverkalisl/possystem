@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Purchase Order - {{ order.po_no }}</title>
+    <title>Project Invoice - {{ invoice.invoice_no }}</title>
     <style>
         :root {
             --primary: #1f3c88;
@@ -349,24 +349,24 @@
         </div>
 
         <div class="po-block">
-            <h2 class="po-title">PURCHASE ORDER</h2>
+            <h2 class="po-title">PROJECT INVOICE</h2>
 
             <div class="po-meta">
                 <div class="po-meta-row">
-                    <span>PO No</span>
-                    <span>{{ order.po_no }}</span>
+                    <span>Invoice No</span>
+                    <span>{{ invoice.invoice_no }}</span>
                 </div>
                 <div class="po-meta-row">
-                    <span>PO Date</span>
-                    <span>{{ order.po_date }}</span>
+                    <span>Invoice Date</span>
+                    <span>{{ invoice.invoice_date }}</span>
                 </div>
                 <div class="po-meta-row">
-                    <span>Delivery Date</span>
-                    <span>{{ order.delivery_date_required|default:"-" }}</span>
+                    <span>Invoice Type</span>
+                    <span>{{ invoice.invoice_type|title }}</span>
                 </div>
                 <div class="po-meta-row">
                     <span>Status</span>
-                    <span>{{ order.status|default:"-"|title }}</span>
+                    <span>{{ invoice.payment_status|default:"-"|title }}</span>
                 </div>
             </div>
         </div>
@@ -375,29 +375,25 @@
     <div class="section">
         <div class="grid-2">
             <div>
-                <div class="section-title">Buyer Information</div>
+                <div class="section-title">Bill To</div>
                 <div class="info-card">
-                    <p><strong>Company:</strong> {{ order.buyer_company_name|default:company_info.name }}</p>
-                    <p><strong>Contact Person:</strong> {{ order.buyer_contact_person|default:"-" }}</p>
-                    <p><strong>Phone:</strong> {{ order.buyer_phone|default:"-" }}</p>
-                    <p><strong>Email:</strong> {{ order.buyer_email|default:"-" }}</p>
-                    <p><strong>Address:</strong> {{ order.buyer_address|default:company_info.address }}</p>
+                    <p><strong>Company:</strong> {{ invoice.bill_to_name|default:company_info.name }}</p>
+                    <p><strong>Address:</strong> {{ invoice.bill_to_address|default:company_info.address }}</p>
                 </div>
             </div>
 
             <div>
-                <div class="section-title">Supplier Information</div>
+                <div class="section-title">Project Information</div>
                 <div class="info-card">
-                    <p><strong>Supplier:</strong> {{ order.supplier.name }}</p>
-                    <p><strong>Address:</strong> {{ order.supplier_address|default:order.supplier.address|default:"-" }}</p>
-                    <p><strong>Contact:</strong> {{ order.supplier_contact_details|default:"-" }}</p>
                     <p><strong>Project:</strong>
-                        {% if order.project %}
-                            {{ order.project.project_id }} - {{ order.project.project_name }}
+                        {% if invoice.project %}
+                            {{ invoice.project.project_id }} - {{ invoice.project.project_name }}
                         {% else %}
                             -
                         {% endif %}
                     </p>
+                    <p><strong>Client:</strong> {{ invoice.project.client_name|default:"-" }}</p>
+                    <p><strong>Location:</strong> {{ invoice.project.location|default:"-" }}</p>
                 </div>
             </div>
         </div>
@@ -410,7 +406,7 @@
                 <thead>
                     <tr>
                         <th style="width: 6%;">#</th>
-                        <th>Description of Goods / Services</th>
+                        <th>Item Code / Description</th>
                         <th style="width: 12%;" class="text-end">Qty</th>
                         <th style="width: 16%;" class="text-end">Unit Price</th>
                         <th style="width: 18%;" class="text-end">Total</th>
@@ -420,9 +416,15 @@
                     {% for row in items %}
                     <tr>
                         <td>{{ forloop.counter }}</td>
-                        <td>{{ row.description }}</td>
-                        <td class="text-end">{{ row.quantity }}</td>
-                        <td class="text-end">{{ row.unit_price }}</td>
+                        <td>
+                            {% if row.item_code %}
+                                {{ row.item_code }} - {{ row.description }}
+                            {% else %}
+                                {{ row.description }}
+                            {% endif %}
+                        </td>
+                        <td class="text-end">{{ row.qty }}</td>
+                        <td class="text-end">{{ row.price_each }}</td>
                         <td class="text-end">{{ row.line_total }}</td>
                     </tr>
                     {% empty %}
@@ -444,36 +446,11 @@
         </div>
     </div>
 
+    {% if invoice.note %}
     <div class="section">
-        <div class="grid-2">
-            <div>
-                <div class="section-title">Payment & Delivery</div>
-                <div class="info-card">
-                    <p><strong>Payment Method:</strong> {{ order.payment_method|default:"-" }}</p>
-                    <p><strong>Payment Period:</strong> {{ order.payment_period|default:"-" }}</p>
-                    <p><strong>Delivery Location:</strong> {{ order.delivery_location|default:"-" }}</p>
-                    <p><strong>Delivery Method:</strong> {{ order.delivery_method|default:"-" }}</p>
-                    <p><strong>Special Instructions:</strong> {{ order.special_instructions|default:"-" }}</p>
-                </div>
-            </div>
-
-            <div>
-                <div class="section-title">Terms & Conditions</div>
-                <div class="terms-card">
-                    <p><strong>Terms:</strong> {{ order.terms_and_conditions|default:"-" }}</p>
-                    <p><strong>Warranty:</strong> {{ order.warranty_details|default:"-" }}</p>
-                    <p><strong>Return Policy:</strong> {{ order.return_policy|default:"-" }}</p>
-                    <p><strong>Penalties / Conditions:</strong> {{ order.penalties_conditions|default:"-" }}</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    {% if order.note %}
-    <div class="section">
-        <div class="section-title">Note</div>
-        <div class="note-card">
-            <p>{{ order.note }}</p>
+        <div class="section-title">Notes</div>
+        <div class="terms-card">
+            <p>{{ invoice.note }}</p>
         </div>
     </div>
     {% endif %}
@@ -481,13 +458,13 @@
     <div class="section">
         <div class="section-title">Authorization</div>
         <div class="auth-card">
-            <p><strong>Authorized Person:</strong> {{ order.authorized_person_name|default:"-" }}</p>
-            <p><strong>Signature Text:</strong> {{ order.signature_text|default:"-" }}</p>
+            <p><strong>Prepared By:</strong> {{ invoice.created_by.get_full_name|default:invoice.created_by.username|default:"-" }}</p>
+            <p><strong>Invoice No:</strong> {{ invoice.invoice_no }}</p>
         </div>
 
         <div class="signature-row">
             <div class="signature-box">
-                <div class="signature-line">Supplier Signature</div>
+                <div class="signature-line">Authorized Signature</div>
             </div>
             <div class="signature-box">
                 <div class="signature-line">Authorized Signature / Company Seal</div>
