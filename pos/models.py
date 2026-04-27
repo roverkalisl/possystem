@@ -269,22 +269,41 @@ class Sale(models.Model):
         )["total"] or Decimal("0")
 
     @property
+    def returned_amount(self):
+        total = Decimal("0")
+        for sale_return in self.returns.select_related("sale_item").all():
+            qty = Decimal(str(sale_return.qty or 0))
+            price = Decimal(str(sale_return.sale_item.price or 0))
+            total += qty * price
+        return total
+
+    @property
     def credit_balance(self):
         if self.payment_method != "credit":
             return Decimal("0")
-        return Decimal(str(self.grand_total or 0)) - Decimal(str(self.recovered_amount or 0))
+
+        total = Decimal(str(self.grand_total or 0))
+        returned = Decimal(str(self.returned_amount or 0))
+        recovered = Decimal(str(self.recovered_amount or 0))
+        balance = total - returned - recovered
+        return balance if balance > 0 else Decimal("0")
 
     @property
     def credit_status(self):
         if self.payment_method != "credit":
             return "na"
 
-        recovered = Decimal(str(self.recovered_amount or 0))
         total = Decimal(str(self.grand_total or 0))
+        returned = Decimal(str(self.returned_amount or 0))
+        effective_total = total - returned
 
+        if effective_total <= 0:
+            return "paid"
+
+        recovered = Decimal(str(self.recovered_amount or 0))
         if recovered <= 0:
             return "unpaid"
-        elif recovered < total:
+        elif recovered < effective_total:
             return "partial"
         return "paid"
 

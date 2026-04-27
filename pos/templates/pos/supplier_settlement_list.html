@@ -235,12 +235,18 @@
                         <td class="text-center">
                             {% if is_owner and s.approval_status == "pending" %}
                                 <div class="d-flex gap-1 justify-content-center">
-                                    <a href="{% url 'approve_supplier_settlement' s.id %}" class="btn btn-sm btn-success">
-                                        Approve
-                                    </a>
-                                    <a href="{% url 'reject_supplier_settlement' s.id %}" class="btn btn-sm btn-danger">
-                                        Reject
-                                    </a>
+                                    <form method="post" action="{% url 'approve_supplier_settlement' s.id %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-success" onclick="return confirm('Approve this settlement?')">
+                                            Approve
+                                        </button>
+                                    </form>
+                                    <form method="post" action="{% url 'reject_supplier_settlement' s.id %}">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Reject this settlement?')">
+                                            Reject
+                                        </button>
+                                    </form>
                                 </div>
                             {% else %}
                                 <span class="text-muted">No Action</span>

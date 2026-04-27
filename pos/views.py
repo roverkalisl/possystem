@@ -11,6 +11,7 @@ from django.db.models import Q, Sum, F
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
+from django.views.decorators.http import require_POST
 
 from .models import (
     Item, Category, Supplier, GLMaster, Customer,
@@ -216,9 +217,18 @@ def generate_petty_cash_expense_no():
 
 
 def generate_project_expense_no():
-    last = ProjectExpense.objects.exclude(expense_no__isnull=True).order_by("-id").first()
-    if last and last.expense_no and str(last.expense_no).isdigit():
-        return str(int(last.expense_no) + 1)
+    expense_nos = ProjectExpense.objects.exclude(expense_no__isnull=True).values_list('expense_no', flat=True)
+    max_no = 0
+    for expense_no in expense_nos:
+        try:
+            number = int(str(expense_no).strip())
+        except (ValueError, TypeError):
+            continue
+        if number > max_no:
+            max_no = number
+
+    if max_no > 0:
+        return str(max_no + 1)
     return "500000"
 
 
@@ -2116,17 +2126,52 @@ def reject_petty_cash_expense(request, expense_id):
 # =========================
 @user_passes_test(can_use_project)
 def project_income_list(request):
-    incomes = ProjectIncome.objects.select_related("project", "gl_account", "created_by").order_by("-income_date", "-id")
+    project_id = request.GET.get("project")
     projects = Project.objects.filter(is_active=True).order_by("-id")
 
-    project_id = request.GET.get("project")
+    income_qs = ProjectIncome.objects.select_related("project", "gl_account", "created_by").order_by("-income_date", "-id")
+    payment_qs = ProjectInvoicePayment.objects.filter(
+        is_active=True,
+        invoice__is_active=True,
+        invoice__project__is_active=True
+    ).select_related("invoice__project", "created_by").order_by("-payment_date", "-id")
+
     if project_id:
-        incomes = incomes.filter(project_id=project_id)
+        income_qs = income_qs.filter(project_id=project_id)
+        payment_qs = payment_qs.filter(invoice__project_id=project_id)
+
+    income_rows = []
+    for income in income_qs:
+        income_rows.append({
+            "source": "income",
+            "date": income.income_date,
+            "project": income.project,
+            "description": income.description or f"Project Income - {income.project.project_id}",
+            "amount": income.amount,
+            "gl_account": income.gl_account,
+            "created_by": income.created_by,
+            "id": income.id,
+        })
+
+    for payment in payment_qs:
+        income_rows.append({
+            "source": "project_invoice_payment",
+            "date": payment.payment_date,
+            "project": payment.invoice.project,
+            "description": f"Invoice Receipt - {payment.receipt_no} ({payment.invoice.invoice_no})",
+            "amount": payment.amount,
+            "gl_account": None,
+            "created_by": payment.created_by,
+            "id": payment.id,
+        })
+
+    income_rows.sort(key=lambda row: (row["date"], row["id"]), reverse=True)
 
     return render(request, "pos/project_income_list.html", {
-        "incomes": incomes,
+        "incomes": income_rows,
         "projects": projects,
         "selected_project": project_id,
+        "show_inactive": request.GET.get("show_inactive") == "1",
         "is_owner": is_owner(request.user),
     })
 
@@ -3777,6 +3822,7 @@ def add_supplier_settlement_from_advance(request, advance_id):
 
 
 @user_passes_test(is_owner)
+@require_POST
 def approve_supplier_settlement(request, settlement_id):
     settlement = get_object_or_404(
         SupplierSettlement.objects.select_related("advance", "project", "expense_gl", "supplier"),
@@ -3818,6 +3864,7 @@ def approve_supplier_settlement(request, settlement_id):
     return redirect("supplier_settlement_list")
 
 @user_passes_test(is_owner)
+@require_POST
 def reject_supplier_settlement(request, settlement_id):
     settlement = get_object_or_404(SupplierSettlement, id=settlement_id)
 

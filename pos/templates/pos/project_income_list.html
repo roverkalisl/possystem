@@ -47,14 +47,18 @@
             <tbody>
                 {% for income in incomes %}
                 <tr>
-                    <td>{{ income.income_date|date:"Y-m-d" }}</td>
+                    <td>{{ income.date|date:"Y-m-d" }}</td>
                     <td>{{ income.project.project_id }}</td>
                     <td>{{ income.description|default:'-' }}</td>
                     <td class="text-money {% if income.amount < 0 %}text-danger{% endif %}">{{ income.amount|money }}</td>
                     <td>{% if income.gl_account %}{{ income.gl_account.gl_code }} - {{ income.gl_account.gl_name }}{% else %}-{% endif %}</td>
                     <td>{% if income.created_by %}{{ income.created_by.username }}{% else %}-{% endif %}</td>
                     <td>
-                        <a href="{% url 'add_project_transfer' %}?type=income&original_id={{ income.id }}" class="btn btn-sm btn-outline-primary">Transfer</a>
+                        {% if income.source == "income" %}
+                            <a href="{% url 'add_project_transfer' %}?type=income&original_id={{ income.id }}" class="btn btn-sm btn-outline-primary">Transfer</a>
+                        {% else %}
+                            <span class="text-muted">-</span>
+                        {% endif %}
                     </td>
                 </tr>
                 {% empty %}
