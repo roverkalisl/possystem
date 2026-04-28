@@ -8,6 +8,39 @@
     <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary">Dashboard</a>
 </div>
 
+<div class="row g-3 mb-3">
+    <div class="col-md-2">
+        <div class="card card-soft bg-light-primary p-3 h-100">
+            <div class="text-muted">Total Assets</div>
+            <div class="h3 mb-0">{{ asset_stats.total_assets }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card card-soft bg-light-success p-3 h-100">
+            <div class="text-muted">Approved</div>
+            <div class="h3 mb-0">{{ asset_stats.approved_assets }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card card-soft bg-light-warning p-3 h-100">
+            <div class="text-muted">Pending</div>
+            <div class="h3 mb-0">{{ asset_stats.pending_assets }}</div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card card-soft bg-light-danger p-3 h-100">
+            <div class="text-muted">Rejected</div>
+            <div class="h3 mb-0">{{ asset_stats.rejected_assets }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card card-soft bg-light-info p-3 h-100">
+            <div class="text-muted">Total Asset Value</div>
+            <div class="h3 mb-0">{{ asset_stats.total_value|money }}</div>
+        </div>
+    </div>
+</div>
+
 <div class="card card-soft mb-3">
     <div class="card-body">
         <form method="get" class="row g-2">

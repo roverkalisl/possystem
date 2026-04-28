@@ -14,6 +14,33 @@
     </div>
 </div>
 
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card card-soft bg-light-primary p-3 h-100">
+            <div class="text-muted">Status</div>
+            <div class="h5 mb-0">{{ asset.get_status_display }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft bg-light-success p-3 h-100">
+            <div class="text-muted">Value</div>
+            <div class="h5 mb-0">{{ asset.purchase_value|money }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft bg-light-info p-3 h-100">
+            <div class="text-muted">Purchase Date</div>
+            <div class="h5 mb-0">{{ asset.purchase_date|date:"Y-m-d" }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft bg-light-warning p-3 h-100">
+            <div class="text-muted">Responsible</div>
+            <div class="h5 mb-0">{% if asset.responsible_person %}{{ asset.responsible_person.get_full_name|default:asset.responsible_person.username }}{% else %}-{% endif %}</div>
+        </div>
+    </div>
+</div>
+
 <div class="card card-soft mb-3">
     <div class="card-body row g-3">
         <div class="col-md-3"><strong>Asset No</strong><div>{{ asset.asset_no }}</div></div>

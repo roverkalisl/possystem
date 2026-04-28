@@ -4713,10 +4713,19 @@ def company_asset_list(request):
             Q(supplier__name__icontains=query)
         )
 
+    asset_stats = {
+        "total_assets": assets.count(),
+        "approved_assets": assets.filter(status="approved").count(),
+        "pending_assets": assets.filter(status="pending").count(),
+        "rejected_assets": assets.filter(status="rejected").count(),
+        "total_value": assets.aggregate(total=Sum("purchase_value"))["total"] or Decimal("0"),
+    }
+
     return render(request, "pos/company_asset_list.html", {
         "assets": assets,
         "query": query,
         "is_owner": is_owner(request.user),
+        "asset_stats": asset_stats,
     })
 
 
