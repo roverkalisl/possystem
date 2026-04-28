@@ -1063,6 +1063,13 @@ class SupplierSettlement(models.Model):
     )
     supplier = models.ForeignKey("Supplier", on_delete=models.PROTECT, related_name="settlements")
     project = models.ForeignKey("Project", on_delete=models.SET_NULL, null=True, blank=True, related_name="supplier_settlements")
+    grn = models.ForeignKey(
+        "GRN",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="supplier_settlements"
+    )
     settlement_date = models.DateField(default=timezone.now)
 
     description = models.CharField(max_length=255)
@@ -1319,6 +1326,14 @@ class GRN(models.Model):
         return self.items.aggregate(total=Sum("quantity_received"))["total"] or Decimal("0")
 
     @property
+    def total_quantity_accepted(self):
+        return self.items.aggregate(total=Sum("quantity_accepted"))["total"] or Decimal("0")
+
+    @property
+    def total_quantity_rejected(self):
+        return self.items.aggregate(total=Sum("quantity_rejected"))["total"] or Decimal("0")
+
+    @property
     def total_value(self):
         return sum(item.line_total for item in self.items.all())
 
@@ -1331,6 +1346,12 @@ class GRNItem(models.Model):
         ("good", "Good"),
         ("damaged", "Damaged"),
         ("rejected", "Rejected"),
+    ]
+
+    ALLOCATION_CHOICES = [
+        ("inventory", "Inventory"),
+        ("project", "Project"),
+        ("asset", "Company Asset"),
     ]
 
     grn = models.ForeignKey(
@@ -1355,6 +1376,22 @@ class GRNItem(models.Model):
     quantity_received = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     quantity_accepted = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     quantity_rejected = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    allocation_type = models.CharField(max_length=20, choices=ALLOCATION_CHOICES, default="inventory")
+    allocation_project = models.ForeignKey(
+        "Project",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="grn_allocations"
+    )
+    company_asset = models.ForeignKey(
+        "CompanyAsset",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="grn_items"
+    )
     
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     line_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -1374,8 +1411,91 @@ class GRNItem(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return f"{self.grn.grn_no} - {self.item.name}"
-    
+        item_name = self.item.name if self.item else self.purchase_order_item.description
+        return f"{self.grn.grn_no} - {item_name}"
+
+
+class CompanyAsset(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    asset_no = models.CharField(max_length=30, unique=True, blank=True, null=True)
+    grn = models.ForeignKey(
+        "GRN",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="company_assets"
+    )
+    grn_item = models.ForeignKey(
+        "GRNItem",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="asset_record"
+    )
+    purchase_order = models.ForeignKey(
+        "PurchaseOrder",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="company_assets"
+    )
+    supplier = models.ForeignKey(
+        "Supplier",
+        on_delete=models.PROTECT,
+        related_name="company_assets"
+    )
+    asset_name = models.CharField(max_length=255)
+    purchase_date = models.DateField(default=timezone.now)
+    purchase_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    serial_number = models.CharField(max_length=150, blank=True, null=True)
+    model_number = models.CharField(max_length=150, blank=True, null=True)
+    warranty_details = models.TextField(blank=True, null=True)
+    responsible_person = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="company_assets"
+    )
+    remarks = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    approved_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="approved_company_assets"
+    )
+    approved_at = models.DateTimeField(blank=True, null=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_company_assets"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-purchase_date", "-id"]
+
+    def save(self, *args, **kwargs):
+        if not self.asset_no:
+            last = CompanyAsset.objects.exclude(asset_no__isnull=True).order_by("-id").first()
+            if last and last.asset_no and str(last.asset_no).replace("ASSET", "").isdigit():
+                next_no = int(str(last.asset_no).replace("ASSET", "")) + 1
+                self.asset_no = f"ASSET{next_no:06d}"
+            else:
+                self.asset_no = "ASSET000001"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.asset_no or self.asset_name    
 
 
 

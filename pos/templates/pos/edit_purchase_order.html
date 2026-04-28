@@ -130,8 +130,17 @@
                     <div id="po-items">
                         {% for row in order.items.all %}
                         <div class="row g-2 mb-2 po-item-row">
-                            <div class="col-md-6">
-                                <input type="text" name="item_description[]" class="form-control" value="{{ row.description }}">
+                            <div class="col-md-3">
+                                <select name="item_id[]" class="form-select item-select" onchange="onItemSelectChange(this)">
+                                    <option value="">-- Select Item --</option>
+                                    {% for item in items %}
+                                        <option value="{{ item.id }}" data-item-name="{{ item.name }}" data-item-code="{{ item.item_code }}" data-item-unit="{{ item.unit }}" {% if row.item_id == item.id %}selected{% endif %}>{{ item.item_code }} - {{ item.name }} ({{ item.unit }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <input type="text" name="item_description[]" class="form-control item-description" value="{{ row.description }}" placeholder="Description">
+                                <div class="form-text text-muted">Choose existing item for inventory-linked PO items.</div>
                             </div>
                             <div class="col-md-2">
                                 <input type="number" step="0.01" min="0" name="item_qty[]" class="form-control" value="{{ row.quantity }}">
@@ -145,8 +154,17 @@
                         </div>
                         {% empty %}
                         <div class="row g-2 mb-2 po-item-row">
-                            <div class="col-md-6">
-                                <input type="text" name="item_description[]" class="form-control" placeholder="Description">
+                            <div class="col-md-3">
+                                <select name="item_id[]" class="form-select item-select" onchange="onItemSelectChange(this)">
+                                    <option value="">-- Select Item --</option>
+                                    {% for item in items %}
+                                        <option value="{{ item.id }}" data-item-name="{{ item.name }}" data-item-code="{{ item.item_code }}" data-item-unit="{{ item.unit }}">{{ item.item_code }} - {{ item.name }} ({{ item.unit }})</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <input type="text" name="item_description[]" class="form-control item-description" placeholder="Description">
+                                <div class="form-text text-muted">Choose existing item for inventory-linked PO items.</div>
                             </div>
                             <div class="col-md-2">
                                 <input type="number" step="0.01" min="0" name="item_qty[]" class="form-control" placeholder="Qty">
@@ -203,13 +221,26 @@
 </div>
 
 <script>
+const poItemOptions = `
+    <option value="">-- Select Item --</option>
+    {% for item in items %}
+        <option value="{{ item.id }}" data-item-name="{{ item.name }}" data-item-code="{{ item.item_code }}" data-item-unit="{{ item.unit }}">{{ item.item_code }} - {{ item.name }} ({{ item.unit }})</option>
+    {% endfor %}
+`;
+
 function addPoRow() {
     const wrap = document.getElementById("po-items");
     const row = document.createElement("div");
     row.className = "row g-2 mb-2 po-item-row";
     row.innerHTML = `
-        <div class="col-md-6">
-            <input type="text" name="item_description[]" class="form-control" placeholder="Description">
+        <div class="col-md-3">
+            <select name="item_id[]" class="form-select item-select" onchange="onItemSelectChange(this)">
+                ${poItemOptions}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <input type="text" name="item_description[]" class="form-control item-description" placeholder="Description">
+            <div class="form-text text-muted">Choose existing item for inventory-linked PO items.</div>
         </div>
         <div class="col-md-2">
             <input type="number" step="0.01" min="0" name="item_qty[]" class="form-control" placeholder="Qty">
@@ -222,6 +253,15 @@ function addPoRow() {
         </div>
     `;
     wrap.appendChild(row);
+}
+
+function onItemSelectChange(select) {
+    const row = select.closest(".po-item-row");
+    const descInput = row.querySelector(".item-description");
+    const selectedOption = select.selectedOptions[0];
+    if (selectedOption && selectedOption.value && descInput && !descInput.value.trim()) {
+        descInput.value = selectedOption.dataset.itemName || "";
+    }
 }
 function removePoRow(btn) {
     const rows = document.querySelectorAll(".po-item-row");

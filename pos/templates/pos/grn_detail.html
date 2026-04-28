@@ -11,6 +11,7 @@
             {% if grn.status != 'approved' and grn.status != 'rejected' %}
             <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#statusModal">Update Status</button>
             {% endif %}
+            <a href="{% url 'company_asset_list' %}" class="btn btn-info btn-sm">Asset Register</a>
             <a href="{% url 'grn_list' %}" class="btn btn-secondary btn-sm">Back to GRNs</a>
             <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
         </div>
@@ -102,11 +103,14 @@
                     <th>Received Qty</th>
                     <th>Accepted Qty</th>
                     <th>Rejected Qty</th>
+                    <th>Allocation</th>
+                    <th>Project</th>
                     <th>Unit Price</th>
                     <th>Line Total</th>
                     <th>Quality</th>
                     <th>Batch No</th>
                     <th>Expiry Date</th>
+                    <th>Asset</th>
                     <th>Notes</th>
                 </tr>
             </thead>
@@ -118,6 +122,8 @@
                     <td>{{ item.quantity_received }}</td>
                     <td>{{ item.quantity_accepted }}</td>
                     <td>{{ item.quantity_rejected }}</td>
+                    <td>{{ item.get_allocation_type_display }}</td>
+                    <td>{% if item.allocation_project %}{{ item.allocation_project.project_id }} - {{ item.allocation_project.project_name }}{% else %}-{% endif %}</td>
                     <td>{{ item.unit_price|money }}</td>
                     <td>{{ item.line_total|money }}</td>
                     <td>
@@ -127,6 +133,13 @@
                     </td>
                     <td>{{ item.batch_no|default:"-" }}</td>
                     <td>{% if item.expiry_date %}{{ item.expiry_date|date:"Y-m-d" }}{% else %}-{% endif %}</td>
+                    <td>
+                        {% if item.company_asset %}
+                            <a href="{% url 'company_asset_detail' item.company_asset.id %}">{{ item.company_asset.asset_no }}</a>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
                     <td>{{ item.quality_notes|default:"-" }}</td>
                 </tr>
                 {% endfor %}
@@ -134,12 +147,14 @@
             <tfoot class="table-dark">
                 <tr>
                     <th colspan="2">Totals</th>
-                    <th>{{ grn.total_quantity_received }}</th>
-                    <th>{{ grn_items|length }}</th>
+                    <th>{{ grn.total_quantity_received|floatformat:2 }}</th>
+                    <th>{{ grn.total_quantity_accepted|floatformat:2 }}</th>
+                    <th>{{ grn.total_quantity_rejected|floatformat:2 }}</th>
+                    <th>-</th>
                     <th>-</th>
                     <th>-</th>
                     <th>{{ grn.total_value|money }}</th>
-                    <th colspan="4">-</th>
+                    <th colspan="5">-</th>
                 </tr>
             </tfoot>
         </table>

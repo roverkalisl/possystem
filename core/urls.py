@@ -173,6 +173,10 @@ path("supplier-settlements/<int:settlement_id>/reject/", views.reject_supplier_s
     path("grn/create/<int:po_id>/", views.create_grn, name="create_grn_from_po"),
     path("grn/<int:grn_id>/", views.grn_detail, name="grn_detail"),
     path("grn/<int:grn_id>/update-status/", views.update_grn_status, name="update_grn_status"),
+    path("assets/", views.company_asset_list, name="company_asset_list"),
+    path("assets/<int:asset_id>/", views.company_asset_detail, name="company_asset_detail"),
+    path("assets/<int:asset_id>/approve/", views.approve_company_asset, name="approve_company_asset"),
+    path("assets/<int:asset_id>/reject/", views.reject_company_asset, name="reject_company_asset"),
     
     # =========================
     # LOGGING & AUDIT

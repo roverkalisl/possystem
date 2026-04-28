@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+{% block title %}Asset {{ asset.asset_no }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="page-title mb-0">Asset Details</h3>
+        <div class="text-muted">{{ asset.asset_no }} - {{ asset.asset_name }}</div>
+    </div>
+    <div>
+        <a href="{% url 'company_asset_list' %}" class="btn btn-secondary btn-sm">Back to Assets</a>
+        <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+    </div>
+</div>
+
+<div class="card card-soft mb-3">
+    <div class="card-body row g-3">
+        <div class="col-md-3"><strong>Asset No</strong><div>{{ asset.asset_no }}</div></div>
+        <div class="col-md-3"><strong>Name</strong><div>{{ asset.asset_name }}</div></div>
+        <div class="col-md-3"><strong>Purchase Date</strong><div>{{ asset.purchase_date|date:"Y-m-d" }}</div></div>
+        <div class="col-md-3"><strong>Value</strong><div>{{ asset.purchase_value|money }}</div></div>
+        <div class="col-md-3"><strong>Supplier</strong><div>{{ asset.supplier.name }}</div></div>
+        <div class="col-md-3"><strong>Status</strong><div>{{ asset.get_status_display }}</div></div>
+        <div class="col-md-3"><strong>Serial Number</strong><div>{{ asset.serial_number|default:"-" }}</div></div>
+        <div class="col-md-3"><strong>Model Number</strong><div>{{ asset.model_number|default:"-" }}</div></div>
+        <div class="col-md-3"><strong>Responsible</strong><div>{% if asset.responsible_person %}{{ asset.responsible_person.get_full_name|default:asset.responsible_person.username }}{% else %}-{% endif %}</div></div>
+        <div class="col-md-3"><strong>GRN</strong><div>{% if asset.grn %}{{ asset.grn.grn_no }}{% else %}-{% endif %}</div></div>
+        <div class="col-md-3"><strong>Purchase Order</strong><div>{% if asset.purchase_order %}{{ asset.purchase_order.po_no }}{% else %}-{% endif %}</div></div>
+        <div class="col-md-12"><strong>Remarks</strong><div>{{ asset.remarks|default:"-" }}</div></div>
+    </div>
+</div>
+
+{% if is_owner and asset.status == 'pending' %}
+<div class="card card-soft">
+    <div class="card-body">
+        <form method="post" action="{% url 'approve_company_asset' asset.id %}" class="d-inline me-2">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-success">Approve Asset</button>
+        </form>
+        <form method="post" action="{% url 'reject_company_asset' asset.id %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Reject Asset</button>
+        </form>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

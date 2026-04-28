@@ -20,7 +20,7 @@ from .models import (
     ProjectPettyCashExpense, ProjectIncome, ProjectTransfer, Employee,
     ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem,
     SupplierAdvance, SupplierSettlement, PurchaseOrder, PurchaseOrderItem,
-    GRN, GRNItem
+    GRN, GRNItem, CompanyAsset
 )
 # =========================
 # HELPERS
@@ -3762,20 +3762,32 @@ def add_supplier_settlement_from_advance(request, advance_id):
     )
 
     expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
+    grns = GRN.objects.filter(
+        supplier=advance.supplier,
+        status="approved"
+    ).exclude(
+        supplier_settlements__isnull=False
+    ).order_by("-received_date")
     next_settlement_no = generate_supplier_settlement_no()
 
     context = {
         "advance": advance,
         "expense_gls": expense_gls,
+        "grns": grns,
         "next_settlement_no": next_settlement_no,
     }
 
     if request.method == "POST":
         settlement_date = request.POST.get("settlement_date") or timezone.localdate()
         description = (request.POST.get("description") or "").strip()
+        grn_id = request.POST.get("grn") or None
+        selected_grn = GRN.objects.filter(id=grn_id, supplier=advance.supplier, status="approved").first() if grn_id else None
         actual_amount = to_decimal(request.POST.get("actual_amount") or 0)
         expense_gl_id = request.POST.get("expense_gl") or None
         note = (request.POST.get("note") or "").strip()
+
+        if selected_grn:
+            actual_amount = selected_grn.total_value
 
         if advance.balance_amount <= 0:
             messages.error(request, "This advance has no available balance.")
@@ -3802,7 +3814,8 @@ def add_supplier_settlement_from_advance(request, advance_id):
             settlement_no=next_settlement_no,
             advance=advance,
             supplier=advance.supplier,
-            project=advance.project,
+            project=(selected_grn.purchase_order.project if selected_grn and selected_grn.purchase_order and selected_grn.purchase_order.project else advance.project),
+            grn=selected_grn,
             settlement_date=settlement_date,
             description=description,
             actual_amount=actual_amount,
@@ -3949,9 +3962,11 @@ def add_purchase_order(request):
     projects = Project.objects.filter(is_active=True).order_by("-id")
     next_po_no = generate_purchase_order_no()
 
+    items = Item.objects.order_by("item_code")
     context = {
         "suppliers": suppliers,
         "projects": projects,
+        "items": items,
         "next_po_no": next_po_no,
     }
 
@@ -3988,6 +4003,7 @@ def add_purchase_order(request):
         status = request.POST.get("status") or "pending"
         note = (request.POST.get("note") or "").strip()
 
+        item_ids = request.POST.getlist("item_id[]")
         descriptions = request.POST.getlist("item_description[]")
         quantities = request.POST.getlist("item_qty[]")
         unit_prices = request.POST.getlist("item_price[]")
@@ -3997,17 +4013,27 @@ def add_purchase_order(request):
             return render(request, "pos/add_purchase_order.html", context)
 
         cleaned_rows = []
-        row_count = max(len(descriptions), len(quantities), len(unit_prices))
+        row_count = max(len(item_ids), len(descriptions), len(quantities), len(unit_prices))
 
         for i in range(row_count):
+            item_id = (item_ids[i] if i < len(item_ids) else "").strip()
             desc = (descriptions[i] if i < len(descriptions) else "").strip()
             qty = to_decimal(quantities[i] if i < len(quantities) else 0)
             price = to_decimal(unit_prices[i] if i < len(unit_prices) else 0)
 
-            if not desc and qty <= 0 and price <= 0:
+            if not item_id and not desc and qty <= 0 and price <= 0:
                 continue
 
-            if not desc:
+            linked_item = None
+            if item_id:
+                linked_item = Item.objects.filter(id=item_id).first()
+                if not linked_item:
+                    messages.error(request, f"Selected item is invalid for row {i+1}.")
+                    return render(request, "pos/add_purchase_order.html", context)
+                if not desc:
+                    desc = linked_item.name
+
+            if not item_id and not desc:
                 messages.error(request, f"Item description is required for row {i+1}.")
                 return render(request, "pos/add_purchase_order.html", context)
 
@@ -4020,6 +4046,7 @@ def add_purchase_order(request):
                 return render(request, "pos/add_purchase_order.html", context)
 
             cleaned_rows.append({
+                "item_id": linked_item.id if linked_item else None,
                 "description": desc,
                 "quantity": qty,
                 "unit_price": price,
@@ -4062,6 +4089,7 @@ def add_purchase_order(request):
             for row in cleaned_rows:
                 PurchaseOrderItem.objects.create(
                     purchase_order=po,
+                    item_id=row["item_id"],
                     description=row["description"],
                     quantity=row["quantity"],
                     unit_price=row["unit_price"],
@@ -4078,10 +4106,12 @@ def edit_purchase_order(request, po_id):
     suppliers = Supplier.objects.filter(is_active=True).order_by("name")
     projects = Project.objects.filter(is_active=True).order_by("-id")
 
+    items = Item.objects.order_by("item_code")
     context = {
         "order": order,
         "suppliers": suppliers,
         "projects": projects,
+        "items": items,
     }
 
     if request.method == "POST":
@@ -4120,22 +4150,33 @@ def edit_purchase_order(request, po_id):
             messages.error(request, "Supplier is required.")
             return render(request, "pos/edit_purchase_order.html", context)
 
+        item_ids = request.POST.getlist("item_id[]")
         descriptions = request.POST.getlist("item_description[]")
         quantities = request.POST.getlist("item_qty[]")
         unit_prices = request.POST.getlist("item_price[]")
 
         cleaned_rows = []
-        row_count = max(len(descriptions), len(quantities), len(unit_prices))
+        row_count = max(len(item_ids), len(descriptions), len(quantities), len(unit_prices))
 
         for i in range(row_count):
+            item_id = (item_ids[i] if i < len(item_ids) else "").strip()
             desc = (descriptions[i] if i < len(descriptions) else "").strip()
             qty = to_decimal(quantities[i] if i < len(quantities) else 0)
             price = to_decimal(unit_prices[i] if i < len(unit_prices) else 0)
 
-            if not desc and qty <= 0 and price <= 0:
+            if not item_id and not desc and qty <= 0 and price <= 0:
                 continue
 
-            if not desc:
+            linked_item = None
+            if item_id:
+                linked_item = Item.objects.filter(id=item_id).first()
+                if not linked_item:
+                    messages.error(request, f"Selected item is invalid for row {i+1}.")
+                    return render(request, "pos/edit_purchase_order.html", context)
+                if not desc:
+                    desc = linked_item.name
+
+            if not item_id and not desc:
                 messages.error(request, f"Item description is required for row {i+1}.")
                 return render(request, "pos/edit_purchase_order.html", context)
 
@@ -4148,6 +4189,7 @@ def edit_purchase_order(request, po_id):
                 return render(request, "pos/edit_purchase_order.html", context)
 
             cleaned_rows.append({
+                "item_id": linked_item.id if linked_item else None,
                 "description": desc,
                 "quantity": qty,
                 "unit_price": price,
@@ -4164,6 +4206,7 @@ def edit_purchase_order(request, po_id):
             for row in cleaned_rows:
                 PurchaseOrderItem.objects.create(
                     purchase_order=order,
+                    item_id=row["item_id"],
                     description=row["description"],
                     quantity=row["quantity"],
                     unit_price=row["unit_price"],
@@ -4517,6 +4560,13 @@ def create_grn(request, po_id=None):
             qty_received = Decimal(request.POST.get(f"qty_received_{po_item.id}") or 0)
             qty_accepted = Decimal(request.POST.get(f"qty_accepted_{po_item.id}") or 0)
             qty_rejected = qty_received - qty_accepted
+            allocation_type = request.POST.get(f"allocation_type_{po_item.id}", "inventory")
+            allocation_project_id = request.POST.get(f"allocation_project_{po_item.id}")
+            asset_serial_number = request.POST.get(f"asset_serial_number_{po_item.id}")
+            asset_model_number = request.POST.get(f"asset_model_number_{po_item.id}")
+            asset_warranty = request.POST.get(f"asset_warranty_{po_item.id}")
+            asset_responsible = request.POST.get(f"asset_responsible_{po_item.id}")
+            asset_notes = request.POST.get(f"asset_notes_{po_item.id}")
             
             if qty_received > 0:
                 linked_item = po_item.item
@@ -4536,7 +4586,7 @@ def create_grn(request, po_id=None):
                     po_item.item = linked_item
                     po_item.save(update_fields=["item"])
 
-                GRNItem.objects.create(
+                grn_item = GRNItem.objects.create(
                     grn=grn,
                     purchase_order_item=po_item,
                     item=linked_item,
@@ -4544,19 +4594,19 @@ def create_grn(request, po_id=None):
                     quantity_received=qty_received,
                     quantity_accepted=qty_accepted,
                     quantity_rejected=qty_rejected,
+                    allocation_type=allocation_type,
+                    allocation_project_id=allocation_project_id or None,
                     unit_price=po_item.unit_price,
                     quality_status=request.POST.get(f"quality_{po_item.id}", "good"),
                     quality_notes=request.POST.get(f"quality_notes_{po_item.id}"),
                     batch_no=request.POST.get(f"batch_no_{po_item.id}"),
                     expiry_date=request.POST.get(f"expiry_date_{po_item.id}") or None,
                 )
-                
-                # Update item stock if accepted
-                if qty_accepted > 0 and linked_item:
+
+                if allocation_type == "inventory" and qty_accepted > 0 and linked_item:
                     linked_item.stock = Decimal(str(linked_item.stock or 0)) + qty_accepted
                     linked_item.save()
                     
-                    # Create stock transaction
                     StockTransaction.objects.create(
                         item=linked_item,
                         transaction_type="grn",
@@ -4566,6 +4616,48 @@ def create_grn(request, po_id=None):
                         notes=f"GRN from PO {purchase_order.po_no}",
                         created_by=request.user,
                     )
+
+                if allocation_type == "project" and qty_accepted > 0:
+                    project = None
+                    if allocation_project_id:
+                        project = Project.objects.filter(id=allocation_project_id).first()
+                    if not project:
+                        project = purchase_order.project
+
+                    if project:
+                        ProjectExpense.objects.create(
+                            expense_no=generate_project_expense_no(),
+                            project=project,
+                            expense_type="inventory",
+                            expense_date=grn.received_date,
+                            item=linked_item,
+                            description=f"GRN {grn.grn_no} - {po_item.description}",
+                            qty=qty_accepted,
+                            unit_price=po_item.unit_price,
+                            amount=qty_accepted * po_item.unit_price,
+                            gl_account=po_item.gl_account or getattr(linked_item, "cost_gl_account", None),
+                            created_by=request.user,
+                        )
+
+                if allocation_type == "asset" and qty_accepted > 0:
+                    company_asset = CompanyAsset.objects.create(
+                        grn=grn,
+                        grn_item=grn_item,
+                        purchase_order=purchase_order,
+                        supplier=purchase_order.supplier,
+                        asset_name=po_item.description,
+                        purchase_date=grn.received_date,
+                        purchase_value=qty_accepted * po_item.unit_price,
+                        serial_number=asset_serial_number,
+                        model_number=asset_model_number,
+                        warranty_details=asset_warranty,
+                        responsible_person=User.objects.filter(username=asset_responsible).first() if asset_responsible else None,
+                        remarks=asset_notes,
+                        status="pending",
+                        created_by=request.user,
+                    )
+                    grn_item.company_asset = company_asset
+                    grn_item.save(update_fields=["company_asset"])
         
         messages.success(request, f"GRN {grn.grn_no} created successfully.")
         return redirect("grn_detail", grn_id=grn.id)
@@ -4580,6 +4672,7 @@ def create_grn(request, po_id=None):
     context = {
         "purchase_order": purchase_order,
         "available_pos": available_pos,
+        "projects": Project.objects.filter(is_active=True).order_by("project_id"),
     }
     
     if purchase_order:
@@ -4602,6 +4695,78 @@ def grn_detail(request, grn_id):
         "grn": grn,
         "grn_items": grn_items,
     })
+
+
+@user_passes_test(can_manage_items)
+def company_asset_list(request):
+    query = request.GET.get("q", "").strip()
+    assets = CompanyAsset.objects.select_related(
+        "supplier", "purchase_order", "grn", "responsible_person", "approved_by"
+    ).order_by("-created_at")
+
+    if query:
+        assets = assets.filter(
+            Q(asset_no__icontains=query) |
+            Q(asset_name__icontains=query) |
+            Q(serial_number__icontains=query) |
+            Q(model_number__icontains=query) |
+            Q(supplier__name__icontains=query)
+        )
+
+    return render(request, "pos/company_asset_list.html", {
+        "assets": assets,
+        "query": query,
+        "is_owner": is_owner(request.user),
+    })
+
+
+@user_passes_test(can_manage_items)
+def company_asset_detail(request, asset_id):
+    asset = get_object_or_404(CompanyAsset.objects.select_related(
+        "supplier", "purchase_order", "grn", "responsible_person", "approved_by"
+    ), id=asset_id)
+
+    return render(request, "pos/company_asset_detail.html", {
+        "asset": asset,
+        "is_owner": is_owner(request.user),
+    })
+
+
+@user_passes_test(is_owner)
+@require_POST
+def approve_company_asset(request, asset_id):
+    asset = get_object_or_404(CompanyAsset, id=asset_id)
+    if asset.status == "approved":
+        messages.warning(request, "Asset already approved.")
+        return redirect("company_asset_detail", asset_id=asset.id)
+
+    asset.status = "approved"
+    asset.approved_by = request.user
+    asset.approved_at = timezone.now()
+    asset.save()
+
+    messages.success(request, "Asset approved successfully.")
+    return redirect("company_asset_detail", asset_id=asset.id)
+
+
+@user_passes_test(is_owner)
+@require_POST
+def reject_company_asset(request, asset_id):
+    asset = get_object_or_404(CompanyAsset, id=asset_id)
+    if asset.status == "approved":
+        messages.error(request, "Approved asset cannot be rejected.")
+        return redirect("company_asset_detail", asset_id=asset.id)
+
+    rejection_note = (request.POST.get("rejection_note") or "").strip()
+    asset.status = "rejected"
+    if rejection_note:
+        asset.remarks = (asset.remarks or "") + f"\nRejected: {rejection_note}"
+    asset.approved_by = request.user
+    asset.approved_at = timezone.now()
+    asset.save()
+
+    messages.success(request, "Asset rejected.")
+    return redirect("company_asset_detail", asset_id=asset.id)
 
 
 @user_passes_test(can_manage_items)

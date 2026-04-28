@@ -173,6 +173,7 @@
                         <th>Advance No</th>
                         <th>Supplier</th>
                         <th>Project</th>
+                        <th>GRN</th>
                         <th>Description</th>
                         <th class="text-end">Actual Amount</th>
                         <th class="text-end">Advance Applied</th>
@@ -200,6 +201,13 @@
                         <td>
                             {% if s.project %}
                                 {{ s.project.project_id }} - {{ s.project.project_name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if s.grn %}
+                                {{ s.grn.grn_no }}
                             {% else %}
                                 -
                             {% endif %}
@@ -255,7 +263,7 @@
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="14" class="text-center text-muted py-4">
+                        <td colspan="15" class="text-center text-muted py-4">
                             No settlement records found.
                         </td>
                     </tr>

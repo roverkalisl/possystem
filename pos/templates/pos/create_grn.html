@@ -19,7 +19,7 @@
         <div class="row g-3 mb-4">
             <div class="col-md-6">
                 <label for="purchase_order" class="form-label">Purchase Order *</label>
-                <select class="form-select" id="purchase_order" name="purchase_order" required onchange="loadPOItems()">
+                <select class="form-select" id="purchase_order" name="purchase_order" required onchange="redirectToPO(this.value)">
                     <option value="">Select Purchase Order</option>
                     {% for po in available_pos %}
                     <option value="{{ po.id }}" {% if purchase_order and purchase_order.id == po.id %}selected{% endif %}>
@@ -68,13 +68,19 @@
                 <table class="table table-bordered">
                     <thead class="table-light">
                         <tr>
-                            <th>Item Description</th>
+                                    <th>Item Description</th>
                             <th>Ordered Qty</th>
                             <th>Unit Price</th>
                             <th>Inventory Item</th>
                             <th>Received Qty</th>
                             <th>Accepted Qty</th>
                             <th>Rejected Qty</th>
+                            <th>Allocation</th>
+                            <th>Project</th>
+                            <th>Serial No</th>
+                            <th>Model No</th>
+                            <th>Warranty</th>
+                            <th>Responsible</th>
                             <th>Quality</th>
                             <th>Batch No</th>
                             <th>Expiry Date</th>
@@ -111,6 +117,39 @@
                                        step="0.01" min="0" readonly>
                             </td>
                             <td>
+                                <select class="form-select form-select-sm" name="allocation_type_{{ item.id }}" onchange="toggleAllocationFields({{ item.id }})">
+                                    <option value="inventory">Inventory</option>
+                                    <option value="project">Project</option>
+                                    <option value="asset">Company Asset</option>
+                                </select>
+                            </td>
+                            <td>
+                                <select class="form-select form-select-sm" name="allocation_project_{{ item.id }}">
+                                    <option value="">Default project</option>
+                                    {% for project in projects %}
+                                    <option value="{{ project.id }}" {% if purchase_order.project and purchase_order.project.id == project.id %}selected{% endif %}>
+                                        {{ project.project_id }} - {{ project.project_name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td class="asset-field asset-field-{{ item.id }}" style="display:none;">
+                                <input type="text" class="form-control form-control-sm" 
+                                       name="asset_serial_number_{{ item.id }}" placeholder="Serial">
+                            </td>
+                            <td class="asset-field asset-field-{{ item.id }}" style="display:none;">
+                                <input type="text" class="form-control form-control-sm" 
+                                       name="asset_model_number_{{ item.id }}" placeholder="Model">
+                            </td>
+                            <td class="asset-field asset-field-{{ item.id }}" style="display:none;">
+                                <input type="text" class="form-control form-control-sm" 
+                                       name="asset_warranty_{{ item.id }}" placeholder="Warranty">
+                            </td>
+                            <td class="asset-field asset-field-{{ item.id }}" style="display:none;">
+                                <input type="text" class="form-control form-control-sm" 
+                                       name="asset_responsible_{{ item.id }}" placeholder="Responsible">
+                            </td>
+                            <td>
                                 <select class="form-select form-select-sm" name="quality_{{ item.id }}">
                                     <option value="good">Good</option>
                                     <option value="damaged">Damaged</option>
@@ -145,18 +184,20 @@
 </div>
 
 <script>
-function loadPOItems() {
-    const poSelect = document.getElementById('purchase_order');
-    const poId = poSelect.value;
-    const itemsSection = document.getElementById('po-items-section');
-    
+function redirectToPO(poId) {
     if (poId) {
-        // In a real implementation, you might want to load PO items via AJAX
-        // For now, we'll just show the section
-        itemsSection.style.display = 'block';
-    } else {
-        itemsSection.style.display = 'none';
+        const baseUrl = "{% url 'create_grn_from_po' 0 %}";
+        const redirectUrl = baseUrl.replace(/0\/?$/, poId + "/");
+        window.location.href = redirectUrl;
     }
+}
+
+function toggleAllocationFields(itemId) {
+    const allocation = document.querySelector(`select[name="allocation_type_${itemId}"]`).value;
+    const assetFields = document.querySelectorAll(`.asset-field-${itemId}`);
+    assetFields.forEach(field => {
+        field.style.display = allocation === 'asset' ? '' : 'none';
+    });
 }
 
 function calculateAccepted(itemId) {
@@ -178,5 +219,12 @@ function calculateRejected(itemId) {
     
     rejectedInput.value = Math.max(0, received - accepted);
 }
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('select[name^="allocation_type_"]').forEach(function(select) {
+        const itemId = select.name.replace('allocation_type_', '');
+        toggleAllocationFields(itemId);
+    });
+});
 </script>
 {% endblock %}
