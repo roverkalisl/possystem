@@ -47,16 +47,6 @@
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label">Project</label>
-                    <select name="project" class="form-select">
-                        <option value="">-- Select Project --</option>
-                        {% for p in projects %}
-                            <option value="{{ p.id }}">{{ p.project_id }} - {{ p.project_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                   <div class="col-md-6">
                     <label class="form-label">Supplier Address</label>
                     <textarea name="supplier_address" rows="2" class="form-control"></textarea>
                 </div>

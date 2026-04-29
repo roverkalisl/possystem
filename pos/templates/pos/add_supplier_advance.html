@@ -105,16 +105,6 @@
                 </div>
 
                 <div class="col-md-6">
-                    <label class="form-label">Paid From GL <span class="text-danger">*</span></label>
-                    <select name="paid_from_gl" class="form-select" required>
-                        <option value="">-- Select GL --</option>
-                        {% for gl in gl_list %}
-                            <option value="{{ gl.id }}">{{ gl.gl_code }} - {{ gl.gl_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-
-                <div class="col-md-6">
                     <label class="form-label">Advance GL <span class="text-danger">*</span></label>
                     <select name="advance_gl" class="form-select" required>
                         <option value="">-- Select GL --</option>

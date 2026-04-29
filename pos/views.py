@@ -3862,10 +3862,6 @@ def add_supplier_advance(request):
             messages.error(request, "Amount must be greater than 0.")
             return render(request, "pos/add_supplier_advance.html", context)
 
-        if not paid_from_gl_id:
-            messages.error(request, "Paid From GL is required.")
-            return render(request, "pos/add_supplier_advance.html", context)
-
         if not advance_gl_id:
             messages.error(request, "Advance GL is required.")
             return render(request, "pos/add_supplier_advance.html", context)
@@ -3878,7 +3874,6 @@ def add_supplier_advance(request):
             advance_date=advance_date,
             amount=amount,
             payment_method=payment_method,
-            paid_from_gl_id=paid_from_gl_id,
             advance_gl_id=advance_gl_id,
             note=note,
             status="approved",
@@ -3905,12 +3900,15 @@ def add_supplier_settlement_from_advance(request, advance_id):
     ).exclude(
         supplier_settlements__isnull=False
     ).order_by("-received_date")
+    projects = Project.objects.filter(is_active=True).order_by("project_id")
     next_settlement_no = generate_supplier_settlement_no()
 
     context = {
         "advance": advance,
         "expense_gls": expense_gls,
         "grns": grns,
+        "projects": projects,
+        "selected_project_id": None,
         "next_settlement_no": next_settlement_no,
     }
 
@@ -3919,9 +3917,12 @@ def add_supplier_settlement_from_advance(request, advance_id):
         description = (request.POST.get("description") or "").strip()
         grn_id = request.POST.get("grn") or None
         selected_grn = GRN.objects.filter(id=grn_id, supplier=advance.supplier, status="approved").first() if grn_id else None
+        project_id = request.POST.get("project") or None
+        selected_project = Project.objects.filter(id=project_id, is_active=True).first() if project_id else None
         actual_amount = to_decimal(request.POST.get("actual_amount") or 0)
         expense_gl_id = request.POST.get("expense_gl") or None
         note = (request.POST.get("note") or "").strip()
+        context["selected_project_id"] = project_id
 
         if selected_grn:
             actual_amount = selected_grn.total_value
@@ -3951,7 +3952,7 @@ def add_supplier_settlement_from_advance(request, advance_id):
             settlement_no=next_settlement_no,
             advance=advance,
             supplier=advance.supplier,
-            project=(selected_grn.purchase_order.project if selected_grn and selected_grn.purchase_order and selected_grn.purchase_order.project else advance.project),
+            project=(selected_project or (selected_grn.purchase_order.project if selected_grn and selected_grn.purchase_order and selected_grn.purchase_order.project else advance.project)),
             grn=selected_grn,
             settlement_date=settlement_date,
             description=description,
@@ -4096,13 +4097,11 @@ def reject_purchase_order(request, po_id):
 @user_passes_test(can_use_project)
 def add_purchase_order(request):
     suppliers = Supplier.objects.filter(is_active=True).order_by("name")
-    projects = Project.objects.filter(is_active=True).order_by("-id")
     next_po_no = generate_purchase_order_no()
 
     items = Item.objects.order_by("item_code")
     context = {
         "suppliers": suppliers,
-        "projects": projects,
         "items": items,
         "next_po_no": next_po_no,
     }
@@ -4112,7 +4111,6 @@ def add_purchase_order(request):
         delivery_date_required = request.POST.get("delivery_date_required") or None
 
         supplier_id = request.POST.get("supplier") or None
-        project_id = request.POST.get("project") or None
 
         buyer_company_name = (request.POST.get("buyer_company_name") or "").strip()
         buyer_address = (request.POST.get("buyer_address") or "").strip()
