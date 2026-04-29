@@ -122,6 +122,7 @@ urlpatterns = [
     # =========================
     path('project-invoices/', views.project_invoice_list, name='project_invoice_list'),
     path('project-invoices/add/', views.add_project_invoice, name='add_project_invoice'),
+    path('project-invoices/<int:invoice_id>/edit/', views.edit_project_invoice, name='edit_project_invoice'),
     path('project-invoices/<int:invoice_id>/', views.project_invoice_detail, name='project_invoice_detail'),
     path('project-invoices/<int:invoice_id>/add-payment/', views.add_project_invoice_payment, name='add_project_invoice_payment'),
     path('project-invoices/<int:invoice_id>/print/', views.print_project_invoice, name='print_project_invoice'),

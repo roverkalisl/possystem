@@ -120,6 +120,10 @@
                     {% if is_owner %}
                     <td>
                         {% if invoice.is_active %}
+                            <a href="{% url 'edit_project_invoice' invoice.id %}"
+                               class="btn btn-sm btn-outline-secondary me-1">
+                               Edit
+                            </a>
                             <a href="{% url 'delete_project_invoice' invoice.id %}"
                                class="btn btn-sm btn-outline-danger"
                                onclick="return confirm('Deactivate this invoice?')">

@@ -2714,7 +2714,7 @@ def edit_employee(request, employee_id):
 # =========================
 @user_passes_test(can_use_income)
 def project_invoice_list(request):
-    invoices = ProjectInvoice.objects.filter(is_active=True).select_related(
+    invoices = ProjectInvoice.objects.all().select_related(
         "project", "created_by"
     ).order_by("-invoice_date", "-id")
 
@@ -2725,6 +2725,8 @@ def project_invoice_list(request):
     show_inactive = request.GET.get("show_inactive") == "1"
     if show_inactive:
         invoices = invoices.filter(is_active=False)
+    else:
+        invoices = invoices.filter(is_active=True)
 
     projects = Project.objects.filter(is_active=True).order_by("-id")
 
@@ -2737,6 +2739,7 @@ def project_invoice_list(request):
         "projects": projects,
         "selected_project": project_id,
         "show_inactive": show_inactive,
+        "is_owner": is_owner(request.user),
         "total_invoice_amount": total_invoice_amount,
         "total_paid_amount": total_paid_amount,
         "total_balance_amount": total_balance_amount,
@@ -2855,6 +2858,140 @@ def add_project_invoice(request):
     return render(request, "pos/add_project_invoice.html", {
         "projects": projects,
         "items": items,
+    })
+
+
+@user_passes_test(can_use_income)
+def edit_project_invoice(request, invoice_id):
+    invoice = get_object_or_404(ProjectInvoice, id=invoice_id, is_active=True)
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+    items = Item.objects.filter(is_active=True).order_by("name")
+    invoice_items = invoice.items.all()
+
+    if request.method == "POST":
+        project_id = request.POST.get("project")
+        invoice_date = request.POST.get("invoice_date") or timezone.now().date()
+        bill_to_name = (request.POST.get("bill_to_name") or "").strip()
+        bill_to_address = (request.POST.get("bill_to_address") or "").strip()
+        invoice_type = request.POST.get("invoice_type") or "advance"
+        note = (request.POST.get("note") or "").strip()
+
+        item_codes = request.POST.getlist("item_code[]")
+        descriptions = request.POST.getlist("description[]")
+        qtys = request.POST.getlist("qty[]")
+        prices = request.POST.getlist("price_each[]")
+
+        if not project_id:
+            messages.error(request, "Project is required.")
+            return render(request, "pos/add_project_invoice.html", {
+                "projects": projects,
+                "items": items,
+                "invoice": invoice,
+                "invoice_items": invoice_items,
+            })
+
+        cleaned_rows = []
+        total_amount = Decimal("0")
+        row_count = max(len(descriptions), len(qtys), len(prices), len(item_codes))
+
+        for i in range(row_count):
+            item_code = (item_codes[i] if i < len(item_codes) else "").strip()
+            description = (descriptions[i] if i < len(descriptions) else "").strip()
+            qty = to_decimal(qtys[i] if i < len(qtys) else 0)
+            price_each = to_decimal(prices[i] if i < len(prices) else 0)
+
+            if not item_code and not description and qty <= 0 and price_each <= 0:
+                continue
+
+            if not description:
+                messages.error(request, f"Description is required for row {i+1}.")
+                return render(request, "pos/add_project_invoice.html", {
+                    "projects": projects,
+                    "items": items,
+                    "invoice": invoice,
+                    "invoice_items": invoice_items,
+                })
+
+            if qty <= 0:
+                messages.error(request, f"Qty must be greater than 0 in row {i+1}.")
+                return render(request, "pos/add_project_invoice.html", {
+                    "projects": projects,
+                    "items": items,
+                    "invoice": invoice,
+                    "invoice_items": invoice_items,
+                })
+
+            if price_each < 0:
+                messages.error(request, f"Price cannot be negative in row {i+1}.")
+                return render(request, "pos/add_project_invoice.html", {
+                    "projects": projects,
+                    "items": items,
+                    "invoice": invoice,
+                    "invoice_items": invoice_items,
+                })
+
+            amount = qty * price_each
+            total_amount += amount
+
+            cleaned_rows.append({
+                "item_code": item_code or None,
+                "description": description,
+                "qty": qty,
+                "price_each": price_each,
+                "amount": amount,
+            })
+
+        if not cleaned_rows:
+            messages.error(request, "At least one invoice item is required.")
+            return render(request, "pos/add_project_invoice.html", {
+                "projects": projects,
+                "items": items,
+                "invoice": invoice,
+                "invoice_items": invoice_items,
+            })
+
+        if total_amount < invoice.paid_amount:
+            messages.error(request, "Invoice total cannot be less than the amount already paid.")
+            return render(request, "pos/add_project_invoice.html", {
+                "projects": projects,
+                "items": items,
+                "invoice": invoice,
+                "invoice_items": invoice_items,
+            })
+
+        first_description = cleaned_rows[0]["description"]
+
+        invoice.project_id = project_id
+        invoice.invoice_date = invoice_date
+        invoice.bill_to_name = bill_to_name
+        invoice.bill_to_address = bill_to_address
+        invoice.invoice_type = invoice_type
+        invoice.description = first_description
+        invoice.qty = Decimal("1.00")
+        invoice.price_each = total_amount
+        invoice.total_amount = total_amount
+        invoice.note = note
+        invoice.save()
+
+        invoice.items.all().delete()
+        for row in cleaned_rows:
+            ProjectInvoiceItem.objects.create(
+                invoice=invoice,
+                item_code=row["item_code"],
+                description=row["description"],
+                qty=row["qty"],
+                price_each=row["price_each"],
+                amount=row["amount"],
+            )
+
+        messages.success(request, "Invoice updated successfully.")
+        return redirect("project_invoice_detail", invoice_id=invoice.id)
+
+    return render(request, "pos/add_project_invoice.html", {
+        "projects": projects,
+        "items": items,
+        "invoice": invoice,
+        "invoice_items": invoice_items,
     })
 
 
