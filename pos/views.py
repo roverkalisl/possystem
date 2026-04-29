@@ -2853,7 +2853,7 @@ def add_project_invoice(request):
         invoice.save()
 
         messages.success(request, f"Invoice created successfully. Invoice No: {invoice.invoice_no}")
-        return redirect("print_project_invoice", invoice_id=invoice.id)
+        return redirect("add_project_invoice")
 
     return render(request, "pos/add_project_invoice.html", {
         "projects": projects,
