@@ -31,6 +31,7 @@
                         </option>
                     {% endfor %}
                 </select>
+                <button type="button" id="load-entries-button" class="btn btn-outline-primary btn-sm mt-2">Load Entries</button>
             </div>
 
             <div class="col-md-12">
@@ -54,7 +55,7 @@
                         </thead>
                         <tbody>
                             {% for expense in expense_entries %}
-                            <tr class="entry-row entry-expense">
+                            <tr class="entry-row entry-expense" data-project-id="{{ expense.project.id }}">
                                 <td><input type="checkbox" name="selected_entries" value="{{ expense.id }}" class="entry-checkbox" {% if expense.id|stringformat:"s" in selected_entry_ids %}checked{% endif %}></td>
                                 <td>EXP {{ expense.expense_no }}</td>
                                 <td>{{ expense.project.project_id }}</td>
@@ -72,7 +73,7 @@
                             </tr>
                             {% endfor %}
                             {% for income in income_entries %}
-                            <tr class="entry-row entry-income">
+                            <tr class="entry-row entry-income" data-project-id="{{ income.project.id }}">
                                 <td><input type="checkbox" name="selected_entries" value="{{ income.id }}" class="entry-checkbox" {% if income.id|stringformat:"s" in selected_entry_ids %}checked{% endif %}></td>
                                 <td>INC {{ income.id }}</td>
                                 <td>{{ income.project.project_id }}</td>
@@ -106,10 +107,10 @@
 
             <div class="col-md-6">
                 <label class="form-label">Approved By</label>
-                <select name="approved_by" class="form-select">
-                    <option value="">Not Approved</option>
+                <select name="approved_by" class="form-select" {% if not users.exists %}disabled{% endif %}>
+                    <option value="" {% if not selected_approved_by %}selected{% endif %}>Not Approved</option>
                     {% for user in users %}
-                        <option value="{{ user.id }}">{{ user.username }}</option>
+                        <option value="{{ user.id }}" {% if selected_approved_by == user.id|stringformat:"s" %}selected{% endif %}>{{ user.username }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -148,10 +149,12 @@
         let visibleRowCount = 0;
 
         entryRows.forEach(row => {
+            const rowProjectId = row.dataset.projectId;
             const isExpense = row.classList.contains("entry-expense");
             const isIncome = row.classList.contains("entry-income");
             const showType = (type === "expense" && isExpense) || (type === "income" && isIncome);
-            const shouldShow = sourceId && showType;
+            const showProject = sourceId && rowProjectId === sourceId;
+            const shouldShow = showType && showProject;
             const checkbox = row.querySelector(".entry-checkbox");
 
             row.style.display = shouldShow ? "table-row" : "none";
@@ -185,8 +188,11 @@
         });
     }
 
+    const loadEntriesButton = document.getElementById("load-entries-button");
+
     transferType.addEventListener("change", updateEntryList);
     sourceProject.addEventListener("change", updateEntryList);
+    loadEntriesButton.addEventListener("click", updateEntryList);
     selectAllCheckbox.addEventListener("change", toggleSelectAll);
 
     updateEntryList();

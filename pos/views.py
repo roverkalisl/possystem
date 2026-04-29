@@ -2239,14 +2239,20 @@ def project_transfer_list(request):
 
 @user_passes_test(can_use_project)
 def add_project_transfer(request):
-    projects = Project.objects.filter(is_active=True, status="ongoing").order_by("-id")
+    projects = Project.objects.order_by("project_id", "project_name")
     expense_entries = ProjectExpense.objects.filter(is_active=True).select_related("project").order_by("-expense_date", "-id")
     income_entries = ProjectIncome.objects.select_related("project").order_by("-income_date", "-id")
-    users = User.objects.filter(is_active=True).order_by("username")
+    if is_owner(request.user):
+        users = User.objects.filter(id=request.user.id)
+    else:
+        users = User.objects.none()
 
     selected_transfer_type = request.GET.get("type", "expense")
     selected_source_project = request.GET.get("source_project")
     selected_entry_ids = request.GET.getlist("selected_entries")
+    selected_approved_by = request.GET.get("approved_by") if is_owner(request.user) else None
+    if request.method != "POST" and is_owner(request.user):
+        selected_approved_by = str(request.user.id)
 
     if request.method == "POST":
         transfer_type = request.POST.get("transfer_type") or "expense"
@@ -2259,6 +2265,7 @@ def add_project_transfer(request):
         notes = (request.POST.get("notes") or "").strip()
 
         selected_transfer_type = transfer_type
+        selected_approved_by = approved_by_id if is_owner(request.user) else None
 
         if transfer_type not in ["expense", "income"]:
             messages.error(request, "Invalid transfer type.")
@@ -2387,6 +2394,7 @@ def add_project_transfer(request):
         "selected_transfer_type": selected_transfer_type,
         "selected_source_project": selected_source_project,
         "selected_entry_ids": selected_entry_ids,
+        "selected_approved_by": selected_approved_by,
         "today": timezone.now().date(),
     })
 # =========================
