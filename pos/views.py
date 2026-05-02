@@ -7,7 +7,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User, Group
 from django.db import transaction
-from django.db.models import Q, Sum, F
+from django.db.models import Q, Sum, F, Count, Max
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
@@ -4535,6 +4535,160 @@ def supplier_settlement_list(request):
         "grand_pending_actual": grand_pending_actual,
         "grand_approved_balance_due": grand_approved_balance_due,
         "grand_pending_balance_due": grand_pending_balance_due,
+    })
+
+@user_passes_test(can_use_project)
+def supplier_advance_summary(request):
+    query = request.GET.get("q", "").strip()
+    supplier_id = request.GET.get("supplier", "").strip()
+    project_id = request.GET.get("project", "").strip()
+    status_filter = request.GET.get("status", "").strip()
+    from_date_str = request.GET.get("from_date", "").strip()
+    to_date_str = request.GET.get("to_date", "").strip()
+
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+    projects = Project.objects.filter(is_active=True).order_by("project_id")
+
+    advances = SupplierAdvance.objects.filter(is_active=True)
+    settlements = SupplierSettlement.objects.all()
+
+    if query:
+        supplier_ids = Supplier.objects.filter(name__icontains=query).values_list("id", flat=True)
+        advances = advances.filter(supplier_id__in=supplier_ids)
+        settlements = settlements.filter(supplier_id__in=supplier_ids)
+
+    if supplier_id:
+        advances = advances.filter(supplier_id=supplier_id)
+        settlements = settlements.filter(supplier_id=supplier_id)
+
+    if project_id:
+        advances = advances.filter(project_id=project_id)
+        settlements = settlements.filter(project_id=project_id)
+
+    from_date = None
+    to_date = None
+    try:
+        if from_date_str:
+            from_date = datetime.strptime(from_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        from_date = None
+    try:
+        if to_date_str:
+            to_date = datetime.strptime(to_date_str, "%Y-%m-%d").date()
+    except ValueError:
+        to_date = None
+
+    if from_date:
+        advances = advances.filter(advance_date__gte=from_date)
+        settlements = settlements.filter(settlement_date__gte=from_date)
+    if to_date:
+        advances = advances.filter(advance_date__lte=to_date)
+        settlements = settlements.filter(settlement_date__lte=to_date)
+
+    if status_filter in ["pending", "approved", "rejected"]:
+        settlements = settlements.filter(approval_status=status_filter)
+
+    advance_summary = advances.values("supplier_id").annotate(
+        total_advance=Sum("amount"),
+        advance_count=Count("id"),
+        latest_advance_date=Max("advance_date"),
+    )
+    settlement_summary = settlements.values("supplier_id").annotate(
+        total_approved_settled=Sum("actual_amount", filter=Q(approval_status="approved")),
+        total_pending_settlement=Sum("actual_amount", filter=Q(approval_status="pending")),
+        settlement_count=Count("id"),
+        latest_settlement_date=Max("settlement_date"),
+    )
+
+    advance_map = {
+        row["supplier_id"]: row for row in advance_summary
+    }
+    settlement_map = {
+        row["supplier_id"]: row for row in settlement_summary
+    }
+
+    supplier_ids = set(advance_map) | set(settlement_map)
+    supplier_rows = []
+    grand_total_advance = Decimal("0")
+    grand_total_approved_settled = Decimal("0")
+    grand_total_pending_settlement = Decimal("0")
+    grand_total_remaining_balance = Decimal("0")
+    grand_advance_records = 0
+    grand_settlement_records = 0
+
+    if supplier_ids:
+        suppliers = suppliers.filter(id__in=supplier_ids)
+
+    for supplier in suppliers:
+        advance_data = advance_map.get(supplier.id, {})
+        settlement_data = settlement_map.get(supplier.id, {})
+
+        total_advance = advance_data.get("total_advance") or Decimal("0")
+        total_approved_settled = settlement_data.get("total_approved_settled") or Decimal("0")
+        total_pending_settlement = settlement_data.get("total_pending_settlement") or Decimal("0")
+        remaining_balance = total_advance - total_approved_settled
+        advance_count = advance_data.get("advance_count") or 0
+        settlement_count = settlement_data.get("settlement_count") or 0
+        latest_advance_date = advance_data.get("latest_advance_date")
+        latest_settlement_date = settlement_data.get("latest_settlement_date")
+
+        supplier_rows.append({
+            "supplier": supplier,
+            "total_advance": total_advance,
+            "total_approved_settled": total_approved_settled,
+            "total_pending_settlement": total_pending_settlement,
+            "remaining_balance": remaining_balance,
+            "advance_count": advance_count,
+            "settlement_count": settlement_count,
+            "latest_advance_date": latest_advance_date,
+            "latest_settlement_date": latest_settlement_date,
+        })
+
+        grand_total_advance += total_advance
+        grand_total_approved_settled += total_approved_settled
+        grand_total_pending_settlement += total_pending_settlement
+        grand_total_remaining_balance += remaining_balance
+        grand_advance_records += advance_count
+        grand_settlement_records += settlement_count
+
+    return render(request, "pos/supplier_advance_summary.html", {
+        "supplier_rows": supplier_rows,
+        "suppliers": Supplier.objects.filter(is_active=True).order_by("name"),
+        "projects": projects,
+        "query": query,
+        "selected_supplier": supplier_id,
+        "selected_project": project_id,
+        "status_filter": status_filter,
+        "from_date": from_date_str,
+        "to_date": to_date_str,
+        "grand_total_advance": grand_total_advance,
+        "grand_total_approved_settled": grand_total_approved_settled,
+        "grand_total_pending_settlement": grand_total_pending_settlement,
+        "grand_total_remaining_balance": grand_total_remaining_balance,
+        "grand_advance_records": grand_advance_records,
+        "grand_settlement_records": grand_settlement_records,
+    })
+
+@user_passes_test(can_use_project)
+def supplier_advance_summary_detail(request, supplier_id):
+    supplier = get_object_or_404(Supplier, id=supplier_id, is_active=True)
+    advances = supplier.advances.filter(is_active=True).select_related("project").order_by("-advance_date", "-id")
+    settlements = supplier.settlements.select_related("advance", "project").order_by("-settlement_date", "-id")
+
+    total_advance = advances.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+    total_approved_settled = settlements.filter(approval_status="approved").aggregate(total=Sum("actual_amount"))["total"] or Decimal("0")
+    total_pending_settlement = settlements.filter(approval_status="pending").aggregate(total=Sum("actual_amount"))["total"] or Decimal("0")
+    remaining_balance = total_advance - total_approved_settled
+
+    return render(request, "pos/supplier_advance_summary_detail.html", {
+        "supplier": supplier,
+        "advances": advances,
+        "settlements": settlements,
+        "total_advance": total_advance,
+        "total_approved_settled": total_approved_settled,
+        "total_pending_settlement": total_pending_settlement,
+        "remaining_balance": remaining_balance,
+        "is_owner": is_owner(request.user),
     })
 
 @user_passes_test(can_use_project)

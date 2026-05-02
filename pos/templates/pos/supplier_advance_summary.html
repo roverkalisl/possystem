@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+{% block title %}Supplier-wise Advance Details{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="page-title mb-0">Supplier-wise Advance Details</h3>
+        <p class="text-muted mb-0">Summary of advances, approved settlements, pending settlements, and balances by supplier.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'supplier_advance_list' %}" class="btn btn-secondary">Advance List</a>
+        <a href="{% url 'supplier_settlement_list' %}" class="btn btn-secondary">Settlement Ledger</a>
+    </div>
+</div>
+
+<div class="card card-soft mb-3">
+    <div class="card-body">
+        <form method="get" class="row g-2">
+            <div class="col-md-3">
+                <input type="text" name="q" value="{{ query }}" class="form-control" placeholder="Search supplier">
+            </div>
+            <div class="col-md-2">
+                <select name="supplier" class="form-select">
+                    <option value="">All Suppliers</option>
+                    {% for supplier in suppliers %}
+                    <option value="{{ supplier.id }}" {% if supplier.id|stringformat:"s" == selected_supplier %}selected{% endif %}>{{ supplier.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="project" class="form-select">
+                    <option value="">All Projects</option>
+                    {% for project in projects %}
+                    <option value="{{ project.id }}" {% if project.id|stringformat:"s" == selected_project %}selected{% endif %}>{{ project.project_id }} - {{ project.project_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select name="status" class="form-select">
+                    <option value="">All Statuses</option>
+                    <option value="approved" {% if status_filter == "approved" %}selected{% endif %}>Approved Settlements</option>
+                    <option value="pending" {% if status_filter == "pending" %}selected{% endif %}>Pending Settlements</option>
+                    <option value="rejected" {% if status_filter == "rejected" %}selected{% endif %}>Rejected Settlements</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <input type="date" name="from_date" value="{{ from_date }}" class="form-control" placeholder="From date">
+            </div>
+            <div class="col-md-2">
+                <input type="date" name="to_date" value="{{ to_date }}" class="form-control" placeholder="To date">
+            </div>
+            <div class="col-md-1 d-grid">
+                <button type="submit" class="btn btn-outline-primary">Filter</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card card-soft">
+            <div class="card-body">
+                <div class="text-muted small">Total Advance Amount</div>
+                <div class="fs-5 text-money">{{ grand_total_advance|money }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft">
+            <div class="card-body">
+                <div class="text-muted small">Total Approved Settled</div>
+                <div class="fs-5 text-money">{{ grand_total_approved_settled|money }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft">
+            <div class="card-body">
+                <div class="text-muted small">Total Pending Settlement</div>
+                <div class="fs-5 text-money">{{ grand_total_pending_settlement|money }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft">
+            <div class="card-body">
+                <div class="text-muted small">Total Remaining Balance</div>
+                <div class="fs-5 text-money">{{ grand_total_remaining_balance|money }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-soft">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Supplier</th>
+                        <th class="text-end">Total Advance</th>
+                        <th class="text-end">Approved Settled</th>
+                        <th class="text-end">Pending Settlement</th>
+                        <th class="text-end">Remaining Balance</th>
+                        <th class="text-center">Advance Records</th>
+                        <th class="text-center">Settlement Records</th>
+                        <th class="text-center">Last Advance</th>
+                        <th class="text-center">Last Settlement</th>
+                        <th class="text-center">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in supplier_rows %}
+                    <tr>
+                        <td>{{ row.supplier.name }}</td>
+                        <td class="text-end">{{ row.total_advance|money }}</td>
+                        <td class="text-end">{{ row.total_approved_settled|money }}</td>
+                        <td class="text-end">{{ row.total_pending_settlement|money }}</td>
+                        <td class="text-end">{{ row.remaining_balance|money }}</td>
+                        <td class="text-center">{{ row.advance_count }}</td>
+                        <td class="text-center">{{ row.settlement_count }}</td>
+                        <td class="text-center">{% if row.latest_advance_date %}{{ row.latest_advance_date }}{% else %}-{% endif %}</td>
+                        <td class="text-center">{% if row.latest_settlement_date %}{{ row.latest_settlement_date }}{% else %}-{% endif %}</td>
+                        <td class="text-center">
+                            <a href="{% url 'supplier_advance_summary_detail' row.supplier.id %}" class="btn btn-sm btn-outline-primary">View Details</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center text-muted py-4">No supplier advance summary found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="fw-bold">
+                        <td>Totals</td>
+                        <td class="text-end">{{ grand_total_advance|money }}</td>
+                        <td class="text-end">{{ grand_total_approved_settled|money }}</td>
+                        <td class="text-end">{{ grand_total_pending_settlement|money }}</td>
+                        <td class="text-end">{{ grand_total_remaining_balance|money }}</td>
+                        <td class="text-center">{{ grand_advance_records }}</td>
+                        <td class="text-center">{{ grand_settlement_records }}</td>
+                        <td colspan="3"></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+{% block title %}{{ supplier.name }} Advance Details{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="page-title mb-0">{{ supplier.name }} - Advance Details</h3>
+        <p class="text-muted mb-0">Detailed advances and settlements for this supplier.</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'supplier_advance_summary' %}" class="btn btn-secondary">Back to Summary</a>
+        <a href="{% url 'supplier_advance_list' %}" class="btn btn-secondary">Advance List</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card card-soft">
+            <div class="card-body">
+                <div class="text-muted small">Total Advance Amount</div>
+                <div class="fs-5 text-money">{{ total_advance|money }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft">
+            <div class="card-body">
+                <div class="text-muted small">Approved Settled</div>
+                <div class="fs-5 text-money">{{ total_approved_settled|money }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft">
+            <div class="card-body">
+                <div class="text-muted small">Pending Settlement</div>
+                <div class="fs-5 text-money">{{ total_pending_settlement|money }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft">
+            <div class="card-body">
+                <div class="text-muted small">Remaining Balance</div>
+                <div class="fs-5 text-money">{{ remaining_balance|money }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card card-soft mb-3">
+    <div class="card-header">
+        <strong>Supplier Advances</strong>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Advance No</th>
+                        <th>Project</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-end">Settled</th>
+                        <th class="text-end">Balance</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for advance in advances %}
+                    <tr>
+                        <td>{{ advance.advance_date }}</td>
+                        <td>{{ advance.advance_no }}</td>
+                        <td>{% if advance.project %}{{ advance.project.project_id }} - {{ advance.project.project_name }}{% else %}-{% endif %}</td>
+                        <td class="text-end">{{ advance.amount|money }}</td>
+                        <td class="text-end">{{ advance.settled_amount|money }}</td>
+                        <td class="text-end">{{ advance.balance_amount|money }}</td>
+                        <td>{{ advance.status }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center text-muted py-4">No advances found for this supplier.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="card card-soft">
+    <div class="card-header">
+        <strong>Supplier Settlements</strong>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Settlement No</th>
+                        <th>Advance No</th>
+                        <th>Project</th>
+                        <th>Description</th>
+                        <th class="text-end">Actual Amount</th>
+                        <th class="text-end">Advance Applied</th>
+                        <th class="text-end">Balance Due</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for settlement in settlements %}
+                    <tr>
+                        <td>{{ settlement.settlement_date }}</td>
+                        <td>{{ settlement.settlement_no }}</td>
+                        <td>{{ settlement.advance.advance_no }}</td>
+                        <td>{% if settlement.project %}{{ settlement.project.project_id }} - {{ settlement.project.project_name }}{% else %}-{% endif %}</td>
+                        <td>{{ settlement.description }}</td>
+                        <td class="text-end">{{ settlement.actual_amount|money }}</td>
+                        <td class="text-end">{{ settlement.advance_applied|money }}</td>
+                        <td class="text-end">{{ settlement.balance_due|money }}</td>
+                        <td>{{ settlement.approval_status }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="9" class="text-center text-muted py-4">No settlements found for this supplier.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
