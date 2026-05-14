@@ -104,6 +104,11 @@
                                 <a href="{% url 'print_purchase_order' o.id %}" class="btn btn-sm btn-outline-dark" target="_blank">
                                     Print
                                 </a>
+                                {% if o.status == 'approved' %}
+                                <a href="{% url 'import_items_from_po' o.id %}" class="btn btn-sm btn-outline-info">
+                                    Import Items
+                                </a>
+                                {% endif %}
 
                                 {% if is_owner and o.status == 'pending' %}
                                 <form method="post" action="{% url 'approve_purchase_order' o.id %}" class="d-inline">

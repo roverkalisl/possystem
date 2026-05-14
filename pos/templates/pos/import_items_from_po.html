@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Import Items from PO{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Import Items from Purchase Order</h4>
+        <div>
+            <a href="{% url 'purchase_order_list' %}" class="btn btn-secondary btn-sm">Back to POs</a>
+            <a href="{% url 'item_list' %}" class="btn btn-secondary btn-sm">Item List</a>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
+        </div>
+    </div>
+
+    <div class="mb-4">
+        <h5>PO Details</h5>
+        <div class="row">
+            <div class="col-md-6">
+                <strong>PO No:</strong> {{ po.po_no }}
+            </div>
+            <div class="col-md-6">
+                <strong>Supplier:</strong> {{ po.supplier.name }}
+            </div>
+            <div class="col-md-6">
+                <strong>Date:</strong> {{ po.po_date }}
+            </div>
+            <div class="col-md-6">
+                <strong>Status:</strong> 
+                {% if po.status == "approved" %}
+                    <span class="badge bg-success">Approved</span>
+                {% else %}
+                    <span class="badge bg-warning">{{ po.status|title }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if po_items %}
+    <form method="post">
+        {% csrf_token %}
+        
+        <h5>Select Items to Import</h5>
+        <p class="text-muted">Only items that are not yet linked to inventory are shown below.</p>
+        
+        <div class="table-responsive">
+            <table class="table table-bordered">
+                <thead class="table-light">
+                    <tr>
+                        <th width="50">
+                            <input type="checkbox" id="select_all" onchange="toggleAll(this)">
+                        </th>
+                        <th>Description</th>
+                        <th>Quantity</th>
+                        <th>Unit Price</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in po_items %}
+                    <tr>
+                        <td>
+                            <input type="checkbox" name="selected_items" value="{{ item.id }}" class="item-checkbox">
+                        </td>
+                        <td>{{ item.description }}</td>
+                        <td>{{ item.quantity }}</td>
+                        <td>{{ item.unit_price|money }}</td>
+                        <td>{{ item.total|money }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary">Import Selected Items</button>
+            <a href="{% url 'purchase_order_list' %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+    {% else %}
+    <div class="alert alert-info">
+        <h5>No items to import</h5>
+        <p>All items in this PO are already linked to inventory items.</p>
+        <a href="{% url 'item_list' %}" class="btn btn-primary">View Item List</a>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleAll(source) {
+    const checkboxes = document.querySelectorAll('.item-checkbox');
+    checkboxes.forEach(cb => cb.checked = source.checked);
+}
+</script>
+{% endblock %}

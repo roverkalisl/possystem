@@ -164,6 +164,7 @@ urlpatterns = [
     path("purchase-orders/<int:po_id>/reject/", views.reject_purchase_order, name="reject_purchase_order"),
     path("purchase-orders/<int:po_id>/data/", views.purchase_order_data, name="purchase_order_data"),
     path("purchase-orders/<int:po_id>/print/receipt/", views.print_purchase_order_receipt, name="print_purchase_order_receipt"),
+    path("purchase-orders/<int:po_id>/import-items/", views.import_items_from_po, name="import_items_from_po"),
     path("petty-cash-ledger/", views.petty_cash_ledger_report, name="petty_cash_ledger_report"),
     path("supplier-advances/<int:advance_id>/edit/", views.edit_supplier_advance, name="edit_supplier_advance"),
     path("sales-return-list/", views.sales_return_list, name="sales_return_list"),
@@ -178,6 +179,7 @@ urlpatterns = [
     path("grn/<int:grn_id>/update-status/", views.update_grn_status, name="update_grn_status"),
     path("assets/", views.company_asset_list, name="company_asset_list"),
     path("assets/<int:asset_id>/", views.company_asset_detail, name="company_asset_detail"),
+    path("assets/<int:asset_id>/edit/", views.edit_company_asset, name="edit_company_asset"),
     path("assets/<int:asset_id>/approve/", views.approve_company_asset, name="approve_company_asset"),
     path("assets/<int:asset_id>/reject/", views.reject_company_asset, name="reject_company_asset"),
     

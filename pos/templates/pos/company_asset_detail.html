@@ -9,6 +9,9 @@
         <div class="text-muted">{{ asset.asset_no }} - {{ asset.asset_name }}</div>
     </div>
     <div>
+        {% if can_manage_items %}
+        <a href="{% url 'edit_company_asset' asset.id %}" class="btn btn-primary btn-sm me-2">Edit Asset</a>
+        {% endif %}
         <a href="{% url 'company_asset_list' %}" class="btn btn-secondary btn-sm">Back to Assets</a>
         <a href="{% url 'dashboard' %}" class="btn btn-secondary btn-sm">Dashboard</a>
     </div>

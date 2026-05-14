@@ -4450,6 +4450,46 @@ def print_purchase_order_receipt(request, po_id):
         "po_items": po_items,
     })
 
+@user_passes_test(can_manage_items)
+def import_items_from_po(request, po_id):
+    po = get_object_or_404(PurchaseOrder, id=po_id)
+    
+    if request.method == "POST":
+        selected_item_ids = request.POST.getlist("selected_items")
+        
+        if not selected_item_ids:
+            messages.error(request, "Please select at least one item to import.")
+            return redirect("import_items_from_po", po_id=po.id)
+        
+        imported_count = 0
+        for item_id in selected_item_ids:
+            po_item = po.items.filter(id=item_id).first()
+            if po_item and not po_item.item:
+                # Create new item
+                new_item = Item.objects.create(
+                    item_code=generate_next_item_code(),
+                    name=po_item.description,
+                    supplier=po.supplier,
+                    unit="pcs",
+                    cost_price=po_item.unit_price,
+                    selling_price=po_item.unit_price,
+                    stock=Decimal("0"),
+                    updated_by=request.user,
+                )
+                po_item.item = new_item
+                po_item.save(update_fields=["item"])
+                imported_count += 1
+        
+        messages.success(request, f"Successfully imported {imported_count} item(s) from PO {po.po_no}.")
+        return redirect("item_list")
+    
+    po_items = po.items.filter(item__isnull=True).all()  # Only items not yet linked to inventory
+    
+    return render(request, "pos/import_items_from_po.html", {
+        "po": po,
+        "po_items": po_items,
+    })
+
 @user_passes_test(can_use_project)
 def supplier_settlement_list(request):
     query = request.GET.get("q", "").strip()
@@ -5046,6 +5086,44 @@ def company_asset_detail(request, asset_id):
     return render(request, "pos/company_asset_detail.html", {
         "asset": asset,
         "is_owner": is_owner(request.user),
+        "can_manage_items": can_manage_items(request.user),
+    })
+
+
+@user_passes_test(can_manage_items)
+def edit_company_asset(request, asset_id):
+    asset = get_object_or_404(CompanyAsset, id=asset_id)
+    suppliers = Supplier.objects.order_by("name")
+    users = User.objects.filter(is_active=True).order_by("username")
+
+    if request.method == "POST":
+        asset.asset_name = (request.POST.get("asset_name") or asset.asset_name).strip()
+        asset.purchase_date = request.POST.get("purchase_date") or asset.purchase_date
+        asset.purchase_value = to_decimal(request.POST.get("purchase_value") or asset.purchase_value)
+
+        supplier_id = request.POST.get("supplier")
+        if supplier_id:
+            supplier = Supplier.objects.filter(id=supplier_id).first()
+            if supplier:
+                asset.supplier = supplier
+
+        asset.serial_number = request.POST.get("serial_number") or None
+        asset.model_number = request.POST.get("model_number") or None
+        asset.warranty_details = request.POST.get("warranty_details") or None
+
+        responsible_person_id = request.POST.get("responsible_person")
+        asset.responsible_person = User.objects.filter(id=responsible_person_id).first() if responsible_person_id else None
+
+        asset.remarks = request.POST.get("remarks") or None
+        asset.save()
+
+        messages.success(request, "Asset register updated successfully.")
+        return redirect("company_asset_detail", asset_id=asset.id)
+
+    return render(request, "pos/company_asset_edit.html", {
+        "asset": asset,
+        "suppliers": suppliers,
+        "users": users,
     })
 
 

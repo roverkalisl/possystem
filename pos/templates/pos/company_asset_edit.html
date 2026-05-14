@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Edit Asset {{ asset.asset_no }}{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="app-page-title">Edit Company Asset</h4>
+            <div class="text-muted">{{ asset.asset_no }} - {{ asset.asset_name }}</div>
+        </div>
+        <div>
+            <a href="{% url 'company_asset_detail' asset.id %}" class="btn btn-secondary btn-sm">Cancel</a>
+        </div>
+    </div>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label for="asset_name" class="form-label">Asset Name *</label>
+                <input type="text" id="asset_name" name="asset_name" class="form-control" value="{{ asset.asset_name }}" required>
+            </div>
+            <div class="col-md-3">
+                <label for="purchase_date" class="form-label">Purchase Date</label>
+                <input type="date" id="purchase_date" name="purchase_date" class="form-control" value="{{ asset.purchase_date|date:'Y-m-d' }}">
+            </div>
+            <div class="col-md-3">
+                <label for="purchase_value" class="form-label">Purchase Value</label>
+                <input type="number" step="0.01" min="0" id="purchase_value" name="purchase_value" class="form-control" value="{{ asset.purchase_value }}">
+            </div>
+            <div class="col-md-6">
+                <label for="supplier" class="form-label">Supplier</label>
+                <select id="supplier" name="supplier" class="form-select">
+                    <option value="">Select supplier</option>
+                    {% for supplier in suppliers %}
+                    <option value="{{ supplier.id }}" {% if asset.supplier and asset.supplier.id == supplier.id %}selected{% endif %}>
+                        {{ supplier.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="responsible_person" class="form-label">Responsible Person</label>
+                <select id="responsible_person" name="responsible_person" class="form-select">
+                    <option value="">Unassigned</option>
+                    {% for user in users %}
+                    <option value="{{ user.id }}" {% if asset.responsible_person and asset.responsible_person.id == user.id %}selected{% endif %}>
+                        {{ user.get_full_name|default:user.username }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="serial_number" class="form-label">Serial Number</label>
+                <input type="text" id="serial_number" name="serial_number" class="form-control" value="{{ asset.serial_number }}">
+            </div>
+            <div class="col-md-4">
+                <label for="model_number" class="form-label">Model Number</label>
+                <input type="text" id="model_number" name="model_number" class="form-control" value="{{ asset.model_number }}">
+            </div>
+            <div class="col-md-4">
+                <label for="warranty_details" class="form-label">Warranty Details</label>
+                <input type="text" id="warranty_details" name="warranty_details" class="form-control" value="{{ asset.warranty_details }}">
+            </div>
+            <div class="col-12">
+                <label for="remarks" class="form-label">Remarks</label>
+                <textarea id="remarks" name="remarks" class="form-control" rows="4">{{ asset.remarks }}</textarea>
+            </div>
+        </div>
+
+        <div class="mt-4">
+            <button type="submit" class="btn btn-primary">Update Asset</button>
+            <a href="{% url 'company_asset_detail' asset.id %}" class="btn btn-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
