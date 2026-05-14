@@ -52,7 +52,7 @@
             </thead>
             <tbody>
                 {% for item in items %}
-                <tr>
+                <tr id="item-row-{{ item.id }}" class="{% if selected_item and item.id|stringformat:"s" == selected_item %}table-warning{% endif %}">
                     <td>{{ item.item_code }}</td>
                     <td>{{ item.name }}</td>
                     <td>{% if item.category %}{{ item.category.name }}{% else %}-{% endif %}</td>
@@ -92,4 +92,15 @@
         </table>
     </div>
 </div>
+
+{% if selected_item %}
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const selectedRow = document.getElementById("item-row-{{ selected_item }}");
+        if (selectedRow) {
+            selectedRow.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+    });
+</script>
+{% endif %}
 {% endblock %}

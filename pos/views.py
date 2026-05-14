@@ -1,4 +1,5 @@
 import json
+import re
 from decimal import Decimal, InvalidOperation
 from datetime import datetime
 
@@ -7,6 +8,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User, Group
 from django.db import transaction
+from django.urls import reverse
 from django.db.models import Q, Sum, F, Count, Max
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
@@ -73,8 +75,7 @@ def build_item_context(user):
     categories = Category.objects.filter(is_active=True).order_by("name")
     suppliers = Supplier.objects.filter(is_active=True).order_by("name")
     gl_list = GLMaster.objects.filter(is_active=True).order_by("gl_code")
-    last_item = Item.objects.order_by("-id").first()
-    next_item_code = f"ITM{((last_item.id + 1) if last_item else 1):05d}"
+    next_item_code = generate_next_item_code()
 
     return {
         "categories": categories,
@@ -82,6 +83,18 @@ def build_item_context(user):
         "gl_list": gl_list,
         "next_item_code": next_item_code,
     }
+
+def _increment_item_code(item_code):
+    item_code = str(item_code or "").strip()
+    match = re.match(r"^([A-Za-z]*)(\d+)$", item_code)
+    if match:
+        prefix = match.group(1) or ""
+        number = match.group(2)
+        next_number = int(number) + 1
+        return f"{prefix}{next_number:0{len(number)}d}"
+    if item_code.isdigit():
+        return str(int(item_code) + 1)
+    return "ITM00001"
 
 def to_decimal(val):
     try:
@@ -202,11 +215,8 @@ def generate_project_id(project_type):
 def generate_next_item_code():
     last_item = Item.objects.order_by("-id").first()
     if not last_item or not last_item.item_code:
-        return "1000000000"
-    try:
-        return str(int(str(last_item.item_code).strip()) + 1)
-    except Exception:
-        return "1000000000"
+        return "ITM00001"
+    return _increment_item_code(last_item.item_code)
 
 
 def generate_petty_cash_expense_no():
@@ -1052,6 +1062,7 @@ def add_item(request):
 @user_passes_test(can_manage_items)
 def item_list(request):
     query = request.GET.get("q", "").strip()
+    selected_item = request.GET.get("selected_item", "")
 
     items = Item.objects.filter(is_active=True).select_related(
         "category", "supplier", "retail_gl_account", "cost_gl_account"
@@ -1072,6 +1083,7 @@ def item_list(request):
         "items": items,
         "query": query,
         "low_stock_items": low_stock_items,
+        "selected_item": selected_item,
     })
 
 @user_passes_test(can_manage_items)
@@ -1164,7 +1176,7 @@ def receive_stock(request, item_id):
         )
         
         messages.success(request, f"Stock received successfully. {qty} {item.unit} added to {item.name}")
-        return redirect("item_list")
+        return redirect(f"{reverse('item_list')}?selected_item={item.id}")
     
     return render(request, "pos/receive_stock.html", {"item": item})
 
@@ -4205,7 +4217,6 @@ def add_purchase_order(request):
                 po_date=po_date,
                 delivery_date_required=delivery_date_required,
                 supplier_id=supplier_id,
-                project_id=project_id,
                 buyer_company_name=buyer_company_name or None,
                 buyer_address=buyer_address or None,
                 buyer_contact_person=buyer_contact_person or None,

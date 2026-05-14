@@ -140,12 +140,13 @@
 
             <div class="col-md-6">
                 <label class="form-label">Cost GL Account</label>
-              <select name="gl_account" class="form-select form-select-sm" required>
+                <select id="cost_gl_account" name="cost_gl_account" class="form-select form-select-sm">
                     <option value="">Select GL Account</option>
                     {% for gl in gl_list %}
                     <option value="{{ gl.id }}">{{ gl.gl_code }} - {{ gl.gl_name }}</option>
                     {% endfor %}
                 </select>
+                <div class="form-text">Required for non-service items only.</div>
             </div>
         </div>
 
@@ -154,4 +155,22 @@
         </div>
     </form>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const serviceCheckbox = document.getElementById("is_service");
+    const costGlAccount = document.getElementById("cost_gl_account");
+
+    if (!serviceCheckbox || !costGlAccount) {
+        return;
+    }
+
+    const toggleCostGl = () => {
+        costGlAccount.required = !serviceCheckbox.checked;
+    };
+
+    serviceCheckbox.addEventListener("change", toggleCostGl);
+    toggleCostGl();
+});
+</script>
 {% endblock %}
