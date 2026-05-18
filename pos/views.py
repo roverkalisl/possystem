@@ -16,6 +16,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .models import (
+    Quotation, QuotationItem,
     Item, Category, Supplier, GLMaster, Customer,
     Sale, SaleItem, SalesReturn, StockTransaction, SaleRecovery,
     Project, ProjectExpense, ProjectPettyCash,
@@ -24,6 +25,8 @@ from .models import (
     SupplierAdvance, SupplierSettlement, PurchaseOrder, PurchaseOrderItem,
     GRN, GRNItem, CompanyAsset
 )
+
+from .forms import QuotationForm, QuotationItemFormSet
 # =========================
 # HELPERS
 # =========================
@@ -375,6 +378,9 @@ def dashboard(request):
     
     pending_purchase_assets_count = PurchaseOrder.objects.filter(status="pending").count()
 
+    total_quotations = Quotation.objects.count()
+    pending_quotations = Quotation.objects.filter(status__in=["draft", "sent"]).count()
+
     return render(request, "pos/dashboard.html", {
         "show_pos": can_use_pos(request.user),
         "show_project": can_use_project(request.user),
@@ -394,6 +400,8 @@ def dashboard(request):
         "pending_project_issues": pending_project_issues,
         "pending_project_issues_count": pending_project_issues_count,
         "pending_purchase_assets_count": pending_purchase_assets_count,
+        "total_quotations": total_quotations,
+        "pending_quotations": pending_quotations,
     })
 
 
@@ -5383,4 +5391,113 @@ def print_purchase_order(request, po_id):
         "items": items,
         "grand_total": grand_total,
         "company_info": company_info,
+    })
+
+
+# =========================
+# QUOTATIONS
+# =========================
+@login_required
+def quotation_list(request):
+    q = request.GET.get('q', '').strip()
+    status = request.GET.get('status', '').strip()
+    items = Quotation.objects.all()
+    if q:
+        items = items.filter(Q(quotation_no__icontains=q) | Q(customer_name__icontains=q) | Q(contact_person__icontains=q))
+    if status:
+        items = items.filter(status=status)
+
+    items = items.order_by('-date')[:200]
+    return render(request, 'pos/quotation_list.html', {'quotations': items, 'q': q, 'status': status})
+
+
+@login_required
+@transaction.atomic
+def create_quotation(request, quotation_id=None):
+    if quotation_id:
+        quotation = get_object_or_404(Quotation, id=quotation_id)
+    else:
+        quotation = Quotation(created_by=request.user)
+
+    if request.method == 'POST':
+        form = QuotationForm(request.POST, instance=quotation)
+        formset = QuotationItemFormSet(request.POST, instance=quotation)
+        if form.is_valid() and formset.is_valid():
+            quotation = form.save(commit=False)
+            quotation.created_by = request.user
+            quotation.save()
+            formset.instance = quotation
+            formset.save()
+            messages.success(request, 'Quotation saved.')
+            return redirect('quotation_detail', quotation_id=quotation.id)
+        else:
+            messages.error(request, 'Please fix errors below.')
+    else:
+        form = QuotationForm(instance=quotation)
+        formset = QuotationItemFormSet(instance=quotation)
+
+    available_items = Item.objects.filter(is_active=True).order_by('name')
+    items_data = [
+        {
+            'id': item.id,
+            'code': item.item_code or '',
+            'description': item.name or '',
+            'unit': item.unit or '',
+            'price': str(item.selling_price or 0),
+        }
+        for item in available_items
+    ]
+    return render(request, 'pos/quotation_form.html', {
+        'form': form,
+        'formset': formset,
+        'available_items': available_items,
+        'items_data': items_data,
+        'quotation': quotation,
+    })
+
+
+@login_required
+def quotation_detail(request, quotation_id):
+    quotation = get_object_or_404(Quotation, id=quotation_id)
+    return render(request, 'pos/quotation_detail.html', {'quotation': quotation})
+
+
+@login_required
+def print_quotation(request, quotation_id):
+    quotation = get_object_or_404(Quotation, id=quotation_id)
+    company_info = {
+        'name': 'P&I CONSTRUCTIONS',
+        'address': 'Matara Road, Magalla, Galle',
+        'phone': 'Tel :+94 91 222 4030 / +94 74 147 1213 / +94 74 195 1213',
+        'email': 'contact@pandiconstructions.lk',
+    }
+    return render(request, 'pos/quotation_print.html', {
+        'quotation': quotation,
+        'company_info': company_info,
+    })
+
+
+@login_required
+def quotation_dashboard(request):
+    # Counts by status
+    statuses = ['draft', 'sent', 'approved', 'rejected', 'converted']
+    counts = {}
+    for s in statuses:
+        counts[s] = Quotation.objects.filter(status=s).count()
+
+    # recent quotations
+    recent = Quotation.objects.order_by('-date')[:10]
+
+    # totals
+    total_value = Decimal('0')
+    for q in Quotation.objects.all():
+        try:
+            total_value += q.grand_total
+        except Exception:
+            continue
+
+    return render(request, 'pos/quotation_dashboard.html', {
+        'counts': counts,
+        'recent': recent,
+        'total_value': total_value,
     })

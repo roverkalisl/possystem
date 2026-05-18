@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Quotation {{ quotation.quotation_no }}</h2>
+<p><strong>Status:</strong> {{ quotation.get_status_display }}</p>
+<p><strong>Date:</strong> {{ quotation.date }} | <strong>Valid Until:</strong> {{ quotation.valid_until|default:'-' }}</p>
+<p><strong>Customer:</strong> {{ quotation.customer_name|default:'-' }} | <strong>Contact:</strong> {{ quotation.contact_person|default:'-' }}</p>
+<p><strong>Phone:</strong> {{ quotation.phone|default:'-' }} | <strong>Email:</strong> {{ quotation.email|default:'-' }}</p>
+<p><strong>Address:</strong> {{ quotation.address|default:'-' }}</p>
+{% if quotation.remarks %}
+<p><strong>Remarks:</strong> {{ quotation.remarks }}</p>
+{% endif %}
+
+<h3>Items</h3>
+<table class="table">
+    <thead><tr><th>Code</th><th>Description</th><th>Qty</th><th>Unit</th><th>Unit Price</th><th>Discount</th><th>Line Total</th></tr></thead>
+    <tbody>
+    {% for row in quotation.items.all %}
+    <tr>
+        <td>{{ row.item_code }}</td>
+        <td>{{ row.description }}</td>
+        <td>{{ row.qty }}</td>
+        <td>{{ row.unit }}</td>
+        <td>{{ row.unit_price }}</td>
+        <td>{{ row.discount }}</td>
+        <td>{{ row.line_total }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+
+<p><strong>Sub Total:</strong> {{ quotation.sub_total }}</p>
+<p><strong>Discount Total:</strong> {{ quotation.discount_total }}</p>
+<p><strong>Grand Total:</strong> {{ quotation.grand_total }}</p>
+
+<a href="{% url 'edit_quotation' quotation.id %}">Edit</a> |
+<a href="{% url 'print_quotation' quotation.id %}" target="_blank">Print</a> |
+<a href="{% url 'quotation_list' %}">Back to list</a>
+
+{% endblock %}

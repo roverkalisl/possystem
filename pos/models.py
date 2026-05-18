@@ -331,6 +331,97 @@ class SaleItem(models.Model):
     def __str__(self):
         return f"{self.sale.invoice_no} - {self.item.name}"
 
+
+class Quotation(models.Model):
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("sent", "Sent"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+        ("converted", "Converted"),
+    ]
+
+    quotation_no = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    date = models.DateField(default=timezone.now)
+    valid_until = models.DateField(blank=True, null=True)
+
+    customer_name = models.CharField(max_length=255, blank=True, null=True)
+    contact_person = models.CharField(max_length=255, blank=True, null=True)
+    phone = models.CharField(max_length=50, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    address = models.TextField(blank=True, null=True)
+    remarks = models.TextField(blank=True, null=True)
+
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+
+    def save(self, *args, **kwargs):
+        if not self.quotation_no:
+            last = Quotation.objects.exclude(quotation_no__isnull=True).order_by("-id").first()
+            if last and last.quotation_no and str(last.quotation_no).replace("QT", "").isdigit():
+                next_no = int(str(last.quotation_no).replace("QT", "")) + 1
+                self.quotation_no = f"QT{next_no:06d}"
+            else:
+                self.quotation_no = "QT000001"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.quotation_no or f"Quotation {self.id}"
+
+    @property
+    def sub_total(self):
+        total = self.items.aggregate(total=Sum("line_total"))["total"] or Decimal("0")
+        return Decimal(str(total))
+
+    @property
+    def discount_total(self):
+        total = self.items.aggregate(total=Sum("discount"))["total"] or Decimal("0")
+        return Decimal(str(total))
+
+    @property
+    def grand_total(self):
+        return max(Decimal("0"), self.sub_total - self.discount_total)
+
+
+class QuotationItem(models.Model):
+    quotation = models.ForeignKey(Quotation, on_delete=models.CASCADE, related_name="items")
+    item = models.ForeignKey(Item, on_delete=models.PROTECT)
+
+    item_code = models.CharField(max_length=80, blank=True, null=True)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    qty = models.DecimalField(max_digits=12, decimal_places=2, default=1)
+    unit = models.CharField(max_length=30, blank=True, null=True)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    line_total = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ["id"]
+
+    def save(self, *args, **kwargs):
+        # populate item fields for consistency
+        if self.item:
+            if not self.item_code:
+                self.item_code = self.item.item_code
+            if not self.description:
+                self.description = self.item.name
+            if not self.unit:
+                self.unit = self.item.unit
+            # default price to item's selling_price unless overridden
+            if not self.unit_price or Decimal(str(self.unit_price)) == Decimal("0"):
+                self.unit_price = self.item.selling_price
+
+        qty = Decimal(str(self.qty or 0))
+        price = Decimal(str(self.unit_price or 0))
+        disc = Decimal(str(self.discount or 0))
+        self.line_total = max(Decimal("0"), qty * price - disc)
+        super().save(*args, **kwargs)
+
 class SaleRecovery(models.Model):
     PAYMENT_METHODS = [
         ("cash", "Cash"),

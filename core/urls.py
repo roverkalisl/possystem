@@ -190,4 +190,12 @@ urlpatterns = [
     path("logs/audit-trail/", views.audit_trail, name="audit_trail"),
     path("logs/audit/<int:log_id>/", views.audit_detail, name="audit_detail"),
     path("purchase-orders/<int:po_id>/print/", views.print_purchase_order, name="print_purchase_order"),
-   ]
+    # =========================
+    # QUOTATIONS
+    # =========================
+    path('quotations/', views.quotation_list, name='quotation_list'),
+    path('quotations/add/', views.create_quotation, name='create_quotation'),
+    path('quotations/<int:quotation_id>/edit/', views.create_quotation, name='edit_quotation'),
+    path('quotations/<int:quotation_id>/', views.quotation_detail, name='quotation_detail'),
+    path('quotations/<int:quotation_id>/print/', views.print_quotation, name='print_quotation'),
+]

@@ -1,0 +1,228 @@
+{% extends 'base.html' %}
+{% block page_title %}{% if quotation.id %}Edit{% else %}Create{% endif %} Quotation{% endblock %}
+{% block content %}
+<form method="post">
+    {% csrf_token %}
+    <div class="row mb-3">
+        <div class="col-lg-4">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Quotation Details</h5>
+                    {{ form.date.label_tag }}
+                    {{ form.date }}
+                    {{ form.valid_until.label_tag }}
+                    {{ form.valid_until }}
+                    {{ form.status.label_tag }}
+                    {{ form.status }}
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-8">
+            <div class="card mb-3">
+                <div class="card-body">
+                    <h5 class="card-title">Customer Information</h5>
+                    {{ form.customer_name.label_tag }}
+                    {{ form.customer_name }}
+                    {{ form.contact_person.label_tag }}
+                    {{ form.contact_person }}
+                    {{ form.phone.label_tag }}
+                    {{ form.phone }}
+                    {{ form.email.label_tag }}
+                    {{ form.email }}
+                    {{ form.address.label_tag }}
+                    {{ form.address }}
+                    {{ form.remarks.label_tag }}
+                    {{ form.remarks }}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <h3 class="mb-3">Quotation Items</h3>
+    {{ formset.management_form }}
+    <div class="mb-2">
+        <button type="button" id="add-quotation-item" class="btn btn-sm btn-outline-primary">Add Item</button>
+        <a href="{% url 'quotation_list' %}" class="btn btn-sm btn-secondary">Back to list</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-bordered" id="quotation-items">
+            <thead>
+                <tr>
+                    <th>Item</th>
+                    <th>Code</th>
+                    <th>Description</th>
+                    <th>Qty</th>
+                    <th>Unit</th>
+                    <th>Unit Price</th>
+                    <th>Discount</th>
+                    <th>Line Total</th>
+                    <th>Remove</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for f in formset.forms %}
+                <tr>
+                    <td>{{ f.item }}</td>
+                    <td>{{ f.item_code }}</td>
+                    <td>{{ f.description }}</td>
+                    <td>{{ f.qty }}</td>
+                    <td>{{ f.unit }}</td>
+                    <td>{{ f.unit_price }}</td>
+                    <td>{{ f.discount }}</td>
+                    <td>{{ f.line_total }}</td>
+                    <td class="text-center">{{ f.DELETE }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="row justify-content-end mt-3">
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Totals</h5>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Sub Total</span>
+                        <strong id="quotation-subtotal">0.00</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span>Discount Total</span>
+                        <strong id="quotation-discount-total">0.00</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Grand Total</span>
+                        <strong id="quotation-grand-total">0.00</strong>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <button type="submit" class="btn btn-primary">Save Quotation</button>
+    </div>
+</form>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const quotationItems = {{ items_data|safe }};
+
+function formatNumber(value) {
+    return parseFloat(value || 0).toFixed(2);
+}
+
+function getItemData(itemId) {
+    return quotationItems.find(item => String(item.id) === String(itemId));
+}
+
+function updateRow(row) {
+    const itemSelect = row.querySelector('select[name$="-item"]');
+    const codeInput = row.querySelector('input[name$="-item_code"]');
+    const descInput = row.querySelector('input[name$="-description"]');
+    const qtyInput = row.querySelector('input[name$="-qty"]');
+    const unitInput = row.querySelector('input[name$="-unit"]');
+    const priceInput = row.querySelector('input[name$="-unit_price"]');
+    const discountInput = row.querySelector('input[name$="-discount"]');
+    const totalInput = row.querySelector('input[name$="-line_total"]');
+
+    const item = getItemData(itemSelect?.value);
+    if (item) {
+        codeInput.value = item.code;
+        if (!descInput.value) descInput.value = item.description;
+        if (!unitInput.value) unitInput.value = item.unit;
+        if (!priceInput.value || parseFloat(priceInput.value) === 0) {
+            priceInput.value = item.price;
+        }
+    }
+
+    const qty = parseFloat(qtyInput.value) || 0;
+    const price = parseFloat(priceInput.value) || 0;
+    const discount = parseFloat(discountInput.value) || 0;
+    const lineTotal = Math.max(0, qty * price - discount);
+    totalInput.value = formatNumber(lineTotal);
+}
+
+function refreshTotals() {
+    let subtotal = 0;
+    let discountTotal = 0;
+
+    document.querySelectorAll('#quotation-items tbody tr').forEach(row => {
+        const itemSelect = row.querySelector('select[name$="-item"]');
+        const qtyInput = row.querySelector('input[name$="-qty"]');
+        const priceInput = row.querySelector('input[name$="-unit_price"]');
+        const discountInput = row.querySelector('input[name$="-discount"]');
+
+        if (!itemSelect || !itemSelect.value) {
+            return;
+        }
+
+        const qty = parseFloat(qtyInput.value) || 0;
+        const price = parseFloat(priceInput.value) || 0;
+        const discount = parseFloat(discountInput.value) || 0;
+        subtotal += qty * price;
+        discountTotal += discount;
+    });
+
+    document.getElementById('quotation-subtotal').textContent = formatNumber(subtotal);
+    document.getElementById('quotation-discount-total').textContent = formatNumber(discountTotal);
+    document.getElementById('quotation-grand-total').textContent = formatNumber(Math.max(0, subtotal - discountTotal));
+}
+
+function hookRow(row) {
+    const fields = row.querySelectorAll('select[name$="-item"], input[name$="-qty"], input[name$="-unit_price"], input[name$="-discount"]');
+    fields.forEach(field => {
+        field.addEventListener('change', () => {
+            updateRow(row);
+            refreshTotals();
+        });
+    });
+}
+
+function initQuotationRows() {
+    document.querySelectorAll('#quotation-items tbody tr').forEach(row => {
+        hookRow(row);
+        updateRow(row);
+    });
+    refreshTotals();
+}
+
+function addQuotationItemRow() {
+    const tableBody = document.querySelector('#quotation-items tbody');
+    const totalForms = document.querySelector('input[name$="-TOTAL_FORMS"]');
+    const newIndex = parseInt(totalForms.value, 10);
+    const templateRow = tableBody.querySelector('tr:last-child');
+    const newRow = templateRow.cloneNode(true);
+
+    newRow.querySelectorAll('input, select').forEach(field => {
+        if (field.name) {
+            field.name = field.name.replace(/-\d+-/, `-${newIndex}-`);
+            field.id = field.id.replace(/-\d+-/, `-${newIndex}-`);
+
+            if (field.tagName === 'INPUT') {
+                if (field.type === 'checkbox') {
+                    field.checked = false;
+                } else {
+                    field.value = '';
+                }
+            }
+
+            if (field.tagName === 'SELECT') {
+                field.selectedIndex = 0;
+            }
+        }
+    });
+
+    tableBody.appendChild(newRow);
+    totalForms.value = newIndex + 1;
+    hookRow(newRow);
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+    initQuotationRows();
+    document.getElementById('add-quotation-item').addEventListener('click', addQuotationItemRow);
+});
+</script>
+{% endblock %}

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% load static %}
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quotation {{ quotation.quotation_no }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+        .page { padding: 24px; max-width: 900px; margin: auto; }
+        .print-actions { margin: 16px 0; text-align: right; }
+        .print-actions .btn { margin-left: 8px; }
+        .top-bar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px; }
+        .company-wrap { display: flex; gap: 16px; align-items: center; }
+        .logo-box img { max-height: 80px; }
+        .company-details h1 { margin: 0; font-size: 24px; }
+        .company-details p { margin: 2px 0; }
+        .quote-title { text-align: right; }
+        .quote-title h2 { margin-bottom: 8px; }
+        .section { margin-bottom: 24px; }
+        .section-title { font-weight: bold; margin-bottom: 8px; }
+        .info-box p { margin: 0; line-height: 1.5; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid #444; padding: 8px; }
+        th { background: #f4f4f4; }
+        .totals-table { width: auto; margin-left: auto; }
+        .totals-table td { border: none; padding: 4px 8px; }
+        .signature-box { margin-top: 48px; }
+        .signature-line { border-top: 1px solid #000; width: 220px; margin-top: 32px; }
+        @media print {
+            .print-actions { display: none; }
+        }
+    </style>
+</head>
+<body>
+<div class="print-actions">
+    <button class="btn btn-secondary" onclick="window.history.back()">Back</button>
+    <button class="btn btn-primary" onclick="window.print()">Print</button>
+</div>
+<div class="page">
+    <div class="top-bar">
+        <div class="company-wrap">
+            <div class="logo-box">
+                <img src="{% static 'logo.png' %}" alt="Company Logo">
+            </div>
+            <div class="company-details">
+                <h1>{{ company_info.name }}</h1>
+                <p>{{ company_info.address }}</p>
+                <p>Phone: {{ company_info.phone }}</p>
+                <p>Email: {{ company_info.email }}</p>
+            </div>
+        </div>
+        <div class="quote-title">
+            <h2>Quotation</h2>
+            <p><strong>No:</strong> {{ quotation.quotation_no }}</p>
+            <p><strong>Date:</strong> {{ quotation.date }}</p>
+            <p><strong>Valid Until:</strong> {{ quotation.valid_until|default:'-' }}</p>
+            <p><strong>Status:</strong> {{ quotation.get_status_display }}</p>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Customer Information</div>
+        <div class="info-box">
+            <p><strong>Name:</strong> {{ quotation.customer_name|default:'-' }}</p>
+            <p><strong>Contact:</strong> {{ quotation.contact_person|default:'-' }}</p>
+            <p><strong>Phone:</strong> {{ quotation.phone|default:'-' }}</p>
+            <p><strong>Email:</strong> {{ quotation.email|default:'-' }}</p>
+            <p><strong>Address:</strong> {{ quotation.address|default:'-' }}</p>
+            {% if quotation.remarks %}<p><strong>Remarks:</strong> {{ quotation.remarks }}</p>{% endif %}
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Quotation Items</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Description</th>
+                    <th>Qty</th>
+                    <th>Unit</th>
+                    <th>Unit Price</th>
+                    <th>Discount</th>
+                    <th>Line Total</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for row in quotation.items.all %}
+                <tr>
+                    <td>{{ row.item_code }}</td>
+                    <td>{{ row.description }}</td>
+                    <td>{{ row.qty }}</td>
+                    <td>{{ row.unit }}</td>
+                    <td>{{ row.unit_price }}</td>
+                    <td>{{ row.discount }}</td>
+                    <td>{{ row.line_total }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="section">
+        <table class="totals-table">
+            <tr>
+                <td><strong>Sub Total:</strong></td>
+                <td>{{ quotation.sub_total }}</td>
+            </tr>
+            <tr>
+                <td><strong>Discount Total:</strong></td>
+                <td>{{ quotation.discount_total }}</td>
+            </tr>
+            <tr>
+                <td><strong>Grand Total:</strong></td>
+                <td><strong>{{ quotation.grand_total }}</strong></td>
+            </tr>
+        </table>
+    </div>
+
+    <div class="section">
+        <div class="section-title">Terms &amp; Conditions</div>
+        <div class="info-box">
+            <p>1. Prices are valid until the quotation expiry date.</p>
+            <p>2. Goods will be supplied according to availability and standard sales terms.</p>
+            <p>3. Quotation does not reserve stock until order confirmation.</p>
+        </div>
+    </div>
+
+    <div class="signature-box">
+        <div class="signature-line"></div>
+        <p>Authorized Signature</p>
+    </div>
+</div>
+</body>
+</html>

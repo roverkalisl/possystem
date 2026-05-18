@@ -1,6 +1,7 @@
 # Register your models here.
 from django.contrib import admin
 from .models import Category, Item, Supplier, UserLog, AuditLog, ProjectTransfer
+from .models import Quotation, QuotationItem
 
 
 # Logging Models
@@ -48,3 +49,17 @@ class ProjectTransferAdmin(admin.ModelAdmin):
 admin.site.register(Category)
 admin.site.register(Item)
 admin.site.register(Supplier)
+
+
+class QuotationItemInline(admin.TabularInline):
+    model = QuotationItem
+    extra = 1
+
+
+@admin.register(Quotation)
+class QuotationAdmin(admin.ModelAdmin):
+    list_display = ['quotation_no', 'date', 'customer_name', 'status', 'created_by']
+    list_filter = ['status', 'date']
+    search_fields = ['quotation_no', 'customer_name', 'contact_person']
+    inlines = [QuotationItemInline]
+    readonly_fields = ['quotation_no', 'created_at']

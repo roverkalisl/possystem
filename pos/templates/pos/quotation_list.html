@@ -1,0 +1,42 @@
+{% extends 'base.html' %}
+{% block content %}
+<h2>Quotations</h2>
+<form method="get" class="form-inline mb-3">
+    <label class="sr-only" for="search-query">Search</label>
+    <input id="search-query" type="text" name="q" value="{{ q }}" placeholder="Search..." class="form-control me-2">
+    <label class="sr-only" for="quotation-status">Status</label>
+    <select id="quotation-status" name="status" class="form-control me-2">
+        <option value="">All</option>
+        <option value="draft" {% if status == 'draft' %}selected{% endif %}>Draft</option>
+        <option value="sent" {% if status == 'sent' %}selected{% endif %}>Sent</option>
+        <option value="approved" {% if status == 'approved' %}selected{% endif %}>Approved</option>
+        <option value="rejected" {% if status == 'rejected' %}selected{% endif %}>Rejected</option>
+        <option value="converted" {% if status == 'converted' %}selected{% endif %}>Converted</option>
+    </select>
+    <button type="submit" class="btn btn-primary me-2">Filter</button>
+    <a href="{% url 'create_quotation' %}" class="btn btn-success">Create Quotation</a>
+</form>
+<table class="table">
+    <thead>
+        <tr><th>Quotation No</th><th>Date</th><th>Customer</th><th>Status</th><th>Total</th><th>Actions</th></tr>
+    </thead>
+    <tbody>
+    {% for q in quotations %}
+    <tr>
+        <td>{{ q.quotation_no }}</td>
+        <td>{{ q.date }}</td>
+        <td>{{ q.customer_name }}</td>
+        <td>{{ q.get_status_display }}</td>
+        <td>{{ q.grand_total }}</td>
+        <td>
+            <a href="{% url 'quotation_detail' q.id %}">View</a> |
+            <a href="{% url 'edit_quotation' q.id %}">Edit</a> |
+            <a href="{% url 'print_quotation' q.id %}" target="_blank">Print</a>
+        </td>
+    </tr>
+    {% empty %}
+    <tr><td colspan="6">No quotations found.</td></tr>
+    {% endfor %}
+    </tbody>
+</table>
+{% endblock %}

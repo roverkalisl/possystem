@@ -43,6 +43,15 @@
         </div>
     </div>
     <div class="col-md-2">
+        <div class="card card-soft bg-light-secondary">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Open Quotations</p>
+                <h4 class="mb-0 text-secondary">{{ pending_quotations }}</h4>
+                <small class="text-muted">of {{ total_quotations }}</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
         <div class="card card-soft bg-light-info">
             <div class="card-body">
                 <p class="text-muted mb-1 small">Pending Project Issues</p>
@@ -166,6 +175,14 @@
                 <a href="{% url 'item_list' %}" class="simple-dashboard-btn primary">Inventory List</a>
                 <a href="{% url 'add_item' %}" class="simple-dashboard-btn">Add Stock</a>
                 <a href="{% url 'stock_history' %}" class="simple-dashboard-btn">Stock History</a>
+            </div>
+        </div>
+
+        <div class="simple-dashboard-card">
+            <h5 class="simple-dashboard-title">QUOTATIONS</h5>
+            <div class="simple-dashboard-links">
+                <a href="{% url 'quotation_list' %}" class="simple-dashboard-btn primary">Quotation List</a>
+                <a href="{% url 'create_quotation' %}" class="simple-dashboard-btn">Create Quotation</a>
             </div>
         </div>
 
