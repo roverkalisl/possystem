@@ -16,7 +16,7 @@
     </div>
 
     <form method="get" class="row g-2 mb-3">
-        <div class="col-md-6">
+        <div class="col-md-4">
             <select name="project" class="form-select form-select-sm">
                 <option value="">All Projects</option>
                 {% for p in projects %}
@@ -26,7 +26,36 @@
                 {% endfor %}
             </select>
         </div>
+        <div class="col-md-2">
+            <select name="record_type" class="form-select form-select-sm">
+                <option value="all" {% if selected_record_type == 'all' %}selected{% endif %}>All Records</option>
+                <option value="income" {% if selected_record_type == 'income' %}selected{% endif %}>Project Income</option>
+                <option value="payment" {% if selected_record_type == 'payment' %}selected{% endif %}>Invoice Payments</option>
+            </select>
+        </div>
         <div class="col-md-3">
+            <select name="gl_group" class="form-select form-select-sm">
+                <option value="">All GL Groups</option>
+                {% for group in gl_groups %}
+                <option value="{{ group }}" {% if selected_gl_group == group %}selected{% endif %}>{{ group }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select name="gl_account" class="form-select form-select-sm">
+                <option value="">All GL Accounts</option>
+                {% for gl in gl_accounts %}
+                <option value="{{ gl.id }}" {% if selected_gl_account == gl.id|stringformat:"s" %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <input type="date" name="from_date" class="form-control form-control-sm" value="{{ from_date }}" placeholder="From date">
+        </div>
+        <div class="col-md-3">
+            <input type="date" name="to_date" class="form-control form-control-sm" value="{{ to_date }}" placeholder="To date">
+        </div>
+        <div class="col-md-2">
             <button class="btn btn-dark btn-sm w-100">Filter</button>
         </div>
     </form>

@@ -160,6 +160,40 @@
 </div>
 
 <script>
+const supplierDetails = {
+    {% for s in suppliers %}
+    "{{ s.id }}": {
+        address: `{{ s.address|default:""|escapejs }}`,
+        contact: `{{ s.contact_person|default:"" }}{% if s.phone_1 %} Phone: {{ s.phone_1 }}{% endif %}{% if s.phone_2 %}, {{ s.phone_2 }}{% endif %}{% if s.phone_3 %}, {{ s.phone_3 }}{% endif %}{% if s.email %} Email: {{ s.email }}{% endif %}`.trim(),
+    }{% if not forloop.last %},{% endif %}
+    {% endfor %}
+};
+
+const supplierSelect = document.querySelector('select[name="supplier"]');
+if (supplierSelect) {
+    const fillSupplierFields = function () {
+        const selected = supplierDetails[supplierSelect.value];
+        const addressInput = document.querySelector('textarea[name="supplier_address"]');
+        const contactInput = document.querySelector('input[name="supplier_contact_details"]');
+
+        if (addressInput) {
+            addressInput.value = selected ? selected.address : '';
+        }
+        if (contactInput) {
+            contactInput.value = selected ? selected.contact : '';
+        }
+    };
+
+    supplierSelect.addEventListener('change', fillSupplierFields);
+    if (supplierSelect.value) {
+        const addressInput = document.querySelector('textarea[name="supplier_address"]');
+        const contactInput = document.querySelector('input[name="supplier_contact_details"]');
+        if ((addressInput && !addressInput.value.trim()) || (contactInput && !contactInput.value.trim())) {
+            fillSupplierFields();
+        }
+    }
+}
+
 const poItemOptions = `
     <option value="">-- Select Item --</option>
     {% for item in items %}

@@ -1,6 +1,45 @@
 {% extends 'base.html' %}
 {% block content %}
 <h2>Quotation {{ quotation.quotation_no }}</h2>
+<div class="mb-3">
+    <a href="{% url 'dashboard' %}" class="btn btn-outline-secondary btn-sm">Dashboard</a>
+</div>
+{% if show_saved_popup %}
+<div class="modal fade" id="quotationSuccessModal" tabindex="-1" aria-labelledby="quotationSuccessModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="quotationSuccessModalLabel">Quotation Saved</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">Quotation <strong>{{ quotation.quotation_no }}</strong> has been saved successfully.</p>
+                <p>You can print or view it from the actions below.</p>
+            </div>
+            <div class="modal-footer">
+                <a href="{% url 'print_quotation' quotation.id %}" target="_blank" class="btn btn-primary">Print Quotation</a>
+                <a href="{% url 'quotation_detail' quotation.id %}" class="btn btn-outline-secondary">View Quotation</a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        var modalElement = document.getElementById('quotationSuccessModal');
+        if (!modalElement) {
+            return;
+        }
+
+        if (typeof bootstrap !== 'undefined') {
+            var successModal = new bootstrap.Modal(modalElement);
+            successModal.show();
+        } else {
+            alert('Quotation saved successfully.');
+        }
+    });
+</script>
+{% endif %}
 <p><strong>Status:</strong> {{ quotation.get_status_display }}</p>
 <p><strong>Date:</strong> {{ quotation.date }} | <strong>Valid Until:</strong> {{ quotation.valid_until|default:'-' }}</p>
 <p><strong>Customer:</strong> {{ quotation.customer_name|default:'-' }} | <strong>Contact:</strong> {{ quotation.contact_person|default:'-' }}</p>

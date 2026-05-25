@@ -1579,16 +1579,43 @@ def project_expense_list(request):
     ).order_by("-expense_date", "-id")
 
     project_id = request.GET.get("project")
+    selected_gl_account = request.GET.get("gl_account")
+    selected_gl_group = request.GET.get("gl_group")
+    selected_expense_type = request.GET.get("expense_type")
+    from_date = request.GET.get("from_date")
+    to_date = request.GET.get("to_date")
+
     if project_id:
         expenses = expenses.filter(project_id=project_id)
+    if selected_gl_account:
+        expenses = expenses.filter(gl_account_id=selected_gl_account)
+    if selected_gl_group:
+        expenses = expenses.filter(gl_account__parent_group=selected_gl_group)
+    if selected_expense_type:
+        expenses = expenses.filter(expense_type=selected_expense_type)
+    if from_date:
+        expenses = expenses.filter(expense_date__gte=from_date)
+    if to_date:
+        expenses = expenses.filter(expense_date__lte=to_date)
 
     projects = Project.objects.filter(is_active=True).order_by("-id")
+    gl_accounts = GLMaster.objects.filter(is_active=True).order_by("gl_code")
+    gl_groups = GLMaster.objects.filter(is_active=True).exclude(parent_group__isnull=True).exclude(parent_group__exact="").order_by("parent_group").values_list("parent_group", flat=True).distinct()
+    expense_types = ProjectExpense.EXPENSE_TYPE_CHOICES
     total_amount = expenses.aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
     return render(request, "pos/project_expense_list.html", {
         "expenses": expenses,
         "projects": projects,
         "selected_project": project_id,
+        "selected_gl_account": selected_gl_account,
+        "selected_gl_group": selected_gl_group,
+        "selected_expense_type": selected_expense_type,
+        "from_date": from_date,
+        "to_date": to_date,
+        "gl_accounts": gl_accounts,
+        "gl_groups": gl_groups,
+        "expense_types": expense_types,
         "total_amount": total_amount,
         "is_owner": is_owner(request.user),
     })
@@ -2147,6 +2174,12 @@ def reject_petty_cash_expense(request, expense_id):
 @user_passes_test(can_use_project)
 def project_income_list(request):
     project_id = request.GET.get("project")
+    selected_record_type = request.GET.get("record_type") or "all"
+    selected_gl_account = request.GET.get("gl_account")
+    selected_gl_group = request.GET.get("gl_group")
+    from_date = request.GET.get("from_date")
+    to_date = request.GET.get("to_date")
+
     projects = Project.objects.filter(is_active=True).order_by("-id")
 
     income_qs = ProjectIncome.objects.select_related("project", "gl_account", "created_by").order_by("-income_date", "-id")
@@ -2159,6 +2192,26 @@ def project_income_list(request):
     if project_id:
         income_qs = income_qs.filter(project_id=project_id)
         payment_qs = payment_qs.filter(invoice__project_id=project_id)
+
+    if selected_gl_account:
+        income_qs = income_qs.filter(gl_account_id=selected_gl_account)
+    if selected_gl_group:
+        income_qs = income_qs.filter(gl_account__parent_group=selected_gl_group)
+
+    if from_date:
+        income_qs = income_qs.filter(income_date__gte=from_date)
+        payment_qs = payment_qs.filter(payment_date__gte=from_date)
+    if to_date:
+        income_qs = income_qs.filter(income_date__lte=to_date)
+        payment_qs = payment_qs.filter(payment_date__lte=to_date)
+
+    if selected_record_type == "income":
+        payment_qs = payment_qs.none()
+    elif selected_record_type == "payment":
+        income_qs = income_qs.none()
+
+    gl_accounts = GLMaster.objects.filter(is_active=True).order_by("gl_code")
+    gl_groups = GLMaster.objects.filter(is_active=True).exclude(parent_group__isnull=True).exclude(parent_group__exact="").order_by("parent_group").values_list("parent_group", flat=True).distinct()
 
     income_rows = []
     for income in income_qs:
@@ -2191,6 +2244,13 @@ def project_income_list(request):
         "incomes": income_rows,
         "projects": projects,
         "selected_project": project_id,
+        "selected_record_type": selected_record_type,
+        "selected_gl_account": selected_gl_account,
+        "selected_gl_group": selected_gl_group,
+        "from_date": from_date,
+        "to_date": to_date,
+        "gl_accounts": gl_accounts,
+        "gl_groups": gl_groups,
         "show_inactive": request.GET.get("show_inactive") == "1",
         "is_owner": is_owner(request.user),
     })
@@ -5429,7 +5489,8 @@ def create_quotation(request, quotation_id=None):
             formset.instance = quotation
             formset.save()
             messages.success(request, 'Quotation saved.')
-            return redirect('quotation_detail', quotation_id=quotation.id)
+            quotation_url = reverse('quotation_detail', kwargs={'quotation_id': quotation.id})
+            return redirect(f"{quotation_url}?saved=1")
         else:
             messages.error(request, 'Please fix errors below.')
     else:
@@ -5459,7 +5520,11 @@ def create_quotation(request, quotation_id=None):
 @login_required
 def quotation_detail(request, quotation_id):
     quotation = get_object_or_404(Quotation, id=quotation_id)
-    return render(request, 'pos/quotation_detail.html', {'quotation': quotation})
+    show_saved_popup = request.GET.get('saved') == '1'
+    return render(request, 'pos/quotation_detail.html', {
+        'quotation': quotation,
+        'show_saved_popup': show_saved_popup,
+    })
 
 
 @login_required
