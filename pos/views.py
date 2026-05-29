@@ -4185,11 +4185,13 @@ def reject_purchase_order(request, po_id):
 @user_passes_test(can_use_project)
 def add_purchase_order(request):
     suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
     next_po_no = generate_purchase_order_no()
 
     items = Item.objects.order_by("item_code")
     context = {
         "suppliers": suppliers,
+        "projects": projects,
         "items": items,
         "next_po_no": next_po_no,
     }
@@ -4199,6 +4201,7 @@ def add_purchase_order(request):
         delivery_date_required = request.POST.get("delivery_date_required") or None
 
         supplier_id = request.POST.get("supplier") or None
+        project_id = request.POST.get("project") or None
 
         buyer_company_name = (request.POST.get("buyer_company_name") or "").strip()
         buyer_address = (request.POST.get("buyer_address") or "").strip()
@@ -4285,6 +4288,7 @@ def add_purchase_order(request):
                 po_date=po_date,
                 delivery_date_required=delivery_date_required,
                 supplier_id=supplier_id,
+                project_id=project_id,
                 buyer_company_name=buyer_company_name or None,
                 buyer_address=buyer_address or None,
                 buyer_contact_person=buyer_contact_person or None,
