@@ -4203,12 +4203,6 @@ def add_purchase_order(request):
         supplier_id = request.POST.get("supplier") or None
         project_id = request.POST.get("project") or None
 
-        buyer_company_name = (request.POST.get("buyer_company_name") or "").strip()
-        buyer_address = (request.POST.get("buyer_address") or "").strip()
-        buyer_contact_person = (request.POST.get("buyer_contact_person") or "").strip()
-        buyer_phone = (request.POST.get("buyer_phone") or "").strip()
-        buyer_email = (request.POST.get("buyer_email") or "").strip()
-
         supplier_address = (request.POST.get("supplier_address") or "").strip()
         supplier_contact_details = (request.POST.get("supplier_contact_details") or "").strip()
 
@@ -4289,11 +4283,6 @@ def add_purchase_order(request):
                 delivery_date_required=delivery_date_required,
                 supplier_id=supplier_id,
                 project_id=project_id,
-                buyer_company_name=buyer_company_name or None,
-                buyer_address=buyer_address or None,
-                buyer_contact_person=buyer_contact_person or None,
-                buyer_phone=buyer_phone or None,
-                buyer_email=buyer_email or None,
                 supplier_address=supplier_address or None,
                 supplier_contact_details=supplier_contact_details or None,
                 payment_method=payment_method,
@@ -4345,12 +4334,6 @@ def edit_purchase_order(request, po_id):
         order.delivery_date_required = request.POST.get("delivery_date_required") or None
         order.supplier_id = request.POST.get("supplier") or None
         order.project_id = request.POST.get("project") or None
-
-        order.buyer_company_name = (request.POST.get("buyer_company_name") or "").strip() or None
-        order.buyer_address = (request.POST.get("buyer_address") or "").strip() or None
-        order.buyer_contact_person = (request.POST.get("buyer_contact_person") or "").strip() or None
-        order.buyer_phone = (request.POST.get("buyer_phone") or "").strip() or None
-        order.buyer_email = (request.POST.get("buyer_email") or "").strip() or None
 
         order.supplier_address = (request.POST.get("supplier_address") or "").strip() or None
         order.supplier_contact_details = (request.POST.get("supplier_contact_details") or "").strip() or None

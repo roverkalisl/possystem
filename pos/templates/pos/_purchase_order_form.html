@@ -45,31 +45,6 @@
         </select>
     </div>
 
-    <div class="col-md-4">
-        <label class="form-label">Buyer Company Name</label>
-        <input type="text" name="buyer_company_name" class="form-control" value="{% if order %}{{ order.buyer_company_name|default:'' }}{% endif %}">
-    </div>
-
-    <div class="col-md-4">
-        <label class="form-label">Buyer Contact Person</label>
-        <input type="text" name="buyer_contact_person" class="form-control" value="{% if order %}{{ order.buyer_contact_person|default:'' }}{% endif %}">
-    </div>
-
-    <div class="col-md-4">
-        <label class="form-label">Buyer Phone</label>
-        <input type="text" name="buyer_phone" class="form-control" value="{% if order %}{{ order.buyer_phone|default:'' }}{% endif %}">
-    </div>
-
-    <div class="col-md-6">
-        <label class="form-label">Buyer Email</label>
-        <input type="email" name="buyer_email" class="form-control" value="{% if order %}{{ order.buyer_email|default:'' }}{% endif %}">
-    </div>
-
-    <div class="col-md-6">
-        <label class="form-label">Buyer Address</label>
-        <textarea name="buyer_address" rows="2" class="form-control">{% if order %}{{ order.buyer_address|default:'' }}{% endif %}</textarea>
-    </div>
-
     <div class="col-md-6">
         <label class="form-label">Supplier Address</label>
         <textarea name="supplier_address" rows="2" class="form-control">{% if order %}{{ order.supplier_address|default:'' }}{% endif %}</textarea>
