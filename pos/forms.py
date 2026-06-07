@@ -83,6 +83,22 @@ class BudgetUploadForm(forms.Form):
         help_text='Check to replace the entire existing budget'
     )
 
+    create_missing_gl = forms.BooleanField(
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        label='Create missing GL accounts',
+        help_text='If enabled, GLs not found in the system will be created automatically (as Expense type)'
+    )
+
+    import_multiple_projects = forms.BooleanField(
+        required=False,
+        initial=False,
+        widget=forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        label='Import multiple projects from file',
+        help_text='If enabled, the Excel file may include a Project/Project ID column to update budgets for multiple projects.'
+    )
+
 
 class ProjectBudgetForm(forms.ModelForm):
     """Form for creating/editing project budgets"""

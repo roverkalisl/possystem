@@ -63,10 +63,12 @@ def budget_upload(request):
                 project = form.cleaned_data['project']
                 excel_file = request.FILES['budget_file']
                 replace_existing = form.cleaned_data.get('replace_existing', False)
-                
+                create_missing_gl = form.cleaned_data.get('create_missing_gl', False)
+                import_multiple_projects = form.cleaned_data.get('import_multiple_projects', False)
+
                 # Process Excel file
-                success_count, error_messages = process_budget_excel(
-                    project, excel_file, replace_existing
+                success_count, error_messages, projects_updated = process_budget_excel(
+                    project, excel_file, replace_existing, create_missing_gl, import_multiple_projects, request.user
                 )
                 
                 if error_messages:
@@ -77,7 +79,11 @@ def budget_upload(request):
                     request,
                     f'Budget imported successfully. {success_count} GL accounts added.'
                 )
-                return redirect('project_cost_analysis_detail', project_id=project.id)
+                # Redirect: if multiple projects were updated go to list, else to project detail
+                if import_multiple_projects:
+                    return redirect('project_cost_analysis_list')
+                else:
+                    return redirect('project_cost_analysis_detail', project_id=project.id)
             
             except Exception as e:
                 messages.error(request, f'Error processing file: {str(e)}')
@@ -174,6 +180,27 @@ def cost_analysis_by_gl_group(request):
         'selected_group': gl_group,
     }
     return render(request, 'pos/cost_analysis_gl_group.html', context)
+
+
+@login_required
+@require_http_methods(["GET"])
+def gl_master_group_report(request):
+    """Report: list GLMaster grouped by GL Group"""
+    if not has_cost_analysis_permission(request.user):
+        messages.error(request, 'You do not have permission to view reports')
+        return redirect('dashboard')
+
+    gls = GLMaster.objects.filter(is_active=True).order_by('gl_code')
+    groups = {}
+    for gl in gls:
+        group_name = ProjectBudgetLine.get_gl_group(gl.gl_code)
+        groups.setdefault(group_name, []).append(gl)
+
+    context = {
+        'groups': groups,
+        'page_title': 'GL Master Group Report'
+    }
+    return render(request, 'pos/gl_master_group_report.html', context)
 
 
 @login_required
@@ -357,7 +384,62 @@ def export_cost_analysis_csv(request, project_id):
     return response
 
 
-def process_budget_excel(project, excel_file, replace_existing=False):
+@login_required
+@require_http_methods(["GET"])
+def export_gl_group_project_report(request):
+    """Export a CSV report: Project x GL Group with Budget, Actual, Variance, Utilization % and Status"""
+    if not has_cost_analysis_permission(request.user):
+        messages.error(request, 'You do not have permission to export')
+        return redirect('dashboard')
+
+    projects = Project.objects.filter(is_active=True)
+
+    # Prepare CSV
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="GL_Group_Project_Report_{timezone.now().strftime("%Y%m%d_%H%M%S")}.csv"'
+    writer = csv.writer(response)
+
+    # Header
+    writer.writerow(['Project', 'GL Group (GL Name)', 'Budget', 'Actual Cost', 'Variance', 'Utilization %', 'Status'])
+
+    for project in projects:
+        analyzer = ProjectCostAnalyzer(project)
+        summary = analyzer.get_cost_summary()
+        by_group = summary.get('by_group', {})
+
+        for group_name, data in by_group.items():
+            # group-level budget and actual
+            budget_amt = data.get('budget', 0)
+            actual_amt = data.get('actual', 0)
+            variance = data.get('variance', 0)
+            utilization = round(data.get('utilization_percent', 0), 2)
+
+            # Try to include a representative GL name (first GL in that group for project)
+            gl_name = ''
+            try:
+                # find any budget line in project with that group
+                line = ProjectBudgetLine.objects.filter(budget__project=project).select_related('gl_account').all().first()
+                if line:
+                    gl_name = line.gl_account.gl_name
+            except Exception:
+                gl_name = ''
+
+            status = project.budget.get_status_display() if hasattr(project, 'budget') and project.budget else 'No Budget'
+
+            writer.writerow([
+                project.project_id,
+                f"{group_name} ({gl_name})",
+                budget_amt,
+                actual_amt,
+                variance,
+                utilization,
+                status
+            ])
+
+    return response
+
+
+def process_budget_excel(project, excel_file, replace_existing=False, create_missing_gl=False, import_multiple_projects=False, user=None):
     """
     Process budget Excel file and create/update budget records
     
@@ -371,74 +453,156 @@ def process_budget_excel(project, excel_file, replace_existing=False):
     
     success_count = 0
     error_messages = []
+    projects_updated = set()
+    seen_keys = set()  # (project_id, gl_code) to detect duplicates in file
     
     try:
         wb = openpyxl.load_workbook(excel_file)
         ws = wb.active
-        
-        # Get or create budget
-        if replace_existing:
-            budget, created = ProjectBudget.objects.get_or_create(
-                project=project,
-                defaults={'status': 'active'}
-            )
-            # Clear existing lines
-            budget.lines.all().delete()
-        else:
-            budget, created = ProjectBudget.objects.get_or_create(
-                project=project,
-                defaults={'status': 'active'}
-            )
-        
-        total_budget = Decimal('0')
-        
-        # Process rows (skip header in row 1)
+
+        # Read header row to detect columns
+        header = None
+        for row in ws.iter_rows(min_row=1, max_row=1, values_only=True):
+            header = [str(c).strip().lower() if c is not None else '' for c in row]
+            break
+
+        # helper to find column index by possible names
+        def find_col(names):
+            for n in names:
+                if n in header:
+                    return header.index(n)
+            return None
+
+        project_col = find_col(['project', 'project_id', 'project number', 'project no', 'project_no'])
+        gl_code_col = find_col(['gl code', 'gl_code', 'glcode']) or 0
+        gl_name_col = find_col(['gl name', 'gl_name', 'glname']) or 1
+        amount_col = find_col(['budget amount', 'budget_amount', 'amount', 'budget']) or 2
+
+        budgets_cache = {}  # project_id -> ProjectBudget instance
+
+
+        # First pass: accumulate amounts per (project, gl_code)
+        pending = {}  # key -> {'project': proj_obj, 'gl_name': str, 'amount': Decimal}
         for row_idx, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
             try:
-                gl_code = row[0]
-                gl_name = row[1]
-                budget_amount = row[2]
-                
-                # Validate required fields
-                if not gl_code or not budget_amount:
+                # Determine project for this row
+                if import_multiple_projects and project_col is not None:
+                    proj_val = row[project_col]
+                    if not proj_val:
+                        error_messages.append(f'Row {row_idx}: Missing project identifier')
+                        continue
+                    proj_code = str(proj_val).strip()
+                    try:
+                        proj_obj = Project.objects.get(project_id=proj_code)
+                    except Project.DoesNotExist:
+                        error_messages.append(f'Row {row_idx}: Project {proj_code} not found')
+                        continue
+                else:
+                    proj_obj = project
+
+                # columns
+                gl_code = row[gl_code_col] if len(row) > gl_code_col else None
+                gl_name = row[gl_name_col] if len(row) > gl_name_col else None
+                budget_amount = row[amount_col] if len(row) > amount_col else None
+
+                if gl_code is None or budget_amount is None:
                     error_messages.append(f'Row {row_idx}: Missing GL Code or Budget Amount')
                     continue
-                
-                # Convert budget amount to Decimal
+
+                gl_code = str(gl_code).strip()
+                gl_name = str(gl_name).strip() if gl_name else ''
+
+                # parse amount
                 try:
-                    budget_amount = Decimal(str(budget_amount))
-                except:
+                    budget_amount_dec = Decimal(str(budget_amount))
+                except Exception:
                     error_messages.append(f'Row {row_idx}: Invalid budget amount format')
                     continue
-                
-                # Find GL account
-                try:
-                    gl_account = GLMaster.objects.get(gl_code=str(gl_code).strip())
-                except GLMaster.DoesNotExist:
-                    error_messages.append(f'Row {row_idx}: GL Code {gl_code} not found')
-                    continue
-                
-                # Create or update budget line
-                line, created = ProjectBudgetLine.objects.update_or_create(
-                    budget=budget,
-                    gl_account=gl_account,
-                    defaults={'budget_amount': budget_amount}
-                )
-                
-                total_budget += budget_amount
-                success_count += 1
-            
+
+                key = (proj_obj.id, gl_code)
+                if key in pending:
+                    pending[key]['amount'] += budget_amount_dec
+                else:
+                    pending[key] = {
+                        'project': proj_obj,
+                        'gl_name': gl_name,
+                        'amount': budget_amount_dec
+                    }
+
             except Exception as e:
                 error_messages.append(f'Row {row_idx}: {str(e)}')
-        
-        # Update total budget
-        budget.total_budget_amount = total_budget
-        budget.save()
-        
+
+        # Second pass: write aggregated data to DB
+        # Track which projects we've cleared (for replace_existing)
+        cleared_projects = set()
+        from .models import GLCreationLog
+
+        for (proj_id, gl_code), info in pending.items():
+            proj_obj = info['project']
+            gl_name = info['gl_name']
+            amt = info['amount']
+
+            # Ensure GL exists
+            try:
+                gl_account = GLMaster.objects.get(gl_code=str(gl_code))
+                created_gl = False
+            except GLMaster.DoesNotExist:
+                if create_missing_gl:
+                    parent_group = ProjectBudgetLine.get_gl_group(str(gl_code)) if hasattr(ProjectBudgetLine, 'get_gl_group') else ''
+                    gl_account = GLMaster.objects.create(
+                        gl_code=str(gl_code),
+                        gl_name=gl_name or str(gl_code),
+                        gl_type='expense',
+                        parent_group=parent_group
+                    )
+                    created_gl = True
+                    # log creation
+                    try:
+                        GLCreationLog.objects.create(
+                            gl=gl_account,
+                            created_by=user if user and hasattr(user, 'id') else None,
+                            source='budget_import'
+                        )
+                    except Exception:
+                        # don't fail import if logging fails
+                        pass
+                else:
+                    error_messages.append(f'Project {proj_obj.project_id}: GL Code {gl_code} not found')
+                    continue
+
+            # get or create budget for project
+            if proj_obj.id not in budgets_cache:
+                b, created = ProjectBudget.objects.get_or_create(
+                    project=proj_obj,
+                    defaults={'status': 'active'}
+                )
+                budgets_cache[proj_obj.id] = b
+
+            # clear if requested (do once per project)
+            budget_obj = budgets_cache[proj_obj.id]
+            if replace_existing and proj_obj.id not in cleared_projects:
+                budget_obj.lines.all().delete()
+                cleared_projects.add(proj_obj.id)
+
+            # Create or update budget line with aggregated amount
+            ProjectBudgetLine.objects.update_or_create(
+                budget=budget_obj,
+                gl_account=gl_account,
+                defaults={'budget_amount': amt}
+            )
+
+            projects_updated.add(proj_obj.id)
+            success_count += 1
+
+        # Recalculate totals for updated budgets
+        for pid in projects_updated:
+            b = budgets_cache.get(pid) or ProjectBudget.objects.get(project_id=pid)
+            b.recalculate_total()
+
     except Exception as e:
         error_messages.append(f'File processing error: {str(e)}')
-    
-    return success_count, error_messages
+
+    return success_count, error_messages, list(projects_updated)
 
 
 @login_required

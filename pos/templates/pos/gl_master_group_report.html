@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+  <h3>{{ page_title }}</h3>
+  <div class="accordion" id="glGroups">
+    {% for group, gls in groups.items %}
+      <div class="accordion-item">
+        <h2 class="accordion-header" id="heading{{ forloop.counter }}">
+          <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse{{ forloop.counter }}" aria-expanded="false">
+            {{ group }} ({{ gls|length }})
+          </button>
+        </h2>
+        <div id="collapse{{ forloop.counter }}" class="accordion-collapse collapse" data-bs-parent="#glGroups">
+          <div class="accordion-body p-0">
+            <table class="table table-sm mb-0">
+              <thead>
+                <tr>
+                  <th>GL Code</th>
+                  <th>GL Name</th>
+                  <th>Type</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for gl in gls %}
+                  <tr>
+                    <td>{{ gl.gl_code }}</td>
+                    <td>{{ gl.gl_name }}</td>
+                    <td>{{ gl.get_gl_type_display }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

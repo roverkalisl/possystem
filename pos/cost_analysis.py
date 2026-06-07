@@ -279,7 +279,7 @@ class ProjectCostAnalyzer:
         qs = GRNItem.objects.filter(
             allocation_project=self.project,
             allocation_type='project'
-        ).select_related('item', 'grn', 'purchase_order_item__supplier')
+        ).select_related('item', 'grn', 'purchase_order_item')
         
         if gl_code or gl_group:
             gl_codes = [gl_code] if gl_code else self._get_gl_codes_in_group(gl_group or '')

@@ -65,6 +65,30 @@
                             </small>
                         </div>
 
+                        <div class="mb-3">
+                            <div class="form-check">
+                                {{ form.create_missing_gl }}
+                                <label for="{{ form.create_missing_gl.id_for_label }}" class="form-check-label">
+                                    <strong>Create missing GL accounts</strong>
+                                </label>
+                            </div>
+                            <small class="form-text text-muted d-block mt-1">
+                                {{ form.create_missing_gl.help_text }}
+                            </small>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="form-check">
+                                {{ form.import_multiple_projects }}
+                                <label for="{{ form.import_multiple_projects.id_for_label }}" class="form-check-label">
+                                    <strong>Import multiple projects from file</strong>
+                                </label>
+                            </div>
+                            <small class="form-text text-muted d-block mt-1">
+                                {{ form.import_multiple_projects.help_text }}
+                            </small>
+                        </div>
+
                         <!-- File Format Help -->
                         <div class="alert alert-info mb-4">
                             <h6 class="alert-heading">

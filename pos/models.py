@@ -71,6 +71,22 @@ class GLMaster(models.Model):
         return f"{self.gl_code} - {self.gl_name}"
 
 
+class GLCreationLog(models.Model):
+    """Log for automatically created GL accounts via imports."""
+    gl = models.ForeignKey(GLMaster, on_delete=models.CASCADE, related_name='creation_logs')
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    source = models.CharField(max_length=200, blank=True, null=True)
+    note = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        user = self.created_by.username if self.created_by else 'system'
+        return f"GL {self.gl.gl_code} created by {user} at {self.created_at:%Y-%m-%d %H:%M}"
+
+
 # =========================
 # ITEMS / STOCK
 # =========================
