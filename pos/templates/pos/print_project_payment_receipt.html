@@ -1,3 +1,4 @@
+{% load static %}
 {% load currency_filters %}
 <!DOCTYPE html>
 <html>
@@ -280,7 +281,7 @@
         <div class="header">
             <div class="left-head">
                 <div class="logo-row">
-                    <img src="/static/logo.png" alt="Logo">
+                    <img src="{% static 'logo.png' %}" alt="Logo">
                     <div class="brand-name">P &amp; I CONSTRUCTIONS</div>
                 </div>
 
