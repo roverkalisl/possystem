@@ -1,0 +1,126 @@
+{% extends 'base.html' %}
+{% load currency_filters %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>GL Group Cost Analysis</h2>
+        <div>
+            <a href="{% url 'project_cost_analysis_list' %}" class="btn btn-secondary">
+                <i class="fas fa-arrow-left"></i> Back
+            </a>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="card shadow-sm mb-4">
+        <div class="card-body">
+            <form method="get" class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Project</label>
+                    <select name="project_id" class="form-select">
+                        <option value="">All Projects</option>
+                        {% for project in projects %}
+                            <option value="{{ project.id }}" {% if project.id|stringformat:"s" == selected_project %}selected{% endif %}>
+                                {{ project.project_id }} - {{ project.project_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">GL Group</label>
+                    <select name="gl_group" class="form-select">
+                        <option value="">All Groups</option>
+                        {% for group in gl_groups %}
+                            <option value="{{ group }}" {% if group == selected_group %}selected{% endif %}>
+                                {{ group }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="fas fa-filter"></i> Filter
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- GL Group Summary Table -->
+    <div class="card shadow-sm">
+        <div class="card-header bg-light">
+            <h5 class="mb-0">GL Group Summary</h5>
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-striped table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Project</th>
+                            <th>GL Group</th>
+                            <th class="text-end">Budget</th>
+                            <th class="text-end">Actual Cost</th>
+                            <th class="text-end">Variance</th>
+                            <th class="text-end">Utilization %</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for project_id, project_summary in summary_data.items %}
+                            {% for group_name, group_data in project_summary.data.items %}
+                            <tr>
+                                <td>
+                                    <strong>{{ project_summary.project.project_id }}</strong><br>
+                                    <small class="text-muted">{{ project_summary.project.project_name }}</small>
+                                </td>
+                                <td>{{ group_name }}</td>
+                                <td class="text-end">{{ group_data.budget|money }}</td>
+                                <td class="text-end">{{ group_data.actual|money }}</td>
+                                <td class="text-end {% if group_data.variance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ group_data.variance|money }}
+                                </td>
+                                <td class="text-end">
+                                    <div class="progress" style="height: 20px;">
+                                        <div class="progress-bar {% if group_data.actual <= group_data.budget %}bg-success{% else %}bg-danger{% endif %}" 
+                                             role="progressbar" 
+                                             style="width: {{ group_data.utilization_percent|floatformat:0 }}%"
+                                             aria-valuenow="{{ group_data.utilization_percent }}" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100">
+                                            {{ group_data.utilization_percent|floatformat:1 }}%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    {% if group_data.utilization_percent <= 100 %}
+                                        <span class="badge bg-success">Within Budget</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Over Budget</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% empty %}
+                        <tr>
+                            <td colspan="7" class="text-center text-muted">No data available</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<style>
+    .card {
+        border-radius: 8px;
+        border: none;
+    }
+    .progress {
+        border-radius: 4px;
+    }
+</style>
+{% endblock %}

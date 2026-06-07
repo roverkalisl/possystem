@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% load currency_filters %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Project Cost Analysis</h2>
+        <div>
+            <a href="{% url 'budget_upload' %}" class="btn btn-primary">
+                <i class="fas fa-upload"></i> Upload Budget
+            </a>
+            <a href="{% url 'cost_analysis_by_gl_group' %}" class="btn btn-info">
+                <i class="fas fa-chart-bar"></i> GL Group Summary
+            </a>
+            <a href="{% url 'dashboard' %}" class="btn btn-secondary">
+                <i class="fas fa-home"></i> Dashboard
+            </a>
+        </div>
+    </div>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="row">
+        {% for project in projects %}
+        <div class="col-md-6 mb-4">
+            <div class="card shadow-sm">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">{{ project.project_id }} - {{ project.project_name }}</h5>
+                </div>
+                <div class="card-body">
+                    {% if project.budget %}
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <small class="text-muted">Budget Amount</small>
+                                <p class="fs-5 fw-bold">{{ project.budget.total_budget_amount|money }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted">Status</small>
+                                <p class="fs-5">
+                                    <span class="badge bg-{% if project.budget.status == 'active' %}success{% else %}warning{% endif %}">
+                                        {{ project.budget.get_status_display }}
+                                    </span>
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <div class="d-grid gap-2">
+                            <a href="{% url 'project_cost_analysis_detail' project.id %}" class="btn btn-outline-primary">
+                                <i class="fas fa-chart-line"></i> View Cost Analysis
+                            </a>
+                            <a href="{% url 'project_cost_analysis_detail' project.id %}?export=true" class="btn btn-outline-success btn-sm">
+                                <i class="fas fa-download"></i> Export
+                            </a>
+                        </div>
+                    {% else %}
+                        <p class="text-muted mb-3">No budget uploaded yet</p>
+                        <a href="{% url 'budget_upload' %}" class="btn btn-primary btn-sm">
+                            <i class="fas fa-upload"></i> Upload Budget
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% empty %}
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle"></i> No active projects found.
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}

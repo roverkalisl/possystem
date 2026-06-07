@@ -1,7 +1,7 @@
 # Register your models here.
 from django.contrib import admin
 from .models import Category, Item, Supplier, UserLog, AuditLog, ProjectTransfer
-from .models import Quotation, QuotationItem
+from .models import Quotation, QuotationItem, ProjectBudget, ProjectBudgetLine, ProjectCostActual
 
 
 # Logging Models
@@ -63,3 +63,50 @@ class QuotationAdmin(admin.ModelAdmin):
     search_fields = ['quotation_no', 'customer_name', 'contact_person']
     inlines = [QuotationItemInline]
     readonly_fields = ['quotation_no', 'created_at']
+
+
+# =========================
+# PROJECT COST ANALYSIS ADMIN
+# =========================
+class ProjectBudgetLineInline(admin.TabularInline):
+    model = ProjectBudgetLine
+    extra = 1
+    fields = ['gl_account', 'budget_amount']
+
+
+@admin.register(ProjectBudget)
+class ProjectBudgetAdmin(admin.ModelAdmin):
+    list_display = ['project', 'budget_date', 'status', 'total_budget_amount', 'created_by', 'created_at']
+    list_filter = ['status', 'budget_date', 'created_at']
+    search_fields = ['project__project_id', 'project__project_name']
+    readonly_fields = ['total_budget_amount', 'created_at', 'updated_at']
+    inlines = [ProjectBudgetLineInline]
+    fieldsets = (
+        ('Project Budget', {
+            'fields': ('project', 'budget_date', 'status', 'total_budget_amount')
+        }),
+        ('Notes', {
+            'fields': ('notes',),
+            'classes': ('collapse',)
+        }),
+        ('Audit Trail', {
+            'fields': ('created_by', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(ProjectBudgetLine)
+class ProjectBudgetLineAdmin(admin.ModelAdmin):
+    list_display = ['budget', 'gl_account', 'budget_amount']
+    list_filter = ['budget__project', 'gl_account__gl_code']
+    search_fields = ['budget__project__project_id', 'gl_account__gl_code', 'gl_account__gl_name']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(ProjectCostActual)
+class ProjectCostActualAdmin(admin.ModelAdmin):
+    list_display = ['project', 'gl_account', 'source_type', 'transaction_date', 'amount', 'reference_no']
+    list_filter = ['project', 'source_type', 'transaction_date', 'gl_account']
+    search_fields = ['project__project_id', 'gl_account__gl_code', 'reference_no', 'description']
+    readonly_fields = ['created_at']

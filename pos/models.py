@@ -1644,3 +1644,167 @@ class AuditLog(models.Model):
     
     def __str__(self):
         return f'{self.action.title()} {self.model_name} by {self.user.username if self.user else "Unknown"}'
+
+
+# =========================
+# PROJECT COST ANALYSIS
+# =========================
+class ProjectBudget(models.Model):
+    """Master budget record for a project"""
+    
+    STATUS_CHOICES = [
+        ('draft', 'Draft'),
+        ('active', 'Active'),
+        ('archived', 'Archived'),
+    ]
+    
+    project = models.OneToOneField(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='budget'
+    )
+    budget_date = models.DateField(default=timezone.now)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='draft')
+    
+    total_budget_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    
+    notes = models.TextField(blank=True, null=True)
+    
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_budgets'
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"Budget - {self.project.project_id}"
+    
+    def recalculate_total(self):
+        """Recalculate total budget from budget lines"""
+        total = self.lines.aggregate(Sum('budget_amount'))['budget_amount__sum'] or Decimal('0')
+        self.total_budget_amount = total
+        self.save()
+        return total
+
+
+class ProjectBudgetLine(models.Model):
+    """GL-wise budget breakdown for a project"""
+    
+    budget = models.ForeignKey(
+        ProjectBudget,
+        on_delete=models.CASCADE,
+        related_name='lines'
+    )
+    
+    gl_account = models.ForeignKey(
+        GLMaster,
+        on_delete=models.PROTECT,
+        related_name='budget_lines'
+    )
+    
+    budget_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['gl_account__gl_code']
+        unique_together = ['budget', 'gl_account']
+    
+    def __str__(self):
+        return f"{self.budget.project.project_id} - {self.gl_account.gl_code}"
+    
+    @property
+    def gl_group(self):
+        """Get GL group based on GL code range"""
+        return self.get_gl_group(self.gl_account.gl_code)
+    
+    @staticmethod
+    def get_gl_group(gl_code):
+        """Map GL code to GL Group"""
+        try:
+            code_num = int(gl_code)
+        except (ValueError, TypeError):
+            return "Other"
+        
+        if 5100 <= code_num <= 5199:
+            return "Direct Material Cost"
+        elif 5200 <= code_num <= 5299:
+            return "Direct Labour Cost"
+        elif 5300 <= code_num <= 5399:
+            return "Plant & Equipment Cost"
+        elif 5400 <= code_num <= 5499:
+            return "Subcontractor Cost"
+        elif 5500 <= code_num <= 5599:
+            return "Third Party Service Cost"
+        elif 5600 <= code_num <= 5699:
+            return "Transportation & Logistics"
+        elif 5700 <= code_num <= 5799:
+            return "Project-Specific Expenses"
+        elif 5800 <= code_num <= 5899:
+            return "Variations / Cost Adjustments"
+        elif 5900 <= code_num <= 5999:
+            return "Retail Operating Expenses"
+        elif 6000 <= code_num <= 6099:
+            return "Overhead Expenses"
+        elif 6100 <= code_num <= 6199:
+            return "Selling & Marketing"
+        elif 6200 <= code_num <= 6299:
+            return "General Expenses"
+        elif code_num >= 8000:
+            return "Other Expenses"
+        else:
+            return "Other"
+
+
+class ProjectCostActual(models.Model):
+    """Cache for actual costs - updated by transaction approvals"""
+    
+    COST_SOURCE_CHOICES = [
+        ('project_expense', 'Project Expense'),
+        ('petty_cash', 'Petty Cash Expense'),
+        ('grn_issue', 'GRN Issue'),
+        ('inventory_issue', 'Inventory Issue'),
+        ('supplier_settlement', 'Supplier Settlement'),
+    ]
+    
+    project = models.ForeignKey(
+        Project,
+        on_delete=models.CASCADE,
+        related_name='cost_actuals'
+    )
+    
+    gl_account = models.ForeignKey(
+        GLMaster,
+        on_delete=models.PROTECT,
+        related_name='cost_actuals'
+    )
+    
+    source_type = models.CharField(max_length=30, choices=COST_SOURCE_CHOICES)
+    source_id = models.CharField(max_length=100)  # ID of source transaction
+    
+    transaction_date = models.DateField()
+    description = models.CharField(max_length=255)
+    
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    
+    reference_no = models.CharField(max_length=100, blank=True, null=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        ordering = ['-transaction_date', '-id']
+        indexes = [
+            models.Index(fields=['project', 'gl_account']),
+            models.Index(fields=['project', 'source_type']),
+        ]
+    
+    def __str__(self):
+        return f"{self.project.project_id} - {self.gl_account.gl_code} - {self.amount}"

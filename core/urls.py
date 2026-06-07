@@ -1,6 +1,7 @@
 from django.contrib import admin
 from django.urls import path
 from pos import views
+from pos import cost_analysis_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -199,4 +200,16 @@ urlpatterns = [
     path('quotations/<int:quotation_id>/edit/', views.create_quotation, name='edit_quotation'),
     path('quotations/<int:quotation_id>/', views.quotation_detail, name='quotation_detail'),
     path('quotations/<int:quotation_id>/print/', views.print_quotation, name='print_quotation'),
+    
+    # =========================
+    # PROJECT COST ANALYSIS
+    # =========================
+    path('reports/cost-analysis/', cost_analysis_views.project_cost_analysis_list, name='project_cost_analysis_list'),
+    path('reports/cost-analysis/<int:project_id>/', cost_analysis_views.project_cost_analysis_detail, name='project_cost_analysis_detail'),
+    path('reports/cost-analysis-by-group/', cost_analysis_views.cost_analysis_by_gl_group, name='cost_analysis_by_gl_group'),
+    path('project/<int:project_id>/cost-summary/', cost_analysis_views.project_dashboard_cost_summary, name='project_dashboard_cost_summary'),
+    path('budget/upload/', cost_analysis_views.budget_upload, name='budget_upload'),
+    path('project/<int:project_id>/transactions/', cost_analysis_views.transaction_details, name='transaction_details'),
+    path('project/<int:project_id>/export/excel/', cost_analysis_views.export_cost_analysis, name='export_cost_analysis'),
+    path('project/<int:project_id>/export/csv/', cost_analysis_views.export_cost_analysis_csv, name='export_cost_analysis_csv'),
 ]
