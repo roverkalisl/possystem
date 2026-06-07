@@ -168,6 +168,13 @@ def generate_supplier_settlement_no():
         return f"SSET{int(str(last.settlement_no).replace('SSET', '')) + 1:05d}"
     return "SSET00001"
 
+
+def generate_sales_return_no():
+    last = SalesReturn.objects.exclude(return_no__isnull=True).order_by("-id").first()
+    if last and last.return_no and str(last.return_no).replace("RET", "").isdigit():
+        return f"RET{int(str(last.return_no).replace('RET', '')) + 1:05d}"
+    return "RET00001"
+
 def is_owner(user):
     return user.is_superuser or user.groups.filter(name__iexact="Owner").exists()
 
@@ -867,135 +874,140 @@ def sales_return(request):
 
     if request.method == "POST":
         sale_id = request.POST.get("sale")
-        sale_item_id = request.POST.get("sale_item")
-        qty = to_decimal(request.POST.get("qty"))
+        sale_item_ids = request.POST.getlist("sale_item_ids")
+        qtys = request.POST.getlist("qtys")
         return_type = request.POST.get("return_type") or "refund"
         reason = (request.POST.get("reason") or "").strip()
 
         sale = get_object_or_404(Sale, id=sale_id)
-        sale_item = get_object_or_404(SaleItem, id=sale_item_id, sale=sale)
 
-        if qty <= 0:
-            messages.error(request, "Return quantity must be greater than 0.")
+        if not sale_item_ids:
+            messages.error(request, "Please select at least one item to return.")
             return redirect("sales_return")
 
-        available_qty = get_available_qty_for_sale_item(sale_item)
+        selected_items = []
+        for index, sale_item_id in enumerate(sale_item_ids):
+            sale_item = get_object_or_404(SaleItem, id=sale_item_id, sale=sale)
+            qty = to_decimal(qtys[index] if index < len(qtys) else 0)
+            selected_items.append((sale_item, qty))
 
-        if available_qty <= 0:
-            messages.error(request, "This item has already been fully returned.")
-            return redirect("sales_return")
+        for sale_item, qty in selected_items:
+            if qty <= 0:
+                messages.error(request, "Return quantity must be greater than 0 for selected items.")
+                return redirect("sales_return")
 
-        if qty > available_qty:
-            messages.error(request, f"Return quantity exceeds available quantity. Available: {available_qty}")
-            return redirect("sales_return")
+            available_qty = get_available_qty_for_sale_item(sale_item)
+            if available_qty <= 0:
+                messages.error(request, f"Item {sale_item.item.name} has already been fully returned.")
+                return redirect("sales_return")
 
-        return_no = f"RET{SalesReturn.objects.count() + 1:05d}"
+            if qty > available_qty:
+                messages.error(request, f"Return quantity for {sale_item.item.name} exceeds available quantity. Available: {available_qty}")
+                return redirect("sales_return")
 
+        created_returns = []
         with transaction.atomic():
-            r = SalesReturn.objects.create(
-                return_no=return_no,
-                sale=sale,
-                sale_item=sale_item,
-                qty=qty,
-                return_type=return_type,
-                reason=reason,
-                created_by=request.user,
-            )
-
-            item = sale_item.item
-            if not item.is_service:
-                item.stock = Decimal(str(item.stock or 0)) + qty
-                item.updated_by = request.user
-                item.save()
-
-                StockTransaction.objects.create(
-                    item=item,
-                    transaction_type="return_in",
+            for sale_item, qty in selected_items:
+                return_no = generate_sales_return_no()
+                r = SalesReturn.objects.create(
+                    return_no=return_no,
+                    sale=sale,
+                    sale_item=sale_item,
                     qty=qty,
+                    return_type=return_type,
+                    reason=reason,
+                    created_by=request.user,
                 )
 
-            # Reverse/Adjust Project Expenses if this is a project issue
-            # This applies regardless of is_posted_to_project_expense flag
-            if sale.sale_type == "project_issue":
-                # Find all project expenses related to this sale, by item or source_sale
-                project_expenses = ProjectExpense.objects.filter(
-                    Q(source_sale=sale, is_active=True) |
-                    Q(source_sale=sale, item=item, is_active=True)
-                ).distinct()
-                
-                if not project_expenses.exists() and item:
-                    # Also try to find by item if no source_sale match
-                    project_expenses = ProjectExpense.objects.filter(
+                created_returns.append(r)
+                item = sale_item.item
+                if not item.is_service:
+                    item.stock = Decimal(str(item.stock or 0)) + qty
+                    item.updated_by = request.user
+                    item.save()
+
+                    StockTransaction.objects.create(
                         item=item,
-                        project=sale.project,
-                        is_active=True,
-                        expense_type="inventory"
+                        transaction_type="return_in",
+                        qty=qty,
                     )
-                
-                returned_qty = Decimal(str(qty))
-                
-                for pe in project_expenses:
-                    original_qty = Decimal(str(pe.qty or 0))
-                    original_amount = Decimal(str(pe.amount or 0))
-                    
-                    if returned_qty >= original_qty:
-                        # Mark entire expense as inactive if return qty >= expense qty
-                        pe.is_active = False
-                        pe.inactive_at = timezone.now()
-                        pe.inactive_by = request.user
-                        pe.inactive_reason = f"Reversed due to sales return {return_no} (Qty: {returned_qty})"
-                        pe.save()
-                        
-                        # Create a separate return entry (credit) for transparency
-                        ProjectExpense.objects.create(
-                            expense_no=f"RET-{return_no}",
-                            project=sale.project,
-                            expense_type="inventory",
-                            expense_date=timezone.now().date(),
+
+                if sale.sale_type == "project_issue":
+                    project_expenses = ProjectExpense.objects.filter(
+                        Q(source_sale=sale, is_active=True) |
+                        Q(source_sale=sale, item=item, is_active=True)
+                    ).distinct()
+
+                    if not project_expenses.exists() and item:
+                        project_expenses = ProjectExpense.objects.filter(
                             item=item,
-                            description=f"Return: {pe.description} (Return No: {return_no})",
-                            qty=returned_qty,
-                            unit_price=Decimal(str(pe.unit_price or 0)),
-                            amount=Decimal("0") - (returned_qty * Decimal(str(pe.unit_price or 0))),  # Negative amount (credit)
-                            gl_account=pe.gl_account,
-                            source_sale=sale,
-                            created_by=request.user,
+                            project=sale.project,
+                            is_active=True,
+                            expense_type="inventory"
                         )
-                    else:
-                        # Reduce the expense quantity and amount if return qty < expense qty
-                        reduction_amount = returned_qty * Decimal(str(pe.unit_price or 0))
-                        
-                        pe.qty = original_qty - returned_qty
-                        pe.amount = original_amount - reduction_amount
-                        
-                        note = f"[Adjusted: Qty reduced by {returned_qty} due to return {return_no}]"
-                        if pe.description:
-                            if "[Adjusted" not in pe.description:
-                                pe.description += f"\n{note}"
+
+                    returned_qty = Decimal(str(qty))
+
+                    for pe in project_expenses:
+                        original_qty = Decimal(str(pe.qty or 0))
+                        original_amount = Decimal(str(pe.amount or 0))
+
+                        if returned_qty >= original_qty:
+                            pe.is_active = False
+                            pe.inactive_at = timezone.now()
+                            pe.inactive_by = request.user
+                            pe.inactive_reason = f"Reversed due to sales return {return_no} (Qty: {returned_qty})"
+                            pe.save()
+
+                            ProjectExpense.objects.create(
+                                expense_no=f"RET-{return_no}",
+                                project=sale.project,
+                                expense_type="inventory",
+                                expense_date=timezone.now().date(),
+                                item=item,
+                                description=f"Return: {pe.description} (Return No: {return_no})",
+                                qty=returned_qty,
+                                unit_price=Decimal(str(pe.unit_price or 0)),
+                                amount=Decimal("0") - (returned_qty * Decimal(str(pe.unit_price or 0))),
+                                gl_account=pe.gl_account,
+                                source_sale=sale,
+                                created_by=request.user,
+                            )
                         else:
-                            pe.description = note
-                        pe.save()
-                        
-                        # Create a separate return entry (credit) for transparency
-                        ProjectExpense.objects.create(
-                            expense_no=f"RET-{return_no}",
-                            project=sale.project,
-                            expense_type="inventory",
-                            expense_date=timezone.now().date(),
-                            item=item,
-                            description=f"Return: {pe.description} (Return No: {return_no})",
-                            qty=returned_qty,
-                            unit_price=Decimal(str(pe.unit_price or 0)),
-                            amount=Decimal("0") - reduction_amount,  # Negative amount (credit)
-                            gl_account=pe.gl_account,
-                            source_sale=sale,
-                            created_by=request.user,
-                        )
+                            reduction_amount = returned_qty * Decimal(str(pe.unit_price or 0))
+                            pe.qty = original_qty - returned_qty
+                            pe.amount = original_amount - reduction_amount
+                            note = f"[Adjusted: Qty reduced by {returned_qty} due to return {return_no}]"
+                            if pe.description:
+                                if "[Adjusted" not in pe.description:
+                                    pe.description += f"\n{note}"
+                            else:
+                                pe.description = note
+                            pe.save()
+
+                            ProjectExpense.objects.create(
+                                expense_no=f"RET-{return_no}",
+                                project=sale.project,
+                                expense_type="inventory",
+                                expense_date=timezone.now().date(),
+                                item=item,
+                                description=f"Return: {pe.description} (Return No: {return_no})",
+                                qty=returned_qty,
+                                unit_price=Decimal(str(pe.unit_price or 0)),
+                                amount=Decimal("0") - reduction_amount,
+                                gl_account=pe.gl_account,
+                                source_sale=sale,
+                                created_by=request.user,
+                            )
 
             recalculate_sale_totals_after_return(sale)
 
-        messages.success(request, f"Sales return saved successfully. Return No: {r.return_no}")
-        return redirect("return_receipt", return_id=r.id)
+        if len(created_returns) == 1:
+            messages.success(request, f"Sales return saved successfully. Return No: {created_returns[0].return_no}")
+            return redirect("return_receipt", return_id=created_returns[0].id)
+
+        messages.success(request, f"Sales return saved successfully for {len(created_returns)} item(s).")
+        return redirect("sales_return_list")
 
     return render(request, "pos/sales_return.html", {"sales": sales})
 
@@ -4641,6 +4653,164 @@ def supplier_settlement_list(request):
         "grand_pending_actual": grand_pending_actual,
         "grand_approved_balance_due": grand_approved_balance_due,
         "grand_pending_balance_due": grand_pending_balance_due,
+    })
+
+@user_passes_test(can_use_project)
+def supplier_payment(request):
+    suppliers = Supplier.objects.filter(is_active=True).order_by("name")
+    expense_gls = GLMaster.objects.filter(gl_type="expense", is_active=True).order_by("gl_code")
+    supplier_id = request.GET.get("supplier", "").strip()
+    selected_supplier = None
+    bills = []
+    advances = []
+    supplier_summary = None
+
+    if supplier_id:
+        selected_supplier = get_object_or_404(Supplier, id=supplier_id, is_active=True)
+        approved_grns = GRN.objects.filter(supplier=selected_supplier, status="approved").order_by("-grn_date", "-id")
+        approved_settlements = SupplierSettlement.objects.filter(supplier=selected_supplier, approval_status="approved")
+
+        settlement_totals_by_grn = {}
+        for settlement in approved_settlements:
+            if settlement.grn_id:
+                settlement_totals_by_grn.setdefault(settlement.grn_id, Decimal("0"))
+                settlement_totals_by_grn[settlement.grn_id] += Decimal(str(settlement.actual_amount or 0))
+
+        total_grn_value = Decimal("0")
+        total_advance_paid = selected_supplier.advances.filter(is_active=True).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        total_settlements_made = approved_settlements.aggregate(total=Sum("actual_amount"))["total"] or Decimal("0")
+
+        for grn in approved_grns:
+            bill_amount = grn.total_value
+            paid_amount = settlement_totals_by_grn.get(grn.id, Decimal("0"))
+            balance_amount = bill_amount - paid_amount
+            bills.append({
+                "id": grn.id,
+                "po_no": grn.purchase_order.po_no if grn.purchase_order else "-",
+                "grn_no": grn.grn_no,
+                "bill_no": grn.invoice_no or "-",
+                "bill_date": grn.grn_date,
+                "project": f"{grn.purchase_order.project.project_id} - {grn.purchase_order.project.project_name}" if grn.purchase_order and grn.purchase_order.project else "-",
+                "bill_amount": bill_amount,
+                "paid_amount": paid_amount,
+                "balance_amount": balance_amount,
+                "status": "Paid" if balance_amount <= 0 else "Outstanding",
+            })
+            total_grn_value += bill_amount
+
+        outstanding_payable = sum(row["balance_amount"] for row in bills if row["balance_amount"] > 0)
+        current_supplier_balance = total_advance_paid - total_settlements_made
+        advances = selected_supplier.advances.filter(is_active=True).order_by("-advance_date", "-id")
+        supplier_summary = {
+            "total_bills": len(bills),
+            "total_grn_value": total_grn_value,
+            "total_advance_paid": total_advance_paid,
+            "total_settlements_made": total_settlements_made,
+            "outstanding_payable": outstanding_payable,
+            "current_balance": current_supplier_balance,
+        }
+
+    today = timezone.localdate()
+
+    if request.method == "POST":
+        supplier_id = request.POST.get("supplier")
+        selected_supplier = get_object_or_404(Supplier, id=supplier_id, is_active=True)
+        selected_advance_id = request.POST.get("supplier_advance") or None
+        expense_gl_id = request.POST.get("expense_gl") or None
+        description = (request.POST.get("description") or "Supplier payment").strip()
+        payment_date = request.POST.get("payment_date") or timezone.localdate()
+        note = (request.POST.get("note") or "").strip()
+        selected_grn_ids = request.POST.getlist("selected_grns")
+        payment_amounts = request.POST.getlist("payment_amounts")
+
+        if not selected_grn_ids:
+            messages.error(request, "Please select at least one bill to pay.")
+            return redirect(f"{request.path}?supplier={supplier_id}")
+
+        if not expense_gl_id:
+            messages.error(request, "Expense GL is required for supplier payments.")
+            return redirect(f"{request.path}?supplier={supplier_id}")
+
+        if selected_advance_id:
+            advance = SupplierAdvance.objects.filter(id=selected_advance_id, supplier=selected_supplier, is_active=True).first()
+        else:
+            advance = None
+
+        if not advance:
+            advance = SupplierAdvance.objects.create(
+                advance_no=generate_supplier_advance_no(),
+                supplier=selected_supplier,
+                advance_date=timezone.localdate(),
+                amount=Decimal("0"),
+                status="approved",
+                created_by=request.user,
+            )
+
+        available_balance = Decimal(str(advance.balance_amount or 0))
+        created_count = 0
+
+        with transaction.atomic():
+            for index, grn_id in enumerate(selected_grn_ids):
+                grn = GRN.objects.filter(id=grn_id, supplier=selected_supplier, status="approved").first()
+                if not grn:
+                    continue
+
+                amount = to_decimal(payment_amounts[index] if index < len(payment_amounts) else 0)
+                if amount <= 0:
+                    continue
+
+                paid_amount = SupplierSettlement.objects.filter(
+                    supplier=selected_supplier,
+                    approval_status="approved",
+                    grn=grn
+                ).aggregate(total=Sum("actual_amount"))["total"] or Decimal("0")
+                remaining_balance = Decimal(str(grn.total_value or 0)) - paid_amount
+
+                if amount > remaining_balance:
+                    messages.error(request, f"Payment amount for GRN {grn.grn_no} exceeds the outstanding balance.")
+                    return redirect(f"{request.path}?supplier={supplier_id}")
+
+                advance_applied = min(available_balance, amount)
+                balance_due = amount - advance_applied
+                excess_advance = available_balance - amount if available_balance > amount else Decimal("0")
+
+                SupplierSettlement.objects.create(
+                    settlement_no=generate_supplier_settlement_no(),
+                    advance=advance,
+                    supplier=selected_supplier,
+                    project=grn.purchase_order.project if grn.purchase_order and grn.purchase_order.project else None,
+                    grn=grn,
+                    settlement_date=payment_date,
+                    description=description,
+                    actual_amount=amount,
+                    advance_applied=advance_applied,
+                    balance_due=balance_due,
+                    excess_advance=excess_advance,
+                    expense_gl_id=expense_gl_id,
+                    approval_status="pending",
+                    note=note,
+                    created_by=request.user,
+                )
+
+                available_balance -= advance_applied
+                created_count += 1
+
+        if created_count == 0:
+            messages.error(request, "No valid payment amounts were entered.")
+            return redirect(f"{request.path}?supplier={supplier_id}")
+
+        messages.success(request, f"{created_count} payment record(s) created and submitted for approval.")
+        return redirect("supplier_settlement_list")
+
+    return render(request, "pos/supplier_payment.html", {
+        "suppliers": suppliers,
+        "expense_gls": expense_gls,
+        "selected_supplier": selected_supplier,
+        "supplier_summary": supplier_summary,
+        "bills": bills,
+        "advances": advances,
+        "supplier_id": supplier_id,
+        "today": today,
     })
 
 @user_passes_test(can_use_project)

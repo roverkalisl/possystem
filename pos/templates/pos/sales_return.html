@@ -26,28 +26,38 @@
         </div>
 
         <div class="mb-2">
-            <label class="form-label">Sale Item</label>
-            <select name="sale_item" id="saleItemSelect" class="form-select form-select-sm" required>
-                <option value="">Select Item</option>
-            </select>
+            <label class="form-label">Invoice Items</label>
+            <div class="table-responsive">
+                <table class="table table-bordered table-hover table-sm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th style="width: 32px;"></th>
+                            <th>Item</th>
+                            <th class="text-end">Unit Price</th>
+                            <th class="text-end">Sold Qty</th>
+                            <th class="text-end">Available Qty</th>
+                            <th class="text-end">Return Qty</th>
+                        </tr>
+                    </thead>
+                    <tbody id="saleItemsTableBody">
+                        <tr>
+                            <td colspan="6" class="text-center text-muted py-4">Select invoice to load items.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
 
         <div class="row g-2">
             <div class="col-md-4">
-                <label class="form-label">Qty</label>
-                <input type="number" step="0.01" name="qty" class="form-control form-control-sm" required>
-            </div>
-
-            <div class="col-md-4">
                 <label class="form-label">Return Type</label>
                 <select name="return_type" class="form-select form-select-sm">
                     <option value="refund">Refund</option>
-                    <option value="replace">Replace</option>
-                    <option value="repair">Repair</option>
+                    <option value="exchange">Exchange</option>
                 </select>
             </div>
 
-            <div class="col-md-4">
+            <div class="col-md-8">
                 <label class="form-label">Reason</label>
                 <input type="text" name="reason" class="form-control form-control-sm">
             </div>
@@ -62,30 +72,103 @@
 
 {% block extra_js %}
 <script>
-document.getElementById("saleSelect").addEventListener("change", function() {
-    const saleId = this.value;
-    const itemSelect = document.getElementById("saleItemSelect");
-    itemSelect.innerHTML = '<option value="">Loading...</option>';
+function formatMoney(value) {
+    return parseFloat(value || 0).toFixed(2);
+}
+
+function updateRowState(row) {
+    const checkbox = row.querySelector('.row-select');
+    const qtyInput = row.querySelector('.return-qty');
+    const unitPrice = parseFloat(row.dataset.price || 0);
+    const available = parseFloat(row.dataset.available || 0);
+    const totalCell = row.querySelector('.return-total');
+
+    if (checkbox.checked) {
+        qtyInput.removeAttribute('disabled');
+        if (!qtyInput.value) {
+            qtyInput.value = formatMoney(available);
+        }
+    } else {
+        qtyInput.setAttribute('disabled', 'disabled');
+        qtyInput.value = '';
+    }
+
+    const qty = parseFloat(qtyInput.value || 0);
+    if (qty > available) {
+        qtyInput.value = formatMoney(available);
+    }
+
+    totalCell.textContent = formatMoney((parseFloat(qtyInput.value || 0) * unitPrice) || 0);
+}
+
+function buildItemsTable(items) {
+    const tbody = document.getElementById('saleItemsTableBody');
+    tbody.innerHTML = '';
+
+    if (!items.length) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No returnable items found for this invoice.</td></tr>';
+        return;
+    }
+
+    items.forEach(item => {
+        const row = document.createElement('tr');
+        row.dataset.price = item.price;
+        row.dataset.available = item.qty;
+
+        row.innerHTML = `
+            <td class="text-center">
+                <input type="checkbox" class="form-check-input row-select">
+                <input type="hidden" name="sale_item_ids" value="${item.sale_item_id}" class="sale-item-id" disabled>
+            </td>
+            <td>${item.item_name}</td>
+            <td class="text-end">${formatMoney(item.price)}</td>
+            <td class="text-end">${formatMoney(item.qty)}</td>
+            <td class="text-end">${formatMoney(item.qty)}</td>
+            <td class="text-end">
+                <input type="number" step="0.01" min="0" max="${item.qty}" name="qtys" class="form-control form-control-sm return-qty" disabled>
+                <div class="small text-muted return-total">0.00</div>
+            </td>
+        `;
+
+        const checkbox = row.querySelector('.row-select');
+        const qtyInput = row.querySelector('.return-qty');
+        const hiddenInput = row.querySelector('.sale-item-id');
+
+        checkbox.addEventListener('change', function() {
+            hiddenInput.disabled = !this.checked;
+            updateRowState(row);
+        });
+
+        qtyInput.addEventListener('input', function() {
+            if (parseFloat(this.value || 0) > item.qty) {
+                this.value = formatMoney(item.qty);
+            }
+            updateRowState(row);
+        });
+
+        tbody.appendChild(row);
+    });
+}
+
+function loadSaleItems(saleId) {
+    const tbody = document.getElementById('saleItemsTableBody');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Loading items...</td></tr>';
 
     if (!saleId) {
-        itemSelect.innerHTML = '<option value="">Select Item</option>';
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Select invoice to load items.</td></tr>';
         return;
     }
 
     fetch(`/sale-items/${saleId}/`)
         .then(response => response.json())
-        .then(data => {
-            itemSelect.innerHTML = '<option value="">Select Item</option>';
-            data.items.forEach(item => {
-                const option = document.createElement("option");
-                option.value = item.sale_item_id;
-                option.textContent = `${item.item_name} | Qty: ${item.qty} | Price: ${item.price}`;
-                itemSelect.appendChild(option);
-            });
-        })
+        .then(data => buildItemsTable(data.items))
         .catch(() => {
-            itemSelect.innerHTML = '<option value="">Failed to load items</option>';
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">Failed to load items.</td></tr>';
         });
+}
+
+document.getElementById('saleSelect').addEventListener('change', function() {
+    loadSaleItems(this.value);
 });
 </script>
 {% endblock %}

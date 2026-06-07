@@ -153,6 +153,7 @@ urlpatterns = [
     path("supplier-advances/<int:advance_id>/settle/", views.add_supplier_settlement_from_advance, name="add_supplier_settlement_from_advance"),
     path("supplier-advance-summary/", views.supplier_advance_summary, name="supplier_advance_summary"),
     path("supplier-advance-summary/<int:supplier_id>/", views.supplier_advance_summary_detail, name="supplier_advance_summary_detail"),
+    path("supplier-payment/", views.supplier_payment, name="supplier_payment"),
 
     path("supplier-settlements/", views.supplier_settlement_list, name="supplier_settlement_list"),
     path("supplier-settlements/<int:settlement_id>/approve/", views.approve_supplier_settlement, name="approve_supplier_settlement"),
