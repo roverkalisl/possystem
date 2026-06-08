@@ -47,70 +47,168 @@
         </div>
     </div>
 
-    <!-- GL Group Summary Table -->
-    <div class="card shadow-sm">
-        <div class="card-header bg-light">
-            <h5 class="mb-0">GL Group Summary</h5>
-        </div>
-        <div class="card-body">
-            <div class="table-responsive">
-                <table class="table table-striped table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Project</th>
-                            <th>GL Group</th>
-                            <th class="text-end">Budget</th>
-                            <th class="text-end">Actual Cost</th>
-                            <th class="text-end">Variance</th>
-                            <th class="text-end">Utilization %</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for project_id, project_summary in summary_data.items %}
-                            {% for group_name, group_data in project_summary.data.items %}
+    <!-- GL Wise Details (when a group is selected) -->
+    {% if show_gl_wise %}
+        {% for project_id, gl_data in gl_wise_data.items %}
+        <div class="card shadow-sm mb-4">
+            <div class="card-header bg-info text-white">
+                <h5 class="mb-0">
+                    <i class="fas fa-layer-group"></i> GL Name Wise Data - {{ gl_data.group_name }}
+                    <span class="badge bg-light text-dark float-end">{{ gl_data.project.project_id }}</span>
+                </h5>
+            </div>
+            <div class="card-body">
+                <!-- Group Summary -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="p-3 bg-light rounded">
+                            <small class="text-muted">Total Budget</small>
+                            <h5 class="mb-0">{{ gl_data.group_summary.budget|money }}</h5>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 bg-light rounded">
+                            <small class="text-muted">Total Actual</small>
+                            <h5 class="mb-0">{{ gl_data.group_summary.actual|money }}</h5>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 bg-light rounded">
+                            <small class="text-muted">Total Variance</small>
+                            <h5 class="mb-0 {% if gl_data.group_summary.variance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                {{ gl_data.group_summary.variance|money }}
+                            </h5>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="p-3 bg-light rounded">
+                            <small class="text-muted">Utilization %</small>
+                            <h5 class="mb-0">{{ gl_data.group_summary.utilization_percent|floatformat:1 }}%</h5>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GL-wise Details Table -->
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-light">
                             <tr>
-                                <td>
-                                    <strong>{{ project_summary.project.project_id }}</strong><br>
-                                    <small class="text-muted">{{ project_summary.project.project_name }}</small>
-                                </td>
-                                <td>{{ group_name }}</td>
-                                <td class="text-end">{{ group_data.budget|money }}</td>
-                                <td class="text-end">{{ group_data.actual|money }}</td>
-                                <td class="text-end {% if group_data.variance >= 0 %}text-success{% else %}text-danger{% endif %}">
-                                    {{ group_data.variance|money }}
+                                <th>GL Code</th>
+                                <th>GL Name</th>
+                                <th class="text-end">Budget</th>
+                                <th class="text-end">Actual Cost</th>
+                                <th class="text-end">Variance</th>
+                                <th class="text-end">Utilization %</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for gl_code, gl_detail in gl_data.gl_details.items %}
+                            <tr>
+                                <td><strong>{{ gl_code }}</strong></td>
+                                <td>{{ gl_detail.gl_name }}</td>
+                                <td class="text-end">{{ gl_detail.budget|money }}</td>
+                                <td class="text-end">{{ gl_detail.actual|money }}</td>
+                                <td class="text-end {% if gl_detail.variance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                    {{ gl_detail.variance|money }}
                                 </td>
                                 <td class="text-end">
                                     <div class="progress" style="height: 20px;">
-                                        <div class="progress-bar {% if group_data.actual <= group_data.budget %}bg-success{% else %}bg-danger{% endif %}" 
+                                        <div class="progress-bar {% if gl_detail.actual <= gl_detail.budget %}bg-success{% else %}bg-danger{% endif %}" 
                                              role="progressbar" 
-                                             style="width: {{ group_data.utilization_percent|floatformat:0 }}%"
-                                             aria-valuenow="{{ group_data.utilization_percent }}" 
+                                             style="width: {{ gl_detail.utilization_percent|floatformat:0 }}%"
+                                             aria-valuenow="{{ gl_detail.utilization_percent }}" 
                                              aria-valuemin="0" 
                                              aria-valuemax="100">
-                                            {{ group_data.utilization_percent|floatformat:1 }}%
+                                            {{ gl_detail.utilization_percent|floatformat:1 }}%
                                         </div>
                                     </div>
                                 </td>
                                 <td>
-                                    {% if group_data.utilization_percent <= 100 %}
+                                    {% if gl_detail.utilization_percent <= 100 %}
                                         <span class="badge bg-success">Within Budget</span>
                                     {% else %}
                                         <span class="badge bg-danger">Over Budget</span>
                                     {% endif %}
                                 </td>
                             </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">No GL accounts in this group</td>
+                            </tr>
                             {% endfor %}
-                        {% empty %}
-                        <tr>
-                            <td colspan="7" class="text-center text-muted">No data available</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-    </div>
+        {% endfor %}
+    {% else %}
+        <!-- GL Group Summary Table (when no specific group is selected) -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-light">
+                <h5 class="mb-0">GL Group Summary</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Project</th>
+                                <th>GL Group</th>
+                                <th class="text-end">Budget</th>
+                                <th class="text-end">Actual Cost</th>
+                                <th class="text-end">Variance</th>
+                                <th class="text-end">Utilization %</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for project_id, project_summary in summary_data.items %}
+                                {% for group_name, group_data in project_summary.data.items %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ project_summary.project.project_id }}</strong><br>
+                                        <small class="text-muted">{{ project_summary.project.project_name }}</small>
+                                    </td>
+                                    <td>{{ group_name }}</td>
+                                    <td class="text-end">{{ group_data.budget|money }}</td>
+                                    <td class="text-end">{{ group_data.actual|money }}</td>
+                                    <td class="text-end {% if group_data.variance >= 0 %}text-success{% else %}text-danger{% endif %}">
+                                        {{ group_data.variance|money }}
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="progress" style="height: 20px;">
+                                            <div class="progress-bar {% if group_data.actual <= group_data.budget %}bg-success{% else %}bg-danger{% endif %}" 
+                                                 role="progressbar" 
+                                                 style="width: {{ group_data.utilization_percent|floatformat:0 }}%"
+                                                 aria-valuenow="{{ group_data.utilization_percent }}" 
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100">
+                                                {{ group_data.utilization_percent|floatformat:1 }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        {% if group_data.utilization_percent <= 100 %}
+                                            <span class="badge bg-success">Within Budget</span>
+                                        {% else %}
+                                            <span class="badge bg-danger">Over Budget</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% empty %}
+                            <tr>
+                                <td colspan="7" class="text-center text-muted">No data available</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    {% endif %}
 
 </div>
 

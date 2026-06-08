@@ -141,32 +141,54 @@ def cost_analysis_by_gl_group(request):
     
     projects = Project.objects.filter(is_active=True)
     summary_data = {}
+    gl_wise_data = {}
+    show_gl_wise = False
     
     if project_id:
         projects = projects.filter(id=project_id)
     
     for project in projects:
         analyzer = ProjectCostAnalyzer(project)
+        full_summary = analyzer.get_cost_summary()
+        
         if gl_group:
-            # Filter by specific GL group
-            full_summary = analyzer.get_cost_summary()
+            # Filter by specific GL group - show GL-wise data
+            show_gl_wise = True
             if gl_group in full_summary['by_group']:
+                group_data = full_summary['by_group'][gl_group]
+                
+                # Get GL codes in this group
+                gl_codes_in_group = group_data.get('gl_codes', [])
+                
+                # Build GL-wise details for this group
+                gl_wise_details = {}
+                for gl_code in gl_codes_in_group:
+                    if gl_code in full_summary['by_gl']:
+                        gl_wise_details[gl_code] = full_summary['by_gl'][gl_code]
+                
+                gl_wise_data[project.id] = {
+                    'project': project,
+                    'group_name': gl_group,
+                    'group_summary': group_data,
+                    'gl_details': gl_wise_details
+                }
+                
                 summary_data[project.id] = {
                     'project': project,
-                    'data': {gl_group: full_summary['by_group'][gl_group]},
-                    'total': full_summary['by_group'][gl_group]
+                    'data': {gl_group: group_data},
+                    'total': group_data
                 }
         else:
             # All GL groups
-            summary = analyzer.get_cost_summary()
             summary_data[project.id] = {
                 'project': project,
-                'data': summary['by_group'],
-                'total': summary['totals']
+                'data': full_summary['by_group'],
+                'total': full_summary['totals']
             }
     
     context = {
         'summary_data': summary_data,
+        'gl_wise_data': gl_wise_data,
         'projects': projects,
         'gl_groups': [
             'Direct Material Cost', 'Direct Labour Cost', 'Plant & Equipment Cost',
@@ -178,6 +200,7 @@ def cost_analysis_by_gl_group(request):
         'page_title': 'GL Group Cost Analysis',
         'selected_project': project_id,
         'selected_group': gl_group,
+        'show_gl_wise': show_gl_wise and gl_wise_data,
     }
     return render(request, 'pos/cost_analysis_gl_group.html', context)
 
