@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}License & Renewal Tracker{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3>License & Renewal Tracker</h3>
+        <p class="text-muted">Monitor all licenses, permits and renewal alerts in one place.</p>
+    </div>
+    <div>
+        <a href="{% url 'add_license_renewal' %}" class="btn btn-primary">Add License Record</a>
+        <a href="{% url 'license_renewal_report' %}" class="btn btn-outline-secondary">Renewal Report</a>
+        <a href="{% url 'license_expiry_report' %}" class="btn btn-outline-secondary">Expiry Report</a>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row gy-3">
+            <div class="col-md-3">
+                <label class="form-label">Category</label>
+                <select name="category" class="form-select">
+                    <option value="">All Categories</option>
+                    {% for code, label in category_choices %}
+                        <option value="{{ code }}" {% if category_filter == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select">
+                    <option value="">All Status</option>
+                    {% for code, label in status_choices %}
+                        <option value="{{ code }}" {% if status_filter == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Expiring Soon</label>
+                <select name="expiring" class="form-select">
+                    {% for code, label in expiring_choices %}
+                        <option value="{{ code }}" {% if expiring_filter == code %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Responsible Person</label>
+                <select name="responsible_person" class="form-select">
+                    <option value="">All</option>
+                    {% for employee in employees %}
+                        <option value="{{ employee.id }}" {% if responsible_person_filter == employee.id|stringformat:"s" %}selected{% endif %}>{{ employee.full_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Expire Date From</label>
+                <input type="date" name="date_from" value="{{ date_from }}" class="form-control">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Expire Date To</label>
+                <input type="date" name="date_to" value="{{ date_to }}" class="form-control">
+            </div>
+            <div class="col-md-6 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary">Filter</button>
+                <a href="{% url 'license_renewal_list' %}" class="btn btn-outline-secondary">Reset</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Category</th>
+                        <th>Ref No</th>
+                        <th>Current Renewal</th>
+                        <th>Expire Date</th>
+                        <th>Next Renewal</th>
+                        <th>Responsible</th>
+                        <th>Status</th>
+                        <th>Days Remaining</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for license in licenses %}
+                    <tr>
+                        <td>{{ license.description }}</td>
+                        <td>{{ license.get_category_display }}</td>
+                        <td>{{ license.reference_number|default:"-" }}</td>
+                        <td>{{ license.current_renewal_date }}</td>
+                        <td>{{ license.expire_date }}</td>
+                        <td>{{ license.next_renewal_date }}</td>
+                        <td>
+                            {% if license.responsible_person %}
+                                {{ license.responsible_person.full_name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if license.status == 'active' %}
+                                <span class="badge bg-success">{{ license.get_status_display }}</span>
+                            {% elif license.status == 'closed' %}
+                                <span class="badge bg-secondary">{{ license.get_status_display }}</span>
+                            {% else %}
+                                <span class="badge bg-danger">{{ license.get_status_display }}</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if license.days_remaining < 0 %}
+                                <span class="text-danger">Expired</span>
+                            {% else %}
+                                <span class="badge {% if license.days_remaining <= 7 %}bg-danger{% elif license.days_remaining <= 30 %}bg-warning text-dark{% else %}bg-success{% endif %}">{{ license.days_remaining }} days</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{% url 'edit_license_renewal' license.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="10" class="text-center text-muted">No license records found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

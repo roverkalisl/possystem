@@ -1,6 +1,6 @@
 # Register your models here.
 from django.contrib import admin
-from .models import Category, Item, Supplier, UserLog, AuditLog, ProjectTransfer
+from .models import Category, Item, Supplier, UserLog, AuditLog, ProjectTransfer, LicenseRenewal
 from .models import Quotation, QuotationItem, ProjectBudget, ProjectBudgetLine, ProjectCostActual
 
 
@@ -49,6 +49,15 @@ class ProjectTransferAdmin(admin.ModelAdmin):
 admin.site.register(Category)
 admin.site.register(Item)
 admin.site.register(Supplier)
+
+
+@admin.register(LicenseRenewal)
+class LicenseRenewalAdmin(admin.ModelAdmin):
+    list_display = ['description', 'category', 'reference_number', 'expire_date', 'next_renewal_date', 'status', 'responsible_person']
+    list_filter = ['category', 'status', 'expire_date', 'next_renewal_date']
+    search_fields = ['description', 'reference_number', 'remarks']
+    readonly_fields = ['created_at', 'updated_at']
+    ordering = ['-next_renewal_date', '-expire_date']
 
 
 class QuotationItemInline(admin.TabularInline):

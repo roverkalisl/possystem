@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3>{{ title }}</h3>
+    </div>
+    <div>
+        <a href="{% url 'license_renewal_list' %}" class="btn btn-outline-secondary">Back to License List</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <form method="post" action="{{ form_action }}">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Description</label>
+                    <input type="text" name="description" value="{{ license.description|default_if_none:'' }}" class="form-control" required>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Category</label>
+                    <select name="category" class="form-select" required>
+                        <option value="">Select category</option>
+                        {% for code, label in category_choices %}
+                            <option value="{{ code }}" {% if license and license.category == code %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Reference Number</label>
+                    <input type="text" name="reference_number" value="{{ license.reference_number|default_if_none:'' }}" class="form-control">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Responsible Person</label>
+                    <select name="responsible_person" class="form-select">
+                        <option value="">Not assigned</option>
+                        {% for employee in employees %}
+                            <option value="{{ employee.id }}" {% if license and license.responsible_person_id == employee.id %}selected{% endif %}>{{ employee.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Current Renewal Date</label>
+                    <input type="date" name="current_renewal_date" value="{{ license.current_renewal_date|default_if_none:'' }}" class="form-control" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Expire Date</label>
+                    <input type="date" name="expire_date" value="{{ license.expire_date|default_if_none:'' }}" class="form-control" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Next Renewal Date</label>
+                    <input type="date" name="next_renewal_date" value="{{ license.next_renewal_date|default_if_none:'' }}" class="form-control" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select" required>
+                        {% for code, label in status_choices %}
+                            <option value="{{ code }}" {% if license and license.status == code %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label">Remarks</label>
+                    <textarea name="remarks" class="form-control" rows="3">{{ license.remarks|default_if_none:'' }}</textarea>
+                </div>
+                <div class="col-12 text-end">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

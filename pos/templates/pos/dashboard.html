@@ -62,6 +62,76 @@
     </div>
 </div>
 
+<!-- License & Renewal Summary -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card card-soft bg-light-success">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Total Active Licenses</p>
+                <h4 class="mb-0 text-success">{{ total_active_licenses }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft bg-light-warning">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Expiring Within 30 Days</p>
+                <h4 class="mb-0 text-warning">{{ expiring_within_30_days }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft bg-light-danger">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Expiring Within 7 Days</p>
+                <h4 class="mb-0 text-danger">{{ expiring_within_7_days }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card card-soft bg-light-secondary">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Expired Licenses</p>
+                <h4 class="mb-0 text-secondary">{{ expired_licenses }}</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if license_alerts %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card card-soft">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    ⚠ {{ license_alerts|length }} Licenses Expiring Soon
+                    <a href="{% url 'license_renewal_list' %}" class="btn btn-sm btn-outline-primary float-end">View All Licenses</a>
+                </h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    {% for license in license_alerts %}
+                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>{{ license.description }}</strong> - {{ license.get_category_display }}
+                            <div class="text-muted small">Expires {{ license.expire_date }} | Renewal {{ license.next_renewal_date }}</div>
+                        </div>
+                        <span class="badge rounded-pill {% if license.days_remaining < 0 %}bg-danger{% elif license.days_remaining <= 7 %}bg-danger{% elif license.days_remaining <= 30 %}bg-warning text-dark{% else %}bg-success{% endif %}">
+                            {% if license.days_remaining < 0 %}
+                                Expired
+                            {% else %}
+                                {{ license.days_remaining }} Days Remaining
+                            {% endif %}
+                        </span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Top Debtors Section -->
 {% if top_debtors %}
 <div class="row mb-4">

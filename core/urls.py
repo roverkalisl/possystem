@@ -63,6 +63,11 @@ urlpatterns = [
     path('gl/', views.gl_list, name='gl_list'),
     path('gl/add/', views.add_gl, name='add_gl'),
     path('categories/', views.category_list, name='category_list'),
+    path('administration/licenses/', views.license_renewal_list, name='license_renewal_list'),
+    path('administration/licenses/add/', views.add_license_renewal, name='add_license_renewal'),
+    path('administration/licenses/<int:license_id>/edit/', views.edit_license_renewal, name='edit_license_renewal'),
+    path('administration/licenses/reports/renewal/', views.license_renewal_report, name='license_renewal_report'),
+    path('administration/licenses/reports/expiry/', views.license_expiry_report, name='license_expiry_report'),
 
     # =========================
     # PROJECTS

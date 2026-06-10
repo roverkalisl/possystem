@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}License Renewal Report{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3>Renewal Report</h3>
+        <p class="text-muted">All active licenses and renewal dates.</p>
+    </div>
+    <div>
+        <a href="{% url 'license_renewal_list' %}" class="btn btn-outline-secondary">Back to License Tracker</a>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-bordered table-hover mb-0">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th>Category</th>
+                        <th>Reference No</th>
+                        <th>Current Renewal Date</th>
+                        <th>Expire Date</th>
+                        <th>Next Renewal Date</th>
+                        <th>Responsible Person</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for license in licenses %}
+                    <tr>
+                        <td>{{ license.description }}</td>
+                        <td>{{ license.get_category_display }}</td>
+                        <td>{{ license.reference_number|default:"-" }}</td>
+                        <td>{{ license.current_renewal_date }}</td>
+                        <td>{{ license.expire_date }}</td>
+                        <td>{{ license.next_renewal_date }}</td>
+                        <td>
+                            {% if license.responsible_person %}
+                                {{ license.responsible_person.full_name }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td>{{ license.get_status_display }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="8" class="text-center text-muted">No license records found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

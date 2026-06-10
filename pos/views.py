@@ -1,7 +1,7 @@
 import json
 import re
 from decimal import Decimal, InvalidOperation
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
@@ -21,7 +21,7 @@ from .models import (
     Sale, SaleItem, SalesReturn, StockTransaction, SaleRecovery,
     Project, ProjectExpense, ProjectPettyCash,
     ProjectPettyCashExpense, ProjectIncome, ProjectTransfer, Employee,
-    ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem,
+    LicenseRenewal, ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem,
     SupplierAdvance, SupplierSettlement, PurchaseOrder, PurchaseOrderItem,
     GRN, GRNItem, CompanyAsset
 )
@@ -106,7 +106,7 @@ def to_decimal(val):
         return Decimal(str(val).replace(",", "").strip())
     except (InvalidOperation, TypeError, ValueError):
         return Decimal("0")
-from django.db.models import Sum
+
 
 def get_returned_qty_for_sale_item(sale_item):
     return sale_item.returns.aggregate(total=Sum("qty"))["total"] or Decimal("0")
@@ -388,6 +388,29 @@ def dashboard(request):
     total_quotations = Quotation.objects.count()
     pending_quotations = Quotation.objects.filter(status__in=["draft", "sent"]).count()
 
+    # License & Renewal Tracker
+    license_today = timezone.localdate()
+    license_licenses = LicenseRenewal.objects.filter(is_active=True)
+    total_active_licenses = license_licenses.filter(status="active").count()
+    expiring_within_30_days = license_licenses.filter(
+        status="active",
+        next_renewal_date__gte=license_today,
+        next_renewal_date__lte=license_today + timedelta(days=30),
+    ).count()
+    expiring_within_7_days = license_licenses.filter(
+        status="active",
+        next_renewal_date__gte=license_today,
+        next_renewal_date__lte=license_today + timedelta(days=7),
+    ).count()
+    expired_licenses = license_licenses.filter(
+        Q(status="expired") | Q(expire_date__lt=license_today)
+    ).count()
+    license_alerts = license_licenses.filter(
+        Q(status="expired") |
+        Q(next_renewal_date__lte=license_today + timedelta(days=30)) |
+        Q(expire_date__lte=license_today + timedelta(days=30))
+    ).order_by("next_renewal_date", "expire_date")[:6]
+
     return render(request, "pos/dashboard.html", {
         "show_pos": can_use_pos(request.user),
         "show_project": can_use_project(request.user),
@@ -409,6 +432,207 @@ def dashboard(request):
         "pending_purchase_assets_count": pending_purchase_assets_count,
         "total_quotations": total_quotations,
         "pending_quotations": pending_quotations,
+        "total_active_licenses": total_active_licenses,
+        "expiring_within_30_days": expiring_within_30_days,
+        "expiring_within_7_days": expiring_within_7_days,
+        "expired_licenses": expired_licenses,
+        "license_alerts": license_alerts,
+    })
+
+
+@login_required
+def license_renewal_list(request):
+    today = timezone.localdate()
+    licenses = LicenseRenewal.objects.filter(is_active=True).order_by("next_renewal_date", "expire_date")
+
+    category_filter = request.GET.get("category", "")
+    status_filter = request.GET.get("status", "")
+    expiring_filter = request.GET.get("expiring", "")
+    date_from = request.GET.get("date_from", "")
+    date_to = request.GET.get("date_to", "")
+    responsible_person_filter = request.GET.get("responsible_person", "")
+
+    if category_filter:
+        licenses = licenses.filter(category=category_filter)
+
+    if status_filter:
+        if status_filter == "expired":
+            licenses = licenses.filter(Q(status="expired") | Q(expire_date__lt=today))
+        else:
+            licenses = licenses.filter(status=status_filter)
+
+    if expiring_filter:
+        if expiring_filter == "7":
+            licenses = licenses.filter(next_renewal_date__gte=today, next_renewal_date__lte=today + timedelta(days=7))
+        elif expiring_filter == "30":
+            licenses = licenses.filter(next_renewal_date__gte=today, next_renewal_date__lte=today + timedelta(days=30))
+        elif expiring_filter == "expired":
+            licenses = licenses.filter(Q(status="expired") | Q(expire_date__lt=today))
+
+    if date_from:
+        try:
+            date_from_value = datetime.strptime(date_from, "%Y-%m-%d").date()
+            licenses = licenses.filter(expire_date__gte=date_from_value)
+        except ValueError:
+            pass
+
+    if date_to:
+        try:
+            date_to_value = datetime.strptime(date_to, "%Y-%m-%d").date()
+            licenses = licenses.filter(expire_date__lte=date_to_value)
+        except ValueError:
+            pass
+
+    if responsible_person_filter:
+        licenses = licenses.filter(responsible_person_id=responsible_person_filter)
+
+    return render(request, "pos/license_renewal_list.html", {
+        "licenses": licenses,
+        "category_choices": LicenseRenewal.CATEGORY_CHOICES,
+        "status_choices": LicenseRenewal.STATUS_CHOICES,
+        "expiring_choices": [
+            ("", "All"),
+            ("7", "Expiring within 7 days"),
+            ("30", "Expiring within 30 days"),
+            ("expired", "Expired"),
+        ],
+        "employees": Employee.objects.filter(is_active=True).order_by("full_name"),
+        "category_filter": category_filter,
+        "status_filter": status_filter,
+        "expiring_filter": expiring_filter,
+        "date_from": date_from,
+        "date_to": date_to,
+        "responsible_person_filter": responsible_person_filter,
+    })
+
+
+@login_required
+def add_license_renewal(request):
+    employees = Employee.objects.filter(is_active=True).order_by("full_name")
+    if request.method == "POST":
+        description = (request.POST.get("description") or "").strip()
+        category = request.POST.get("category") or ""
+        reference_number = (request.POST.get("reference_number") or "").strip() or None
+        current_renewal_date = request.POST.get("current_renewal_date")
+        expire_date = request.POST.get("expire_date")
+        next_renewal_date = request.POST.get("next_renewal_date")
+        responsible_person_id = request.POST.get("responsible_person") or None
+        remarks = (request.POST.get("remarks") or "").strip() or None
+        status = request.POST.get("status") or "active"
+
+        if not description or not category or not current_renewal_date or not expire_date or not next_renewal_date:
+            messages.error(request, "Please complete all required fields.")
+            return render(request, "pos/license_renewal_form.html", {
+                "employees": employees,
+                "category_choices": LicenseRenewal.CATEGORY_CHOICES,
+                "status_choices": LicenseRenewal.STATUS_CHOICES,
+                "license": None,
+                "form_action": reverse("add_license_renewal"),
+                "title": "Add License / Renewal Record",
+            })
+
+        try:
+            current_renewal_value = datetime.strptime(current_renewal_date, "%Y-%m-%d").date()
+            expire_date_value = datetime.strptime(expire_date, "%Y-%m-%d").date()
+            next_renewal_value = datetime.strptime(next_renewal_date, "%Y-%m-%d").date()
+        except ValueError:
+            messages.error(request, "Invalid date format.")
+            return render(request, "pos/license_renewal_form.html", {
+                "employees": employees,
+                "category_choices": LicenseRenewal.CATEGORY_CHOICES,
+                "status_choices": LicenseRenewal.STATUS_CHOICES,
+                "license": None,
+                "form_action": reverse("add_license_renewal"),
+                "title": "Add License / Renewal Record",
+            })
+
+        license_obj = LicenseRenewal.objects.create(
+            description=description,
+            category=category,
+            reference_number=reference_number,
+            current_renewal_date=current_renewal_value,
+            expire_date=expire_date_value,
+            next_renewal_date=next_renewal_value,
+            responsible_person_id=responsible_person_id,
+            remarks=remarks,
+            status=status,
+            is_active=True,
+        )
+
+        messages.success(request, "License renewal record added successfully.")
+        return redirect("license_renewal_list")
+
+    return render(request, "pos/license_renewal_form.html", {
+        "employees": employees,
+        "category_choices": LicenseRenewal.CATEGORY_CHOICES,
+        "status_choices": LicenseRenewal.STATUS_CHOICES,
+        "license": None,
+        "form_action": reverse("add_license_renewal"),
+        "title": "Add License / Renewal Record",
+    })
+
+
+@login_required
+def edit_license_renewal(request, license_id):
+    license_obj = get_object_or_404(LicenseRenewal, id=license_id)
+    employees = Employee.objects.filter(is_active=True).order_by("full_name")
+
+    if request.method == "POST":
+        license_obj.description = (request.POST.get("description") or "").strip()
+        license_obj.category = request.POST.get("category") or license_obj.category
+        license_obj.reference_number = (request.POST.get("reference_number") or "").strip() or None
+        license_obj.responsible_person_id = request.POST.get("responsible_person") or None
+        license_obj.remarks = (request.POST.get("remarks") or "").strip() or None
+        license_obj.status = request.POST.get("status") or license_obj.status
+
+        try:
+            license_obj.current_renewal_date = datetime.strptime(request.POST.get("current_renewal_date"), "%Y-%m-%d").date()
+            license_obj.expire_date = datetime.strptime(request.POST.get("expire_date"), "%Y-%m-%d").date()
+            license_obj.next_renewal_date = datetime.strptime(request.POST.get("next_renewal_date"), "%Y-%m-%d").date()
+        except (TypeError, ValueError):
+            messages.error(request, "Invalid date format.")
+            return render(request, "pos/license_renewal_form.html", {
+                "employees": employees,
+                "category_choices": LicenseRenewal.CATEGORY_CHOICES,
+                "status_choices": LicenseRenewal.STATUS_CHOICES,
+                "license": license_obj,
+                "form_action": reverse("edit_license_renewal", args=[license_obj.id]),
+                "title": "Edit License / Renewal Record",
+            })
+
+        license_obj.save()
+        messages.success(request, "License renewal record updated successfully.")
+        return redirect("license_renewal_list")
+
+    return render(request, "pos/license_renewal_form.html", {
+        "employees": employees,
+        "category_choices": LicenseRenewal.CATEGORY_CHOICES,
+        "status_choices": LicenseRenewal.STATUS_CHOICES,
+        "license": license_obj,
+        "form_action": reverse("edit_license_renewal", args=[license_obj.id]),
+        "title": "Edit License / Renewal Record",
+    })
+
+
+@login_required
+def license_renewal_report(request):
+    licenses = LicenseRenewal.objects.filter(is_active=True).order_by("category", "next_renewal_date")
+    return render(request, "pos/license_renewal_report.html", {
+        "licenses": licenses,
+    })
+
+
+@login_required
+def license_expiry_report(request):
+    today = timezone.localdate()
+    licenses = LicenseRenewal.objects.filter(is_active=True)
+    expired = licenses.filter(Q(status="expired") | Q(expire_date__lt=today)).order_by("-expire_date")
+    expiring_within_7 = licenses.filter(next_renewal_date__gte=today, next_renewal_date__lte=today + timedelta(days=7), status="active").order_by("next_renewal_date")
+    expiring_within_30 = licenses.filter(next_renewal_date__gte=today, next_renewal_date__lte=today + timedelta(days=30), status="active").order_by("next_renewal_date")
+    return render(request, "pos/license_expiry_report.html", {
+        "expired": expired,
+        "expiring_within_7": expiring_within_7,
+        "expiring_within_30": expiring_within_30,
     })
 
 

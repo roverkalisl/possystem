@@ -87,6 +87,71 @@ class GLCreationLog(models.Model):
         return f"GL {self.gl.gl_code} created by {user} at {self.created_at:%Y-%m-%d %H:%M}"
 
 
+class LicenseRenewal(models.Model):
+    STATUS_CHOICES = [
+        ("active", "Active"),
+        ("expired", "Expired"),
+        ("closed", "Closed"),
+    ]
+
+    CATEGORY_CHOICES = [
+        ("business_registration", "Business Registration"),
+        ("trade_license", "Trade License"),
+        ("vehicle_revenue_license", "Vehicle Revenue License"),
+        ("vehicle_insurance", "Vehicle Insurance"),
+        ("environmental_permit", "Environmental Permit"),
+        ("contractor_registration", "Contractor Registration"),
+        ("tax_registration", "Tax Registration"),
+        ("epf_etf_registrations", "EPF / ETF Registrations"),
+        ("company_certifications", "Company Certifications"),
+        ("other_licenses", "Other Licenses"),
+    ]
+
+    description = models.CharField(max_length=255)
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    reference_number = models.CharField(max_length=100, blank=True, null=True)
+    current_renewal_date = models.DateField()
+    expire_date = models.DateField()
+    next_renewal_date = models.DateField()
+    responsible_person = models.ForeignKey(
+        "Employee",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="license_renewals"
+    )
+    remarks = models.TextField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="active")
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["next_renewal_date", "expire_date", "description"]
+
+    def __str__(self):
+        return self.description
+
+    def save(self, *args, **kwargs):
+        if self.status != "closed" and self.expire_date and timezone.localdate() > self.expire_date:
+            self.status = "expired"
+        super().save(*args, **kwargs)
+
+    @property
+    def days_remaining(self):
+        if not self.next_renewal_date:
+            return None
+        return (self.next_renewal_date - timezone.localdate()).days
+
+    @property
+    def effective_status(self):
+        if self.status == "closed":
+            return "closed"
+        if self.expire_date and timezone.localdate() > self.expire_date:
+            return "expired"
+        return "active"
+
+
 # =========================
 # ITEMS / STOCK
 # =========================

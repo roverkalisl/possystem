@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block title %}License Expiry Report{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3>Expiry Report</h3>
+        <p class="text-muted">Expired and expiring licenses.</p>
+    </div>
+    <div>
+        <a href="{% url 'license_renewal_list' %}" class="btn btn-outline-secondary">Back to License Tracker</a>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card card-soft bg-light-danger">
+            <div class="card-body">
+                <h5 class="card-title">Expired Licenses</h5>
+                <p class="mb-0">{{ expired.count }} record{{ expired.count|pluralize }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card card-soft bg-light-warning">
+            <div class="card-body">
+                <h5 class="card-title">Expiring Within 7 Days</h5>
+                <p class="mb-0">{{ expiring_within_7.count }} record{{ expiring_within_7.count|pluralize }}</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card card-soft bg-light-secondary">
+            <div class="card-body">
+                <h5 class="card-title">Expiring Within 30 Days</h5>
+                <p class="mb-0">{{ expiring_within_30.count }} record{{ expiring_within_30.count|pluralize }}</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <strong>Expired</strong>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>Expire Date</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for license in expired %}
+                            <tr>
+                                <td>{{ license.description }}</td>
+                                <td>{{ license.expire_date }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-center text-muted">No expired licenses.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <strong>Expiring Within 7 Days</strong>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>Next Renewal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for license in expiring_within_7 %}
+                            <tr>
+                                <td>{{ license.description }}</td>
+                                <td>{{ license.next_renewal_date }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-center text-muted">No licenses expiring in 7 days.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <strong>Expiring Within 30 Days</strong>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm mb-0">
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>Next Renewal</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for license in expiring_within_30 %}
+                            <tr>
+                                <td>{{ license.description }}</td>
+                                <td>{{ license.next_renewal_date }}</td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="2" class="text-center text-muted">No licenses expiring in 30 days.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
