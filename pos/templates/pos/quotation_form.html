@@ -1,19 +1,60 @@
 {% extends 'base.html' %}
 {% block page_title %}{% if quotation.id %}Edit{% else %}Create{% endif %} Quotation{% endblock %}
 {% block content %}
-<form method="post">
+<form method="post" id="quotation-form" novalidate>
     {% csrf_token %}
+    <div id="quotation-error-summary" class="alert alert-danger {% if not form.errors and not form.non_field_errors and not formset.non_form_errors and not formset.errors %}d-none{% endif %}" role="alert">
+        <h5 class="alert-heading">Please correct the following errors:</h5>
+        <div class="mb-0" id="quotation-error-list">
+            {% for error in form.non_field_errors %}
+                <div class="mb-1">{{ error }}</div>
+            {% endfor %}
+            {% for error in formset.non_form_errors %}
+                <div class="mb-1">{{ error }}</div>
+            {% endfor %}
+            {% for field in form %}
+                {% for error in field.errors %}
+                    <div class="mb-1">{{ field.label }}: {{ error }}</div>
+                {% endfor %}
+            {% endfor %}
+            {% for subform in formset.forms %}
+                {% for field in subform %}
+                    {% for error in field.errors %}
+                        <div class="mb-1">{{ field.label }}: {{ error }}</div>
+                    {% endfor %}
+                {% endfor %}
+                {% for error in subform.non_field_errors %}
+                    <div class="mb-1">{{ error }}</div>
+                {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
     <div class="row mb-3">
         <div class="col-lg-4">
             <div class="card mb-3">
                 <div class="card-body">
                     <h5 class="card-title">Quotation Details</h5>
-                    {{ form.date.label_tag }}
-                    {{ form.date }}
-                    {{ form.valid_until.label_tag }}
-                    {{ form.valid_until }}
-                    {{ form.status.label_tag }}
-                    {{ form.status }}
+                    <div class="mb-3">
+                        <label for="{{ form.date.id_for_label }}" class="form-label">Quotation Date <span class="text-danger">*</span></label>
+                        {{ form.date }}
+                        {% if form.date.errors %}
+                            <div class="invalid-feedback d-block">{{ form.date.errors|join:' ' }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ form.valid_until.id_for_label }}" class="form-label">Valid Until Date <span class="text-danger">*</span></label>
+                        {{ form.valid_until }}
+                        {% if form.valid_until.errors %}
+                            <div class="invalid-feedback d-block">{{ form.valid_until.errors|join:' ' }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ form.status.id_for_label }}" class="form-label">Status <span class="text-danger">*</span></label>
+                        {{ form.status }}
+                        {% if form.status.errors %}
+                            <div class="invalid-feedback d-block">{{ form.status.errors|join:' ' }}</div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -21,18 +62,48 @@
             <div class="card mb-3">
                 <div class="card-body">
                     <h5 class="card-title">Customer Information</h5>
-                    {{ form.customer_name.label_tag }}
-                    {{ form.customer_name }}
-                    {{ form.contact_person.label_tag }}
-                    {{ form.contact_person }}
-                    {{ form.phone.label_tag }}
-                    {{ form.phone }}
-                    {{ form.email.label_tag }}
-                    {{ form.email }}
-                    {{ form.address.label_tag }}
-                    {{ form.address }}
-                    {{ form.remarks.label_tag }}
-                    {{ form.remarks }}
+                    <div class="mb-3">
+                        <label for="{{ form.customer_name.id_for_label }}" class="form-label">Customer Name <span class="text-danger">*</span></label>
+                        {{ form.customer_name }}
+                        {% if form.customer_name.errors %}
+                            <div class="invalid-feedback d-block">{{ form.customer_name.errors|join:' ' }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ form.contact_person.id_for_label }}" class="form-label">Contact Person</label>
+                        {{ form.contact_person }}
+                        {% if form.contact_person.errors %}
+                            <div class="invalid-feedback d-block">{{ form.contact_person.errors|join:' ' }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ form.phone.id_for_label }}" class="form-label">Phone</label>
+                        {{ form.phone }}
+                        {% if form.phone.errors %}
+                            <div class="invalid-feedback d-block">{{ form.phone.errors|join:' ' }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ form.email.id_for_label }}" class="form-label">Email</label>
+                        {{ form.email }}
+                        {% if form.email.errors %}
+                            <div class="invalid-feedback d-block">{{ form.email.errors|join:' ' }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ form.address.id_for_label }}" class="form-label">Address</label>
+                        {{ form.address }}
+                        {% if form.address.errors %}
+                            <div class="invalid-feedback d-block">{{ form.address.errors|join:' ' }}</div>
+                        {% endif %}
+                    </div>
+                    <div class="mb-3">
+                        <label for="{{ form.remarks.id_for_label }}" class="form-label">Remarks</label>
+                        {{ form.remarks }}
+                        {% if form.remarks.errors %}
+                            <div class="invalid-feedback d-block">{{ form.remarks.errors|join:' ' }}</div>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
@@ -40,6 +111,15 @@
 
     <h3 class="mb-3">Quotation Items</h3>
     {{ formset.management_form }}
+    {% if formset.non_form_errors %}
+        <div class="alert alert-danger" role="alert">
+            <div class="mb-0">
+                {% for error in formset.non_form_errors %}
+                    <div class="mb-1">{{ error }}</div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endif %}
     <div class="mb-2">
         <button type="button" id="add-quotation-item" class="btn btn-sm btn-outline-primary">Add Item</button>
         <a href="{% url 'quotation_list' %}" class="btn btn-sm btn-secondary">Back to list</a>
@@ -48,12 +128,12 @@
         <table class="table table-bordered" id="quotation-items">
             <thead>
                 <tr>
-                    <th>Item</th>
+                    <th>Item <span class="text-danger">*</span></th>
                     <th>Code</th>
                     <th>Description</th>
-                    <th>Qty</th>
+                    <th>Qty <span class="text-danger">*</span></th>
                     <th>Unit</th>
-                    <th>Unit Price</th>
+                    <th>Unit Price <span class="text-danger">*</span></th>
                     <th>Discount</th>
                     <th>Line Total</th>
                     <th>Remove</th>
@@ -61,13 +141,28 @@
             </thead>
             <tbody>
             {% for f in formset.forms %}
-                <tr>
-                    <td>{{ f.item }}</td>
+                <tr class="quotation-item-row">
+                    <td>
+                        {{ f.item }}
+                        {% if f.item.errors %}
+                            <div class="invalid-feedback d-block">{{ f.item.errors|join:' ' }}</div>
+                        {% endif %}
+                    </td>
                     <td>{{ f.item_code }}</td>
                     <td>{{ f.description }}</td>
-                    <td>{{ f.qty }}</td>
+                    <td>
+                        {{ f.qty }}
+                        {% if f.qty.errors %}
+                            <div class="invalid-feedback d-block">{{ f.qty.errors|join:' ' }}</div>
+                        {% endif %}
+                    </td>
                     <td>{{ f.unit }}</td>
-                    <td>{{ f.unit_price }}</td>
+                    <td>
+                        {{ f.unit_price }}
+                        {% if f.unit_price.errors %}
+                            <div class="invalid-feedback d-block">{{ f.unit_price.errors|join:' ' }}</div>
+                        {% endif %}
+                    </td>
                     <td>{{ f.discount }}</td>
                     <td>{{ f.line_total }}</td>
                     <td class="text-center">{{ f.DELETE }}</td>
@@ -107,8 +202,9 @@
 {% endblock %}
 
 {% block extra_js %}
+<script type="application/json" id="items-data-json">{{ items_data_json|safe }}</script>
 <script>
-const quotationItems = {{ items_data|safe }};
+const quotationItems = JSON.parse(document.getElementById('items-data-json').textContent || '[]');
 
 function formatNumber(value) {
     return parseFloat(value || 0).toFixed(2);
@@ -220,9 +316,128 @@ function addQuotationItemRow() {
     hookRow(newRow);
 }
 
+function buildErrorSummary(errors) {
+    const summary = document.getElementById('quotation-error-summary');
+    const list = document.getElementById('quotation-error-list');
+    list.innerHTML = '';
+    if (!errors.length) {
+        summary.classList.add('d-none');
+        return;
+    }
+    errors.forEach(text => {
+        const item = document.createElement('div');
+        item.className = 'mb-1';
+        item.textContent = text;
+        list.appendChild(item);
+    });
+    summary.classList.remove('d-none');
+}
+
+function scrollToFirstError() {
+    const firstInvalid = document.querySelector('.is-invalid, .invalid-feedback.d-block, input:invalid, select:invalid');
+    if (firstInvalid) {
+        firstInvalid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        if (typeof firstInvalid.focus === 'function') {
+            firstInvalid.focus({ preventScroll: true });
+        }
+    }
+}
+
+function validateForm(event) {
+    const form = document.getElementById('quotation-form');
+    const errors = [];
+    let firstInvalidField = null;
+
+    form.classList.remove('was-validated');
+
+    const requiredFields = [
+        { field: form.querySelector('[name="date"]'), message: 'Quotation Date is required.' },
+        { field: form.querySelector('[name="valid_until"]'), message: 'Valid Until Date is required.' },
+        { field: form.querySelector('[name="customer_name"]'), message: 'Customer Name is required.' }
+    ];
+
+    requiredFields.forEach(entry => {
+        const field = entry.field;
+        if (field && !field.value.trim()) {
+            errors.push(entry.message);
+            field.classList.add('is-invalid');
+            if (!firstInvalidField) firstInvalidField = field;
+        } else if (field) {
+            field.classList.remove('is-invalid');
+        }
+    });
+
+    const itemRows = Array.from(document.querySelectorAll('#quotation-items tbody tr'));
+    let itemPresent = false;
+    itemRows.forEach(row => {
+        const itemField = row.querySelector('select[name$="-item"]');
+        const qtyField = row.querySelector('input[name$="-qty"]');
+        const priceField = row.querySelector('input[name$="-unit_price"]');
+        const deleteField = row.querySelector('input[type="checkbox"][name$="-DELETE"]');
+        const isDeleted = deleteField && deleteField.checked;
+        if (isDeleted) return;
+
+        const itemValue = itemField && itemField.value;
+        const qtyValue = qtyField && qtyField.value;
+        const priceValue = priceField && priceField.value;
+
+        if (itemValue || qtyValue || priceValue) {
+            itemPresent = true;
+        }
+
+        if (itemValue && qtyField && (!qtyValue || parseFloat(qtyValue) <= 0)) {
+            errors.push('Quantity must be greater than zero for all selected items.');
+            qtyField.classList.add('is-invalid');
+            if (!firstInvalidField) firstInvalidField = qtyField;
+        } else if (qtyField) {
+            qtyField.classList.remove('is-invalid');
+        }
+
+        if (itemValue && priceField && (!priceValue || parseFloat(priceValue) <= 0)) {
+            errors.push('Unit Price must be greater than zero for all selected items.');
+            priceField.classList.add('is-invalid');
+            if (!firstInvalidField) firstInvalidField = priceField;
+        } else if (priceField) {
+            priceField.classList.remove('is-invalid');
+        }
+
+        if (!itemValue && (qtyValue || priceValue)) {
+            errors.push('Please select a valid item for each row with quantity or price entered.');
+            if (itemField) {
+                itemField.classList.add('is-invalid');
+                if (!firstInvalidField) firstInvalidField = itemField;
+            }
+        } else if (itemField) {
+            itemField.classList.remove('is-invalid');
+        }
+    });
+
+    if (!itemPresent) {
+        errors.push('At least one quotation item must be added.');
+        if (!firstInvalidField) {
+            const itemSelect = document.querySelector('#quotation-items tbody tr select[name$="-item"]');
+            firstInvalidField = itemSelect;
+        }
+    }
+
+    if (errors.length) {
+        event.preventDefault();
+        buildErrorSummary(errors);
+        if (firstInvalidField) {
+            firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            firstInvalidField.focus({ preventScroll: true });
+        }
+        return false;
+    }
+
+    document.getElementById('quotation-error-summary').classList.add('d-none');
+    return true;
+}
+
 window.addEventListener('DOMContentLoaded', () => {
     initQuotationRows();
     document.getElementById('add-quotation-item').addEventListener('click', addQuotationItemRow);
+    document.getElementById('quotation-form').addEventListener('submit', validateForm);
 });
 </script>
 {% endblock %}

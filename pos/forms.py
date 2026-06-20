@@ -1,26 +1,64 @@
 from django import forms
+from django.core.exceptions import ValidationError
 from django.forms import inlineformset_factory
+from django.forms.models import BaseInlineFormSet
 from .models import Quotation, QuotationItem, Item
 
 
 class QuotationForm(forms.ModelForm):
-    valid_until = forms.DateField(required=False, widget=forms.DateInput(attrs={'type':'date', 'class': 'form-control'}))
+    date = forms.DateField(
+        required=True,
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control', 'required': 'required'})
+    )
+    valid_until = forms.DateField(
+        required=True,
+        widget=forms.DateInput(attrs={'type': 'date', 'class': 'form-control', 'required': 'required'})
+    )
+    customer_name = forms.CharField(
+        required=True,
+        widget=forms.TextInput(attrs={'class': 'form-control', 'required': 'required'})
+    )
+    contact_person = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control'})
+    )
+    phone = forms.CharField(
+        required=False,
+        widget=forms.TextInput(attrs={'class': 'form-control'})
+    )
+    email = forms.EmailField(
+        required=False,
+        widget=forms.EmailInput(attrs={'class': 'form-control'})
+    )
+    address = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 2, 'class': 'form-control'})
+    )
+    remarks = forms.CharField(
+        required=False,
+        widget=forms.Textarea(attrs={'rows': 2, 'class': 'form-control'})
+    )
+    status = forms.ChoiceField(
+        required=True,
+        choices=Quotation.STATUS_CHOICES,
+        widget=forms.Select(attrs={'class': 'form-control', 'required': 'required'})
+    )
 
     class Meta:
         model = Quotation
         fields = [
             'date', 'valid_until', 'customer_name', 'contact_person', 'phone', 'email', 'address', 'remarks', 'status'
         ]
-        widgets = {
-            'date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
-            'customer_name': forms.TextInput(attrs={'class': 'form-control'}),
-            'contact_person': forms.TextInput(attrs={'class': 'form-control'}),
-            'phone': forms.TextInput(attrs={'class': 'form-control'}),
-            'email': forms.EmailInput(attrs={'class': 'form-control'}),
-            'address': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
-            'remarks': forms.Textarea(attrs={'rows': 2, 'class': 'form-control'}),
-            'status': forms.Select(attrs={'class': 'form-control'}),
-        }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        if not cleaned_data.get('customer_name'):
+            self.add_error('customer_name', 'Customer Name is required.')
+        if not cleaned_data.get('valid_until'):
+            self.add_error('valid_until', 'Valid Until Date is required.')
+        if not cleaned_data.get('date'):
+            self.add_error('date', 'Quotation Date is required.')
+        return cleaned_data
 
 
 class QuotationItemForm(forms.ModelForm):
@@ -29,6 +67,16 @@ class QuotationItemForm(forms.ModelForm):
         required=False,
         widget=forms.Select(attrs={'class': 'form-control quotation-item-select'})
     )
+    qty = forms.DecimalField(
+        required=False,
+        min_value=0.01,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'})
+    )
+    unit_price = forms.DecimalField(
+        required=False,
+        min_value=0.01,
+        widget=forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0.01'})
+    )
 
     class Meta:
         model = QuotationItem
@@ -36,18 +84,54 @@ class QuotationItemForm(forms.ModelForm):
         widgets = {
             'item_code': forms.TextInput(attrs={'class': 'form-control'}),
             'description': forms.TextInput(attrs={'class': 'form-control'}),
-            'qty': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
             'unit': forms.TextInput(attrs={'class': 'form-control'}),
-            'unit_price': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
-            'discount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01'}),
+            'discount': forms.NumberInput(attrs={'class': 'form-control', 'step': '0.01', 'min': '0'}),
             'line_total': forms.NumberInput(attrs={'readonly': 'readonly', 'class': 'form-control'}),
         }
+
+    def clean(self):
+        cleaned_data = super().clean()
+        item = cleaned_data.get('item')
+        qty = cleaned_data.get('qty')
+        unit_price = cleaned_data.get('unit_price')
+
+        if not item and (qty or unit_price or cleaned_data.get('description') or cleaned_data.get('item_code')):
+            self.add_error('item', 'Item selection is required.')
+        if item and qty is None:
+            self.add_error('qty', 'Quantity is required.')
+        elif qty is not None and qty <= 0:
+            self.add_error('qty', 'Quantity must be greater than zero.')
+        if item and unit_price is None:
+            self.add_error('unit_price', 'Unit Price is required.')
+        elif unit_price is not None and unit_price <= 0:
+            self.add_error('unit_price', 'Unit Price must be greater than zero.')
+        return cleaned_data
+
+
+class RequiredQuotationItemFormSet(BaseInlineFormSet):
+    def clean(self):
+        super().clean()
+        if any(self.errors):
+            return
+
+        valid_items = 0
+        for form in self.forms:
+            if form.cleaned_data and not form.cleaned_data.get('DELETE', False):
+                has_item = bool(form.cleaned_data.get('item'))
+                has_qty = form.cleaned_data.get('qty') not in (None, '')
+                has_price = form.cleaned_data.get('unit_price') not in (None, '')
+                if has_item or has_qty or has_price:
+                    valid_items += 1
+
+        if valid_items == 0:
+            raise ValidationError('Please add at least one quotation item.')
 
 
 QuotationItemFormSet = inlineformset_factory(
     Quotation,
     QuotationItem,
     form=QuotationItemForm,
+    formset=RequiredQuotationItemFormSet,
     extra=1,
     can_delete=True
 )

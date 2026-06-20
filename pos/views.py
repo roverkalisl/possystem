@@ -5869,11 +5869,28 @@ def create_quotation(request, quotation_id=None):
             quotation.save()
             formset.instance = quotation
             formset.save()
-            messages.success(request, 'Quotation saved.')
+            messages.success(request, 'Quotation saved successfully.')
             quotation_url = reverse('quotation_detail', kwargs={'quotation_id': quotation.id})
             return redirect(f"{quotation_url}?saved=1")
         else:
-            messages.error(request, 'Please fix errors below.')
+            errors = []
+            for error in form.non_field_errors():
+                errors.append(str(error))
+            for field in form:
+                for error in field.errors:
+                    errors.append(f"{field.label}: {error}")
+            for error in formset.non_form_errors():
+                errors.append(str(error))
+            for subform in formset.forms:
+                for error in subform.non_field_errors():
+                    errors.append(str(error))
+                for field in subform:
+                    for error in field.errors:
+                        errors.append(f"{field.label}: {error}")
+            if errors:
+                messages.error(request, 'Quotation was not saved. ' + ' '.join(errors))
+            else:
+                messages.error(request, 'Quotation was not saved. Please fix the highlighted errors below.')
     else:
         form = QuotationForm(instance=quotation)
         formset = QuotationItemFormSet(instance=quotation)
@@ -5893,7 +5910,7 @@ def create_quotation(request, quotation_id=None):
         'form': form,
         'formset': formset,
         'available_items': available_items,
-        'items_data': items_data,
+        'items_data_json': json.dumps(items_data),
         'quotation': quotation,
     })
 
