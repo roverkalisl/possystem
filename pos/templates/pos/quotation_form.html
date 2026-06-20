@@ -142,6 +142,10 @@
             <tbody>
             {% for f in formset.forms %}
                 <tr class="quotation-item-row">
+                    {# render hidden fields (including the instance id) so Django receives them on POST #}
+                    {% for hidden in f.hidden_fields %}
+                        {{ hidden }}
+                    {% endfor %}
                     <td>
                         {{ f.item }}
                         {% if f.item.errors %}
