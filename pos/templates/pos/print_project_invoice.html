@@ -1,4 +1,5 @@
 {% load static %}
+{% load currency_filters %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -424,8 +425,8 @@
                             {% endif %}
                         </td>
                         <td class="text-end">{{ row.qty }}</td>
-                        <td class="text-end">{{ row.price_each }}</td>
-                        <td class="text-end">{{ row.line_total }}</td>
+                        <td class="text-end">{{ row.price_each|money }}</td>
+                        <td class="text-end">{{ row.line_total|money }}</td>
                     </tr>
                     {% empty %}
                     <tr>
@@ -440,7 +441,7 @@
             <table>
                 <tr class="grand">
                     <td class="label">Grand Total</td>
-                    <td class="value">{{ grand_total }}</td>
+                    <td class="value">{{ grand_total|money }}</td>
                 </tr>
             </table>
         </div>
