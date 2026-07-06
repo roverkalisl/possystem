@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block title %}Labour Allocations{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Daily Labour Allocations</h4>
+        <div>
+            <a href="{% url 'labour_allocation_add' %}" class="btn btn-primary btn-sm">+ Add Allocation</a>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Date</th>
+                    <th>Employee</th>
+                    <th>Project</th>
+                    <th>Work Type</th>
+                    <th>Hours</th>
+                    <th>OT</th>
+                    <th>Attendance</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for allocation in allocations %}
+                <tr>
+                    <td>{{ allocation.date }}</td>
+                    <td>{{ allocation.employee.full_name }}</td>
+                    <td>{{ allocation.project.project_id }} - {{ allocation.project.project_name }}</td>
+                    <td>{{ allocation.work_type|default:"-" }}</td>
+                    <td>{{ allocation.working_hours }}</td>
+                    <td>{{ allocation.ot_hours }}</td>
+                    <td>{{ allocation.get_attendance_status_display }}</td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center text-muted">No labour allocations recorded yet.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

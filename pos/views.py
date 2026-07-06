@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User, Group
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.urls import reverse
 from django.db.models import Q, Sum, F, Count, Max
@@ -23,7 +24,8 @@ from .models import (
     ProjectPettyCashExpense, ProjectIncome, ProjectTransfer, Employee,
     LicenseRenewal, ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem,
     SupplierAdvance, SupplierSettlement, PurchaseOrder, PurchaseOrderItem,
-    GRN, GRNItem, CompanyAsset
+    GRN, GRNItem, CompanyAsset, PayrollEntry, PayrollAllowance,
+    PayrollDeduction, PayrollAllocation, LabourAllocation
 )
 
 from .forms import QuotationForm, QuotationItemFormSet
@@ -2966,7 +2968,16 @@ def add_employee(request):
     if request.method == "POST":
         user_id = request.POST.get("user") or None
         full_name = (request.POST.get("full_name") or "").strip()
+        nic = (request.POST.get("nic") or "").strip()
+        employee_category = (request.POST.get("employee_category") or "").strip()
         designation = (request.POST.get("designation") or "").strip()
+        department = (request.POST.get("department") or "").strip()
+        basic_salary = to_decimal(request.POST.get("basic_salary"))
+        daily_rate = to_decimal(request.POST.get("daily_rate"))
+        employment_type = request.POST.get("employment_type") or "permanent"
+        epf_etf_applicable = request.POST.get("epf_etf_applicable") == "on"
+        bank_name = (request.POST.get("bank_name") or "").strip()
+        bank_account_no = (request.POST.get("bank_account_no") or "").strip()
         address = (request.POST.get("address") or "").strip()
         tel = (request.POST.get("tel") or "").strip()
         petty_cash_limit = to_decimal(request.POST.get("petty_cash_limit"))
@@ -2979,7 +2990,16 @@ def add_employee(request):
         Employee.objects.create(
             user_id=user_id if user_id else None,
             full_name=full_name,
+            nic=nic,
+            employee_category=employee_category,
             designation=designation,
+            department=department,
+            basic_salary=basic_salary,
+            daily_rate=daily_rate,
+            employment_type=employment_type,
+            epf_etf_applicable=epf_etf_applicable,
+            bank_name=bank_name,
+            bank_account_no=bank_account_no,
             address=address,
             tel=tel,
             petty_cash_limit=petty_cash_limit,
@@ -3002,7 +3022,16 @@ def edit_employee(request, employee_id):
     if request.method == "POST":
         user_id = request.POST.get("user") or None
         full_name = (request.POST.get("full_name") or "").strip()
+        nic = (request.POST.get("nic") or "").strip()
+        employee_category = (request.POST.get("employee_category") or "").strip()
         designation = (request.POST.get("designation") or "").strip()
+        department = (request.POST.get("department") or "").strip()
+        basic_salary = to_decimal(request.POST.get("basic_salary"))
+        daily_rate = to_decimal(request.POST.get("daily_rate"))
+        employment_type = request.POST.get("employment_type") or "permanent"
+        epf_etf_applicable = request.POST.get("epf_etf_applicable") == "on"
+        bank_name = (request.POST.get("bank_name") or "").strip()
+        bank_account_no = (request.POST.get("bank_account_no") or "").strip()
         address = (request.POST.get("address") or "").strip()
         tel = (request.POST.get("tel") or "").strip()
         petty_cash_limit = to_decimal(request.POST.get("petty_cash_limit"))
@@ -3017,7 +3046,16 @@ def edit_employee(request, employee_id):
 
         employee.user_id = user_id if user_id else None
         employee.full_name = full_name
+        employee.nic = nic
+        employee.employee_category = employee_category
         employee.designation = designation
+        employee.department = department
+        employee.basic_salary = basic_salary
+        employee.daily_rate = daily_rate
+        employee.employment_type = employment_type
+        employee.epf_etf_applicable = epf_etf_applicable
+        employee.bank_name = bank_name
+        employee.bank_account_no = bank_account_no
         employee.address = address
         employee.tel = tel
         employee.petty_cash_limit = petty_cash_limit
@@ -3033,9 +3071,236 @@ def edit_employee(request, employee_id):
     })
 
 
+@user_passes_test(is_owner)
+def labour_allocation_list(request):
+    allocations = LabourAllocation.objects.select_related("employee", "project", "supervisor").order_by("-date", "-id")
+    return render(request, "pos/labour_allocation_list.html", {
+        "allocations": allocations,
+    })
+
+
+@user_passes_test(is_owner)
+def labour_allocation_form(request):
+    employees = Employee.objects.filter(is_active=True).order_by("full_name")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+
+    if request.method == "POST":
+        employee_id = request.POST.get("employee") or None
+        project_id = request.POST.get("project") or None
+        date_value = request.POST.get("date") or timezone.localdate()
+        supervisor_id = request.POST.get("supervisor") or None
+        work_type = (request.POST.get("work_type") or "").strip()
+        working_hours = to_decimal(request.POST.get("working_hours"))
+        ot_hours = to_decimal(request.POST.get("ot_hours"))
+        attendance_status = request.POST.get("attendance_status") or "present"
+        remarks = (request.POST.get("remarks") or "").strip()
+
+        if not employee_id or not project_id:
+            messages.error(request, "Employee and project are required.")
+            return render(request, "pos/labour_allocation_form.html", {
+                "employees": employees,
+                "projects": projects,
+            })
+
+        LabourAllocation.objects.create(
+            employee_id=employee_id,
+            project_id=project_id,
+            date=date_value,
+            supervisor_id=supervisor_id if supervisor_id else None,
+            work_type=work_type,
+            working_hours=working_hours,
+            ot_hours=ot_hours,
+            attendance_status=attendance_status,
+            remarks=remarks,
+        )
+        messages.success(request, "Labour allocation recorded successfully.")
+        return redirect("labour_allocation_list")
+
+    return render(request, "pos/labour_allocation_form.html", {
+        "employees": employees,
+        "projects": projects,
+    })
+
+
 # =========================
-# PROJECT INVOICE / PAYMENTS
+# PAYROLL
 # =========================
+@user_passes_test(is_owner)
+def payroll_list(request):
+    payrolls = PayrollEntry.objects.select_related("employee", "project", "supervisor", "created_by", "approved_by").order_by("-created_at")
+    return render(request, "pos/payroll_list.html", {
+        "payrolls": payrolls,
+        "projects": Project.objects.filter(is_active=True).order_by("-id"),
+        "employees": Employee.objects.filter(is_active=True).order_by("full_name"),
+    })
+
+
+@user_passes_test(is_owner)
+def payroll_paysheet(request):
+    payrolls = PayrollEntry.objects.select_related("employee", "project").order_by("employee__full_name", "-created_at")
+    return render(request, "pos/payroll_paysheet.html", {
+        "payrolls": payrolls,
+        "total_gross": sum((payroll.gross_salary or Decimal("0")) for payroll in payrolls),
+        "total_allowances": sum((payroll.total_allowances or Decimal("0")) for payroll in payrolls),
+        "total_deductions": sum((payroll.total_deductions or Decimal("0")) for payroll in payrolls),
+        "total_net": sum((payroll.net_salary or Decimal("0")) for payroll in payrolls),
+    })
+
+
+@user_passes_test(is_owner)
+def payroll_pay_entry(request, payroll_id):
+    payroll = get_object_or_404(PayrollEntry, id=payroll_id)
+    gl_accounts = GLMaster.objects.filter(is_active=True).order_by("gl_code")
+
+    if request.method == "POST":
+        allowance_name = (request.POST.get("allowance_name") or "").strip()
+        allowance_amount = to_decimal(request.POST.get("allowance_amount"))
+        deduction_type = (request.POST.get("deduction_type") or "").strip()
+        deduction_amount = to_decimal(request.POST.get("deduction_amount"))
+        payment_note = (request.POST.get("payment_note") or "").strip()
+
+        if allowance_name and allowance_amount > 0:
+            PayrollAllowance.objects.create(
+                payroll_entry=payroll,
+                allowance_name=allowance_name,
+                amount=allowance_amount,
+                description=payment_note,
+            )
+
+        if deduction_type and deduction_amount > 0:
+            PayrollDeduction.objects.create(
+                payroll_entry=payroll,
+                deduction_type=deduction_type,
+                amount=deduction_amount,
+                description=payment_note,
+            )
+
+        if request.POST.get("pay_now"):
+            try:
+                payroll.pay()
+                messages.success(request, "Payroll payment recorded successfully.")
+            except ValidationError as exc:
+                messages.error(request, "; ".join(exc.messages if isinstance(exc.messages, list) else [str(exc)]))
+                return redirect("payroll_pay_entry", payroll_id=payroll.id)
+        else:
+            messages.success(request, "Payroll entry data updated successfully.")
+
+        return redirect("payroll_pay_entry", payroll_id=payroll.id)
+
+    return render(request, "pos/payroll_pay_entry.html", {
+        "payroll": payroll,
+        "gl_accounts": gl_accounts,
+    })
+
+
+@user_passes_test(is_owner)
+def payroll_form(request, payroll_id=None):
+    payroll = get_object_or_404(PayrollEntry, id=payroll_id) if payroll_id else None
+    employees = Employee.objects.filter(is_active=True).order_by("full_name")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+    gl_accounts = GLMaster.objects.filter(is_active=True).order_by("gl_code")
+
+    if request.method == "POST":
+        employee_id = request.POST.get("employee") or None
+        project_id = request.POST.get("project") or None
+        supervisor_id = request.POST.get("supervisor") or None
+        department = (request.POST.get("department") or "").strip()
+        employee_category = (request.POST.get("employee_category") or "").strip()
+        designation = (request.POST.get("designation") or "").strip()
+        salary_period = request.POST.get("salary_period") or "monthly"
+        working_days = to_decimal(request.POST.get("working_days"))
+        ot_hours = to_decimal(request.POST.get("ot_hours"))
+        gross_salary = to_decimal(request.POST.get("gross_salary"))
+        labour_gl_id = request.POST.get("labour_gl_account") or None
+        payable_gl_id = request.POST.get("salary_payable_gl_account") or None
+        bank_gl_id = request.POST.get("bank_gl_account") or None
+        description = (request.POST.get("description") or "").strip()
+
+        if not employee_id:
+            messages.error(request, "Employee is required.")
+            return render(request, "pos/payroll_form.html", {
+                "payroll": payroll,
+                "employees": employees,
+                "projects": projects,
+                "gl_accounts": gl_accounts,
+            })
+
+        if payroll is None:
+            payroll = PayrollEntry.objects.create(
+                employee_id=employee_id,
+                project_id=project_id,
+                supervisor_id=supervisor_id,
+                department=department,
+                employee_category=employee_category,
+                designation=designation,
+                salary_period=salary_period,
+                working_days=working_days,
+                ot_hours=ot_hours,
+                gross_salary=gross_salary,
+                labour_gl_account_id=labour_gl_id,
+                salary_payable_gl_account_id=payable_gl_id,
+                bank_gl_account_id=bank_gl_id,
+                description=description,
+                created_by=request.user,
+            )
+        else:
+            payroll.employee_id = employee_id
+            payroll.project_id = project_id
+            payroll.supervisor_id = supervisor_id
+            payroll.department = department
+            payroll.employee_category = employee_category
+            payroll.designation = designation
+            payroll.salary_period = salary_period
+            payroll.working_days = working_days
+            payroll.ot_hours = ot_hours
+            payroll.gross_salary = gross_salary
+            payroll.labour_gl_account_id = labour_gl_id
+            payroll.salary_payable_gl_account_id = payable_gl_id
+            payroll.bank_gl_account_id = bank_gl_id
+            payroll.description = description
+            payroll.save()
+
+        if project_id:
+            payroll.allocations.all().delete()
+            PayrollAllocation.objects.create(payroll_entry=payroll, project_id=project_id, amount=gross_salary)
+
+        messages.success(request, "Payroll entry saved successfully.")
+        return redirect("payroll_list")
+
+    return render(request, "pos/payroll_form.html", {
+        "payroll": payroll,
+        "employees": employees,
+        "projects": projects,
+        "gl_accounts": gl_accounts,
+    })
+
+
+@user_passes_test(is_owner)
+def approve_payroll(request, payroll_id):
+    payroll = get_object_or_404(PayrollEntry, id=payroll_id)
+    try:
+        payroll.approve(approved_by=request.user)
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages if isinstance(exc.messages, list) else [str(exc)]))
+        return redirect("payroll_list")
+
+    messages.success(request, "Payroll approved and linked to project cost analysis.")
+    return redirect("payroll_list")
+
+
+@user_passes_test(is_owner)
+def pay_payroll(request, payroll_id):
+    payroll = get_object_or_404(PayrollEntry, id=payroll_id)
+    try:
+        payroll.pay()
+    except ValidationError as exc:
+        messages.error(request, "; ".join(exc.messages if isinstance(exc.messages, list) else [str(exc)]))
+        return redirect("payroll_list")
+
+    messages.success(request, "Payroll paid and journal entries created.")
+    return redirect("payroll_list")
+
+
 @user_passes_test(can_use_income)
 def project_invoice_list(request):
     invoices = ProjectInvoice.objects.all().select_related(

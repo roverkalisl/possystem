@@ -1,0 +1,56 @@
+{% extends 'base.html' %}
+{% block title %}Payroll{% endblock %}
+{% block page_title %}Payroll{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">Payroll Entries</h4>
+            <div class="d-flex gap-2">
+                <a href="{% url 'payroll_paysheet' %}" class="btn btn-outline-info btn-sm">Paysheet</a>
+                <a href="{% url 'payroll_add' %}" class="btn btn-primary btn-sm">+ Add Payroll</a>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Project</th>
+                        <th>Supervisor</th>
+                        <th>Department</th>
+                        <th>Salary</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payroll in payrolls %}
+                    <tr>
+                        <td>{{ payroll.employee }}</td>
+                        <td>{{ payroll.project|default:'-' }}</td>
+                        <td>{{ payroll.supervisor|default:'-' }}</td>
+                        <td>{{ payroll.department|default:'-' }}</td>
+                        <td>{{ payroll.gross_salary }}</td>
+                        <td>{{ payroll.get_status_display }}</td>
+                        <td>
+                            <a href="{% url 'payroll_edit' payroll.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
+                            {% if payroll.status != 'approved' and payroll.status != 'paid' %}
+                            <a href="{% url 'approve_payroll' payroll.id %}" class="btn btn-sm btn-outline-success">Approve</a>
+                            {% endif %}
+                            {% if payroll.status == 'approved' %}
+                            <a href="{% url 'pay_payroll' payroll.id %}" class="btn btn-sm btn-outline-primary">Pay</a>
+                            {% endif %}
+                            <a href="{% url 'payroll_pay_entry' payroll.id %}" class="btn btn-sm btn-outline-info">Pay Entry</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted">No payroll entries yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -10,7 +10,7 @@ from datetime import datetime
 from .models import (
     Project, ProjectExpense, ProjectPettyCashExpense, GRNItem,
     ProjectCostActual, GLMaster, ProjectBudget, ProjectBudgetLine,
-    StockTransaction
+    StockTransaction, PayrollProjectCostEntry
 )
 
 
@@ -99,6 +99,34 @@ class ProjectCostAnalyzer:
                 'amount': float(exp.amount),
             })
         
+        # Payroll labour costs allocated to project
+        payroll_costs = PayrollProjectCostEntry.objects.filter(
+            project=self.project,
+            gl_account__isnull=False
+        )
+
+        if end_date:
+            payroll_costs = payroll_costs.filter(created_at__lte=end_date)
+
+        for entry in payroll_costs:
+            gl_code = entry.gl_account.gl_code
+            if gl_code not in actuals:
+                actuals[gl_code] = {
+                    'gl_name': entry.gl_account.gl_name,
+                    'amount': Decimal('0'),
+                    'gl_group': ProjectBudgetLine.get_gl_group(gl_code),
+                    'transactions': []
+                }
+            actuals[gl_code]['amount'] += entry.amount
+            actuals[gl_code]['transactions'].append({
+                'type': 'payroll',
+                'id': entry.id,
+                'date': entry.created_at.date(),
+                'ref': f'PR-{entry.id}',
+                'description': entry.description or 'Payroll labour cost',
+                'amount': float(entry.amount),
+            })
+
         # GRN Items allocated to project
         grn_items = GRNItem.objects.filter(
             allocation_project=self.project,
@@ -275,6 +303,30 @@ class ProjectCostAnalyzer:
                 'created_by': exp.created_by.username if exp.created_by else '',
             })
         
+        # Payroll labour costs
+        qs = PayrollProjectCostEntry.objects.filter(
+            project=self.project
+        ).select_related('gl_account')
+
+        if gl_code:
+            qs = qs.filter(gl_account__gl_code=gl_code)
+        elif gl_group:
+            gl_codes = self._get_gl_codes_in_group(gl_group)
+            qs = qs.filter(gl_account__gl_code__in=gl_codes)
+
+        for entry in qs:
+            transactions.append({
+                'type': 'Payroll Labour Cost',
+                'date': entry.created_at.date(),
+                'ref_no': f'PR-{entry.id}',
+                'description': entry.description or 'Payroll labour cost',
+                'gl_code': entry.gl_account.gl_code if entry.gl_account else '',
+                'gl_name': entry.gl_account.gl_name if entry.gl_account else '',
+                'amount': float(entry.amount),
+                'supplier': '-',
+                'created_by': entry.payroll_entry.created_by.username if entry.payroll_entry.created_by else '',
+            })
+
         # GRN Items
         qs = GRNItem.objects.filter(
             allocation_project=self.project,
@@ -365,6 +417,20 @@ class ProjectCostAnalyzer:
                     reference_no=exp.expense_no or f'PCE-{exp.id}'
                 )
         
+        # Payroll labour costs
+        for entry in PayrollProjectCostEntry.objects.filter(project=self.project):
+            if entry.gl_account:
+                ProjectCostActual.objects.create(
+                    project=self.project,
+                    gl_account=entry.gl_account,
+                    source_type='payroll',
+                    source_id=str(entry.id),
+                    transaction_date=entry.created_at.date(),
+                    description=entry.description or 'Payroll labour cost',
+                    amount=entry.amount,
+                    reference_no=f'PR-{entry.id}'
+                )
+
         # GRN Items
         for item in GRNItem.objects.filter(
             allocation_project=self.project,

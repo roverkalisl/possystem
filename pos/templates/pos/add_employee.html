@@ -32,8 +32,57 @@
             </div>
 
             <div class="col-md-6">
+                <label class="form-label">NIC</label>
+                <input type="text" name="nic" class="form-control form-control-sm">
+            </div>
+        </div>
+
+        <div class="row g-2 mt-2">
+            <div class="col-md-6">
+                <label class="form-label">Employee Category</label>
+                <input type="text" name="employee_category" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-6">
                 <label class="form-label">Designation</label>
                 <input type="text" name="designation" class="form-control form-control-sm">
+            </div>
+        </div>
+
+        <div class="row g-2 mt-2">
+            <div class="col-md-6">
+                <label class="form-label">Department</label>
+                <input type="text" name="department" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Employment Type</label>
+                <select name="employment_type" class="form-select form-select-sm">
+                    <option value="permanent">Permanent</option>
+                    <option value="executive">Executive</option>
+                    <option value="contract">Contract</option>
+                    <option value="daily_labour">Daily Labour</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row g-2 mt-2">
+            <div class="col-md-6">
+                <label class="form-label">Basic Salary / Daily Rate</label>
+                <input type="number" step="0.01" name="basic_salary" class="form-control form-control-sm" value="0">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Daily Rate</label>
+                <input type="number" step="0.01" name="daily_rate" class="form-control form-control-sm" value="0">
+            </div>
+        </div>
+
+        <div class="row g-2 mt-2">
+            <div class="col-md-6">
+                <label class="form-label">Bank Name</label>
+                <input type="text" name="bank_name" class="form-control form-control-sm">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Bank Account No</label>
+                <input type="text" name="bank_account_no" class="form-control form-control-sm">
             </div>
         </div>
 
@@ -51,6 +100,13 @@
             <div class="col-md-6">
                 <label class="form-label">Petty Cash Limit</label>
                 <input type="number" step="0.01" name="petty_cash_limit" class="form-control form-control-sm text-money" value="0">
+            </div>
+        </div>
+
+        <div class="mt-2">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="epf_etf_applicable" id="epf_etf_applicable" checked>
+                <label class="form-check-label" for="epf_etf_applicable">EPF/ETF Applicable</label>
             </div>
         </div>
 

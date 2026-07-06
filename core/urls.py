@@ -122,6 +122,19 @@ urlpatterns = [
     path('employees/', views.employee_list, name='employee_list'),
     path('employees/add/', views.add_employee, name='add_employee'),
     path('employees/edit/<int:employee_id>/', views.edit_employee, name='edit_employee'),
+    path('labour-allocations/', views.labour_allocation_list, name='labour_allocation_list'),
+    path('labour-allocations/add/', views.labour_allocation_form, name='labour_allocation_add'),
+
+    # =========================
+    # PAYROLL
+    # =========================
+    path('payroll/', views.payroll_list, name='payroll_list'),
+    path('payroll/paysheet/', views.payroll_paysheet, name='payroll_paysheet'),
+    path('payroll/add/', views.payroll_form, name='payroll_add'),
+    path('payroll/<int:payroll_id>/edit/', views.payroll_form, name='payroll_edit'),
+    path('payroll/<int:payroll_id>/entry/', views.payroll_pay_entry, name='payroll_pay_entry'),
+    path('payroll/<int:payroll_id>/approve/', views.approve_payroll, name='approve_payroll'),
+    path('payroll/<int:payroll_id>/pay/', views.pay_payroll, name='pay_payroll'),
 
     # =========================
     # PROJECT INVOICE / PAYMENTS

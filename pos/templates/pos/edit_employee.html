@@ -39,8 +39,57 @@
             </div>
 
             <div class="col-md-6">
+                <label class="form-label">NIC</label>
+                <input type="text" name="nic" class="form-control form-control-sm" value="{{ employee.nic }}">
+            </div>
+        </div>
+
+        <div class="row g-2 mt-2">
+            <div class="col-md-6">
+                <label class="form-label">Employee Category</label>
+                <input type="text" name="employee_category" class="form-control form-control-sm" value="{{ employee.employee_category }}">
+            </div>
+            <div class="col-md-6">
                 <label class="form-label">Designation</label>
                 <input type="text" name="designation" class="form-control form-control-sm" value="{{ employee.designation }}">
+            </div>
+        </div>
+
+        <div class="row g-2 mt-2">
+            <div class="col-md-6">
+                <label class="form-label">Department</label>
+                <input type="text" name="department" class="form-control form-control-sm" value="{{ employee.department }}">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Employment Type</label>
+                <select name="employment_type" class="form-select form-select-sm">
+                    <option value="permanent" {% if employee.employment_type == 'permanent' %}selected{% endif %}>Permanent</option>
+                    <option value="executive" {% if employee.employment_type == 'executive' %}selected{% endif %}>Executive</option>
+                    <option value="contract" {% if employee.employment_type == 'contract' %}selected{% endif %}>Contract</option>
+                    <option value="daily_labour" {% if employee.employment_type == 'daily_labour' %}selected{% endif %}>Daily Labour</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="row g-2 mt-2">
+            <div class="col-md-6">
+                <label class="form-label">Basic Salary / Daily Rate</label>
+                <input type="number" step="0.01" name="basic_salary" class="form-control form-control-sm" value="{{ employee.basic_salary }}">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Daily Rate</label>
+                <input type="number" step="0.01" name="daily_rate" class="form-control form-control-sm" value="{{ employee.daily_rate }}">
+            </div>
+        </div>
+
+        <div class="row g-2 mt-2">
+            <div class="col-md-6">
+                <label class="form-label">Bank Name</label>
+                <input type="text" name="bank_name" class="form-control form-control-sm" value="{{ employee.bank_name }}">
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Bank Account No</label>
+                <input type="text" name="bank_account_no" class="form-control form-control-sm" value="{{ employee.bank_account_no }}">
             </div>
         </div>
 
@@ -58,6 +107,13 @@
             <div class="col-md-6">
                 <label class="form-label">Petty Cash Limit</label>
                 <input type="number" step="0.01" name="petty_cash_limit" class="form-control form-control-sm text-money" value="{{ employee.petty_cash_limit }}">
+            </div>
+        </div>
+
+        <div class="mt-2">
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" name="epf_etf_applicable" id="epf_etf_applicable" {% if employee.epf_etf_applicable %}checked{% endif %}>
+                <label class="form-check-label" for="epf_etf_applicable">EPF/ETF Applicable</label>
             </div>
         </div>
 

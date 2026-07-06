@@ -1,7 +1,28 @@
 # Register your models here.
 from django.contrib import admin
-from .models import Category, Item, Supplier, UserLog, AuditLog, ProjectTransfer, LicenseRenewal
-from .models import Quotation, QuotationItem, ProjectBudget, ProjectBudgetLine, ProjectCostActual
+from .models import (
+    Category,
+    Item,
+    Supplier,
+    UserLog,
+    AuditLog,
+    ProjectTransfer,
+    LicenseRenewal,
+    Quotation,
+    QuotationItem,
+    ProjectBudget,
+    ProjectBudgetLine,
+    ProjectCostActual,
+    Employee,
+    LabourAllocation,
+    PayrollEntry,
+    PayrollAllowance,
+    PayrollDeduction,
+    PayrollAllocation,
+    PayrollProjectCostEntry,
+    PayrollGLEntry,
+    SalaryAdvance,
+)
 
 
 # Logging Models
@@ -119,3 +140,65 @@ class ProjectCostActualAdmin(admin.ModelAdmin):
     list_filter = ['project', 'source_type', 'transaction_date', 'gl_account']
     search_fields = ['project__project_id', 'gl_account__gl_code', 'reference_no', 'description']
     readonly_fields = ['created_at']
+
+
+@admin.register(Employee)
+class EmployeeAdmin(admin.ModelAdmin):
+    list_display = ['emp_no', 'full_name', 'designation', 'department', 'employment_type', 'is_active']
+    list_filter = ['is_active', 'employment_type', 'department']
+    search_fields = ['emp_no', 'full_name', 'nic', 'designation', 'department']
+
+
+@admin.register(LabourAllocation)
+class LabourAllocationAdmin(admin.ModelAdmin):
+    list_display = ['employee', 'date', 'project', 'work_type', 'working_hours', 'ot_hours', 'attendance_status']
+    list_filter = ['date', 'project', 'attendance_status', 'work_type']
+    search_fields = ['employee__full_name', 'project__project_id', 'project__project_name', 'remarks']
+
+
+@admin.register(PayrollEntry)
+class PayrollEntryAdmin(admin.ModelAdmin):
+    list_display = ['id', 'employee', 'project', 'department', 'gross_salary', 'status', 'created_by', 'created_at']
+    list_filter = ['status', 'salary_period', 'department', 'employee_category', 'project']
+    search_fields = ['employee__full_name', 'project__project_id', 'project__project_name', 'department']
+    readonly_fields = ['created_at', 'updated_at']
+
+
+@admin.register(SalaryAdvance)
+class SalaryAdvanceAdmin(admin.ModelAdmin):
+    list_display = ['employee', 'advance_date', 'amount', 'status', 'approved_by']
+    list_filter = ['status', 'advance_date']
+    search_fields = ['employee__full_name', 'reason']
+
+
+@admin.register(PayrollAllowance)
+class PayrollAllowanceAdmin(admin.ModelAdmin):
+    list_display = ['payroll_entry', 'allowance_name', 'amount']
+    search_fields = ['payroll_entry__employee__full_name', 'allowance_name']
+
+
+@admin.register(PayrollDeduction)
+class PayrollDeductionAdmin(admin.ModelAdmin):
+    list_display = ['payroll_entry', 'deduction_type', 'amount']
+    search_fields = ['payroll_entry__employee__full_name', 'deduction_type']
+
+
+@admin.register(PayrollAllocation)
+class PayrollAllocationAdmin(admin.ModelAdmin):
+    list_display = ['payroll_entry', 'project', 'amount', 'created_at']
+    list_filter = ['project', 'created_at']
+    search_fields = ['payroll_entry__employee__full_name', 'project__project_id']
+
+
+@admin.register(PayrollProjectCostEntry)
+class PayrollProjectCostEntryAdmin(admin.ModelAdmin):
+    list_display = ['payroll_entry', 'project', 'amount', 'gl_account', 'created_at']
+    list_filter = ['project', 'gl_account', 'created_at']
+    search_fields = ['payroll_entry__employee__full_name', 'project__project_id']
+
+
+@admin.register(PayrollGLEntry)
+class PayrollGLEntryAdmin(admin.ModelAdmin):
+    list_display = ['payroll_entry', 'entry_type', 'gl_account', 'direction', 'amount', 'created_at']
+    list_filter = ['entry_type', 'direction', 'gl_account', 'created_at']
+    search_fields = ['payroll_entry__employee__full_name', 'description']

@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+{% block title %}Payroll Pay Entry{% endblock %}
+{% block page_title %}Payroll Pay Entry{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">Payroll Pay Entry</h4>
+            <div>
+                <a href="{% url 'payroll_list' %}" class="btn btn-outline-secondary btn-sm">Back to Payroll</a>
+                <a href="{% url 'payroll_paysheet' %}" class="btn btn-outline-info btn-sm">Paysheet</a>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="border rounded p-3 bg-light">
+                    <div class="text-muted small">Employee</div>
+                    <div class="fw-bold">{{ payroll.employee }}</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="border rounded p-3 bg-light">
+                    <div class="text-muted small">Project</div>
+                    <div class="fw-bold">{{ payroll.project|default:'-' }}</div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="border rounded p-3 bg-light">
+                    <div class="text-muted small">Gross Salary</div>
+                    <div class="fw-bold">{{ payroll.gross_salary }}</div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="border rounded p-3 bg-light">
+                    <div class="text-muted small">Allowances</div>
+                    <div class="fw-bold">{{ payroll.total_allowances }}</div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="border rounded p-3 bg-light">
+                    <div class="text-muted small">Deductions</div>
+                    <div class="fw-bold">{{ payroll.total_deductions }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <strong>Net Pay:</strong> {{ payroll.net_salary }}
+        </div>
+
+        <form method="post" class="row g-3">
+            {% csrf_token %}
+            <div class="col-md-4">
+                <label class="form-label">Allowance Name</label>
+                <input type="text" name="allowance_name" class="form-control" placeholder="e.g. Site Allowance">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Allowance Amount</label>
+                <input type="number" step="0.01" name="allowance_amount" class="form-control" placeholder="0.00">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Deduction Type</label>
+                <input type="text" name="deduction_type" class="form-control" placeholder="e.g. Salary Advance">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Deduction Amount</label>
+                <input type="number" step="0.01" name="deduction_amount" class="form-control" placeholder="0.00">
+            </div>
+            <div class="col-md-12">
+                <label class="form-label">Note</label>
+                <textarea name="payment_note" class="form-control" rows="2" placeholder="Optional note"></textarea>
+            </div>
+            <div class="col-12 d-flex gap-2">
+                <button type="submit" name="save_entry" class="btn btn-primary">Save Entry</button>
+                <button type="submit" name="pay_now" class="btn btn-success">Pay Now</button>
+            </div>
+        </form>
+
+        <div class="mt-4">
+            <h5 class="mb-3">Allowance & Deduction History</h5>
+            <div class="table-responsive">
+                <table class="table table-bordered table-striped">
+                    <thead>
+                        <tr>
+                            <th>Type</th>
+                            <th>Description</th>
+                            <th>Amount</th>
+                            <th>Date</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for allowance in payroll.allowances.all %}
+                        <tr>
+                            <td>Allowance</td>
+                            <td>{{ allowance.allowance_name }}</td>
+                            <td>{{ allowance.amount }}</td>
+                            <td>{{ allowance.created_at|date:'Y-m-d' }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% for deduction in payroll.deductions.all %}
+                        <tr>
+                            <td>Deduction</td>
+                            <td>{{ deduction.deduction_type }}</td>
+                            <td>{{ deduction.amount }}</td>
+                            <td>{{ deduction.created_at|date:'Y-m-d' }}</td>
+                        </tr>
+                        {% endfor %}
+                        {% if not payroll.allowances.exists and not payroll.deductions.exists %}
+                        <tr><td colspan="4" class="text-center text-muted">No entries recorded yet.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

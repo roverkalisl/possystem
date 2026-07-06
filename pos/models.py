@@ -1,5 +1,6 @@
 from decimal import Decimal
-from django.db import models
+from django.core.exceptions import ValidationError
+from django.db import models, transaction
 from django.db.models import Sum
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -620,6 +621,250 @@ class Project(models.Model):
         return f"{self.project_id} - {self.project_name}"
 
 
+class SalaryAdvance(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("rejected", "Rejected"),
+    ]
+
+    employee = models.ForeignKey("Employee", on_delete=models.CASCADE, related_name="salary_advances")
+    advance_date = models.DateField(default=timezone.now)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    reason = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_salary_advances")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-advance_date", "-id"]
+
+    @property
+    def remaining_balance(self):
+        return Decimal(str(self.amount or 0))
+
+    def __str__(self):
+        return f"Advance {self.id} - {self.employee}"
+
+
+class PayrollEntry(models.Model):
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("approved", "Approved"),
+        ("paid", "Paid"),
+        ("rejected", "Rejected"),
+    ]
+    SALARY_PERIOD_CHOICES = [
+        ("monthly", "Monthly"),
+        ("weekly", "Weekly"),
+    ]
+
+    employee = models.ForeignKey("Employee", on_delete=models.CASCADE, related_name="payroll_entries")
+    project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_entries")
+    supervisor = models.ForeignKey("Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="supervised_payroll_entries")
+    department = models.CharField(max_length=100, blank=True, null=True)
+    employee_category = models.CharField(max_length=100, blank=True, null=True)
+    designation = models.CharField(max_length=100, blank=True, null=True)
+    salary_period = models.CharField(max_length=20, choices=SALARY_PERIOD_CHOICES, default="monthly")
+    working_days = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    ot_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    gross_salary = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    labour_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_labour_entries")
+    salary_payable_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_payable_entries")
+    bank_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_bank_entries")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    description = models.TextField(blank=True, null=True)
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_payroll_entries")
+    approval_date = models.DateTimeField(blank=True, null=True)
+    paid_on = models.DateTimeField(blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_payroll_entries")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"Payroll {self.id} - {self.employee}"
+
+    def clean(self):
+        super().clean()
+        if self.project is None and not self.allocations.exists():
+            raise ValidationError({"project": "A project must be selected before payroll can be approved."})
+
+    def approve(self, approved_by):
+        if not self.project and not self.allocations.exists():
+            raise ValidationError("A project must be selected before payroll can be approved.")
+
+        total_allocated = self.allocations.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+        if self.allocations.exists() and Decimal(str(total_allocated)) != Decimal(str(self.gross_salary)):
+            raise ValidationError("Payroll allocations must total the gross salary amount.")
+
+        if self.status == "approved":
+            return self
+
+        with transaction.atomic():
+            self.status = "approved"
+            self.approved_by = approved_by
+            self.approval_date = timezone.now()
+            self.save(update_fields=["status", "approved_by", "approval_date", "updated_at"])
+
+            self.project_cost_entries.all().delete()
+            self.gl_entries.all().delete()
+
+            if not self.allocations.exists() and self.project:
+                PayrollAllocation.objects.create(payroll_entry=self, project=self.project, amount=self.gross_salary)
+
+            for allocation in self.allocations.select_related("project").all():
+                if allocation.project and allocation.amount:
+                    PayrollProjectCostEntry.objects.create(
+                        payroll_entry=self,
+                        project=allocation.project,
+                        amount=allocation.amount,
+                        gl_account=self.labour_gl_account,
+                        description=f"Payroll labour cost for {self.employee.full_name}",
+                    )
+
+            if self.labour_gl_account and self.salary_payable_gl_account:
+                PayrollGLEntry.objects.create(
+                    payroll_entry=self,
+                    entry_type="approval",
+                    gl_account=self.labour_gl_account,
+                    direction="debit",
+                    amount=self.gross_salary,
+                    description="Payroll labour cost approved",
+                )
+                PayrollGLEntry.objects.create(
+                    payroll_entry=self,
+                    entry_type="approval",
+                    gl_account=self.salary_payable_gl_account,
+                    direction="credit",
+                    amount=self.gross_salary,
+                    description="Payroll salary payable created",
+                )
+
+        return self
+
+    def pay(self, paid_by=None):
+        if self.status != "approved":
+            raise ValidationError("Only approved payroll can be paid.")
+        if not self.bank_gl_account:
+            raise ValidationError("A bank or cash GL account is required to pay salary.")
+
+        with transaction.atomic():
+            self.status = "paid"
+            self.paid_on = timezone.now()
+            self.save(update_fields=["status", "paid_on", "updated_at"])
+
+            PayrollGLEntry.objects.create(
+                payroll_entry=self,
+                entry_type="payment",
+                gl_account=self.salary_payable_gl_account,
+                direction="debit",
+                amount=self.gross_salary,
+                description="Salary payable settled",
+            )
+            PayrollGLEntry.objects.create(
+                payroll_entry=self,
+                entry_type="payment",
+                gl_account=self.bank_gl_account,
+                direction="credit",
+                amount=self.gross_salary,
+                description="Salary paid to employee",
+            )
+
+        return self
+
+    @property
+    def total_allowances(self):
+        return self.allowances.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+
+    @property
+    def total_deductions(self):
+        return self.deductions.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+
+    @property
+    def net_salary(self):
+        return Decimal(str(self.gross_salary or 0)) + Decimal(str(self.total_allowances or 0)) - Decimal(str(self.total_deductions or 0))
+
+
+class PayrollAllowance(models.Model):
+    payroll_entry = models.ForeignKey(PayrollEntry, on_delete=models.CASCADE, related_name="allowances")
+    allowance_name = models.CharField(max_length=100)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+
+
+class PayrollDeduction(models.Model):
+    payroll_entry = models.ForeignKey(PayrollEntry, on_delete=models.CASCADE, related_name="deductions")
+    deduction_type = models.CharField(max_length=50)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+
+
+class PayrollAllocation(models.Model):
+    payroll_entry = models.ForeignKey(PayrollEntry, on_delete=models.CASCADE, related_name="allocations")
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="payroll_allocations")
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["id"]
+
+    def __str__(self):
+        return f"{self.project} - {self.amount}"
+
+
+class PayrollProjectCostEntry(models.Model):
+    payroll_entry = models.ForeignKey(PayrollEntry, on_delete=models.CASCADE, related_name="project_cost_entries")
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="payroll_cost_entries")
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_cost_entries")
+    description = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.project} - {self.amount}"
+
+
+class PayrollGLEntry(models.Model):
+    ENTRY_TYPE_CHOICES = [
+        ("approval", "Approval"),
+        ("payment", "Payment"),
+    ]
+    DIRECTION_CHOICES = [
+        ("debit", "Debit"),
+        ("credit", "Credit"),
+    ]
+
+    payroll_entry = models.ForeignKey(PayrollEntry, on_delete=models.CASCADE, related_name="gl_entries")
+    entry_type = models.CharField(max_length=20, choices=ENTRY_TYPE_CHOICES, default="approval")
+    gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_gl_entries")
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.direction.upper()} {self.amount}"
+
+
 class ProjectExpense(models.Model):
     EXPENSE_TYPE_CHOICES = [
         ("inventory", "Inventory Item"),
@@ -789,10 +1034,26 @@ class ProjectTransfer(models.Model):
 # EMPLOYEES / PETTY CASH
 # =========================
 class Employee(models.Model):
+    EMPLOYMENT_TYPE_CHOICES = [
+        ("permanent", "Permanent"),
+        ("executive", "Executive"),
+        ("contract", "Contract"),
+        ("daily_labour", "Daily Labour"),
+    ]
+
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="employee_profile")
     emp_no = models.CharField(max_length=30, unique=True, blank=True, null=True)
     full_name = models.CharField(max_length=255)
+    nic = models.CharField(max_length=20, blank=True, null=True)
+    employee_category = models.CharField(max_length=100, blank=True, null=True)
     designation = models.CharField(max_length=100, blank=True, null=True)
+    department = models.CharField(max_length=100, blank=True, null=True)
+    basic_salary = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    daily_rate = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    employment_type = models.CharField(max_length=30, choices=EMPLOYMENT_TYPE_CHOICES, default="permanent")
+    epf_etf_applicable = models.BooleanField(default=True)
+    bank_name = models.CharField(max_length=255, blank=True, null=True)
+    bank_account_no = models.CharField(max_length=50, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
     tel = models.CharField(max_length=30, blank=True, null=True)
     petty_cash_limit = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -829,6 +1090,35 @@ class Employee(models.Model):
 
     def __str__(self):
         return f"{self.emp_no} - {self.full_name}"
+
+
+class LabourAllocation(models.Model):
+    ATTENDANCE_STATUS_CHOICES = [
+        ("present", "Present"),
+        ("absent", "Absent"),
+        ("half_day", "Half Day"),
+        ("leave", "Leave"),
+        ("holiday", "Holiday"),
+        ("late", "Late"),
+    ]
+
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="labour_allocations")
+    date = models.DateField(default=timezone.now)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="labour_allocations")
+    supervisor = models.ForeignKey(Employee, on_delete=models.SET_NULL, null=True, blank=True, related_name="supervised_labour_allocations")
+    work_type = models.CharField(max_length=100, blank=True, null=True)
+    working_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    ot_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    attendance_status = models.CharField(max_length=20, choices=ATTENDANCE_STATUS_CHOICES, default="present")
+    remarks = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "-id"]
+
+    def __str__(self):
+        return f"{self.employee} - {self.project} - {self.date}"
 
 
 class ProjectPettyCash(models.Model):

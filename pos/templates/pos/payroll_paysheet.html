@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% block title %}Paysheet{% endblock %}
+{% block page_title %}Paysheet{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">Paysheet</h4>
+            <a href="{% url 'payroll_list' %}" class="btn btn-outline-secondary btn-sm">Back to Payroll</a>
+        </div>
+
+        <div class="row g-3 mb-3">
+            <div class="col-md-3">
+                <div class="border rounded p-3 bg-light">
+                    <div class="text-muted small">Gross Salary</div>
+                    <div class="fw-bold">{{ total_gross }}</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="border rounded p-3 bg-light">
+                    <div class="text-muted small">Allowances</div>
+                    <div class="fw-bold">{{ total_allowances }}</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="border rounded p-3 bg-light">
+                    <div class="text-muted small">Deductions</div>
+                    <div class="fw-bold">{{ total_deductions }}</div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="border rounded p-3 bg-light">
+                    <div class="text-muted small">Net Salary</div>
+                    <div class="fw-bold">{{ total_net }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Employee</th>
+                        <th>Project</th>
+                        <th>Gross</th>
+                        <th>Allowances</th>
+                        <th>Deductions</th>
+                        <th>Net</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for payroll in payrolls %}
+                    <tr>
+                        <td>{{ payroll.employee }}</td>
+                        <td>{{ payroll.project|default:'-' }}</td>
+                        <td>{{ payroll.gross_salary }}</td>
+                        <td>{{ payroll.total_allowances }}</td>
+                        <td>{{ payroll.total_deductions }}</td>
+                        <td>{{ payroll.net_salary }}</td>
+                        <td>{{ payroll.get_status_display }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="7" class="text-center text-muted">No payroll entries found.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
