@@ -1,0 +1,120 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}Payslip - {{ payroll.employee.full_name }}{% endblock %}
+{% block page_title %}Payslip{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start mb-4">
+            <div>
+                <h4 class="mb-1">Payslip</h4>
+                <div class="text-muted">{{ payroll.employee.full_name }} | {{ payroll.salary_period|title }} salary</div>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'payroll_list' %}" class="btn btn-outline-secondary btn-sm">Back to Payroll</a>
+                <a href="{% url 'print_payroll_payslip' payroll.id %}" target="_blank" class="btn btn-outline-primary btn-sm">Print Payslip</a>
+            </div>
+        </div>
+
+        <div class="border rounded p-4 mb-4 bg-light">
+            <div class="row align-items-center">
+                <div class="col-md-4">
+                    <img src="{% static 'logo.png' %}" alt="Company Logo" class="img-fluid mb-3" style="max-height: 80px;">
+                    <h3 class="fw-bold mb-1">{{ company_name }}</h3>
+                    <div class="text-muted">{{ company_address }}</div>
+                    <div class="text-muted">{{ company_contact }}</div>
+                </div>
+                <div class="col-md-4 text-center">
+                    <div class="fw-bold mb-2">Payslip</div>
+                    <div class="text-muted">Month of Salary: {{ payroll.approval_date|default:payroll.created_at|date:'F Y' }}</div>
+                    <div class="text-muted">Salary Date: {{ payroll.approval_date|date:'Y-m-d'|default:payroll.created_at|date:'Y-m-d' }}</div>
+                </div>
+                <div class="col-md-4 text-md-end">
+                    <div class="fw-bold">Payslip No: {{ payroll.payslip_no|default:'-' }}</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="border rounded p-3 bg-white h-100">
+                    <h6 class="fw-bold mb-3">Employee Information</h6>
+                    <div class="row g-2">
+                        <div class="col-6 text-muted">Employee ID</div><div class="col-6">{{ payroll.employee.emp_no|default:'-' }}</div>
+                        <div class="col-6 text-muted">Employee Name</div><div class="col-6">{{ payroll.employee.full_name }}</div>
+                        <div class="col-6 text-muted">NIC</div><div class="col-6">{{ payroll.employee.nic|default:'-' }}</div>
+                        <div class="col-6 text-muted">Designation</div><div class="col-6">{{ payroll.designation|default:'-' }}</div>
+                        <div class="col-6 text-muted">Department</div><div class="col-6">{{ payroll.department|default:'-' }}</div>
+                        <div class="col-6 text-muted">Project</div><div class="col-6">{{ payroll.project|default:'-' }}</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="border rounded p-3 bg-white h-100">
+                    <h6 class="fw-bold mb-3">Attendance Summary</h6>
+                    <div class="row g-2">
+                        <div class="col-6 text-muted">Working Days</div><div class="col-6">{{ payroll.working_days }}</div>
+                        <div class="col-6 text-muted">Present Days</div><div class="col-6">{{ payroll.working_days }}</div>
+                        <div class="col-6 text-muted">Leave Days</div><div class="col-6">0</div>
+                        <div class="col-6 text-muted">OT Hours</div><div class="col-6">{{ payroll.ot_hours }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4">
+            <div class="col-md-6">
+                <div class="border rounded p-3 bg-white">
+                    <h6 class="fw-bold mb-3">Earnings</h6>
+                    <div class="d-flex justify-content-between"><span>Basic Salary</span><span>{{ payroll.gross_salary }}</span></div>
+                    <div class="d-flex justify-content-between"><span>OT Payment</span><span>{{ payroll.ot_amount }}</span></div>
+                    <div class="d-flex justify-content-between"><span>Allowances</span><span>{{ payroll.total_allowances }}</span></div>
+                    <div class="d-flex justify-content-between"><span>Incentives</span><span>0.00</span></div>
+                    <div class="d-flex justify-content-between"><span>Bonus</span><span>0.00</span></div>
+                    <div class="d-flex justify-content-between"><span>Other Earnings</span><span>0.00</span></div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="border rounded p-3 bg-white">
+                    <h6 class="fw-bold mb-3">Deductions</h6>
+                    <div class="d-flex justify-content-between"><span>Salary Advance</span><span>{{ payroll.salary_advance_deduction }}</span></div>
+                    <div class="d-flex justify-content-between"><span>Loan Deduction</span><span>0.00</span></div>
+                    <div class="d-flex justify-content-between"><span>EPF</span><span>{{ payroll.epf_amount }}</span></div>
+                    <div class="d-flex justify-content-between"><span>ETF</span><span>{{ payroll.etf_amount }}</span></div>
+                    <div class="d-flex justify-content-between"><span>Other Deductions</span><span>{{ payroll.other_deductions }}</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="border rounded p-3 mb-4 bg-light">
+            <div class="d-flex justify-content-between align-items-center fw-bold fs-5">
+                <span>Net Salary Payable</span>
+                <span>{{ payroll.net_salary }}</span>
+            </div>
+        </div>
+
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="text-muted small">Prepared By</div>
+                <div class="border-top mt-3 pt-2">________________________</div>
+            </div>
+            <div class="col-md-4">
+                <div class="text-muted small">Approved By</div>
+                <div class="border-top mt-3 pt-2">________________________</div>
+            </div>
+            <div class="col-md-4">
+                <div class="text-muted small">Employee Signature</div>
+                <div class="border-top mt-3 pt-2">________________________</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+@media print {
+    .btn, .btn-outline-secondary, .btn-outline-primary { display: none !important; }
+    .card { box-shadow: none !important; }
+}
+</style>
+{% endblock %}

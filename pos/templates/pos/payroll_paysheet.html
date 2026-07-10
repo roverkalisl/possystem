@@ -5,32 +5,32 @@
 {% block content %}
 <div class="card shadow-sm">
     <div class="card-body">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h4 class="mb-0">Paysheet</h4>
-            <a href="{% url 'payroll_list' %}" class="btn btn-outline-secondary btn-sm">Back to Payroll</a>
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+                <h4 class="mb-1">Monthly Paysheet</h4>
+                <div class="text-muted">P&I Constructions • Approved salary register</div>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'payroll_list' %}" class="btn btn-outline-secondary btn-sm">Back to Payroll</a>
+                <button class="btn btn-outline-primary btn-sm" onclick="window.print()">Print / Save PDF</button>
+            </div>
         </div>
 
-        <div class="row g-3 mb-3">
-            <div class="col-md-3">
-                <div class="border rounded p-3 bg-light">
+        <div class="border rounded p-3 mb-3 bg-light">
+            <div class="row g-3">
+                <div class="col-md-3">
                     <div class="text-muted small">Gross Salary</div>
                     <div class="fw-bold">{{ total_gross }}</div>
                 </div>
-            </div>
-            <div class="col-md-3">
-                <div class="border rounded p-3 bg-light">
+                <div class="col-md-3">
                     <div class="text-muted small">Allowances</div>
                     <div class="fw-bold">{{ total_allowances }}</div>
                 </div>
-            </div>
-            <div class="col-md-3">
-                <div class="border rounded p-3 bg-light">
+                <div class="col-md-3">
                     <div class="text-muted small">Deductions</div>
                     <div class="fw-bold">{{ total_deductions }}</div>
                 </div>
-            </div>
-            <div class="col-md-3">
-                <div class="border rounded p-3 bg-light">
+                <div class="col-md-3">
                     <div class="text-muted small">Net Salary</div>
                     <div class="fw-bold">{{ total_net }}</div>
                 </div>
@@ -38,35 +38,52 @@
         </div>
 
         <div class="table-responsive">
-            <table class="table table-bordered table-striped align-middle">
-                <thead>
+            <table class="table table-bordered align-middle">
+                <thead class="table-dark">
                     <tr>
-                        <th>Employee</th>
-                        <th>Project</th>
+                        <th>Employee ID</th>
+                        <th>Employee Name</th>
+                        <th>Designation</th>
+                        <th>Category</th>
+                        <th>Basic</th>
+                        <th>WD</th>
+                        <th>OT Hrs</th>
+                        <th>OT Amt</th>
+                        <th>Allow.</th>
                         <th>Gross</th>
-                        <th>Allowances</th>
                         <th>Deductions</th>
                         <th>Net</th>
-                        <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for payroll in payrolls %}
                     <tr>
-                        <td>{{ payroll.employee }}</td>
-                        <td>{{ payroll.project|default:'-' }}</td>
+                        <td>{{ payroll.employee.emp_no|default:'-' }}</td>
+                        <td>{{ payroll.employee.full_name }}</td>
+                        <td>{{ payroll.designation|default:'-' }}</td>
+                        <td>{{ payroll.employee_category|default:'-' }}</td>
                         <td>{{ payroll.gross_salary }}</td>
+                        <td>{{ payroll.working_days }}</td>
+                        <td>{{ payroll.ot_hours }}</td>
+                        <td>{{ payroll.ot_amount }}</td>
                         <td>{{ payroll.total_allowances }}</td>
+                        <td>{{ payroll.gross_salary }}</td>
                         <td>{{ payroll.total_deductions }}</td>
                         <td>{{ payroll.net_salary }}</td>
-                        <td>{{ payroll.get_status_display }}</td>
                     </tr>
                     {% empty %}
-                    <tr><td colspan="7" class="text-center text-muted">No payroll entries found.</td></tr>
+                    <tr><td colspan="12" class="text-center text-muted">No approved payroll entries found.</td></tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+
+<style>
+@media print {
+    .btn, .btn-outline-secondary, .btn-outline-primary { display: none !important; }
+    .card { box-shadow: none !important; }
+}
+</style>
 {% endblock %}

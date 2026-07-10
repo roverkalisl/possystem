@@ -49,6 +49,7 @@
                     <option value="advance" {% if invoice and invoice.invoice_type == 'advance' %}selected{% endif %}>Advance</option>
                     <option value="progress" {% if invoice and invoice.invoice_type == 'progress' %}selected{% endif %}>Progress</option>
                     <option value="final" {% if invoice and invoice.invoice_type == 'final' %}selected{% endif %}>Final Payment</option>
+                    <option value="payslip" {% if invoice and invoice.invoice_type == 'payslip' %}selected{% endif %}>Payslip</option>
                     <option value="other" {% if invoice and invoice.invoice_type == 'other' %}selected{% endif %}>Other</option>
                 </select>
             </div>

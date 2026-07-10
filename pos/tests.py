@@ -1,3 +1,4 @@
+from datetime import date
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
@@ -16,6 +17,40 @@ from .models import (
     Project,
     SalaryAdvance,
 )
+
+
+class EmployeeConstructionPayrollTests(TestCase):
+    def test_add_employee_saves_construction_payroll_fields(self):
+        user = User.objects.create_superuser(username="employee_form_admin", email="employee@example.com", password="12345")
+        self.client.force_login(user)
+
+        response = self.client.post(reverse("add_employee"), {
+            "full_name": "Asha Perera",
+            "nic": "199012345678",
+            "employee_category": "Skilled Labour",
+            "designation": "Mason",
+            "department": "Civil",
+            "joining_date": "2024-01-10",
+            "basic_salary": "65000",
+            "daily_rate": "3000",
+            "salary_type": "daily",
+            "contract_based": "on",
+            "employment_type": "daily_labour",
+            "epf_etf_applicable": "on",
+            "bank_name": "Sampath Bank",
+            "bank_account_no": "123456789",
+            "address": "Matara Road",
+            "tel": "0771234567",
+            "petty_cash_limit": "1000",
+            "is_active": "on",
+        })
+
+        self.assertRedirects(response, reverse("employee_list"))
+        employee = Employee.objects.get(full_name="Asha Perera")
+        self.assertEqual(employee.joining_date, date(2024, 1, 10))
+        self.assertEqual(employee.salary_type, "daily")
+        self.assertTrue(employee.contract_based)
+        self.assertEqual(employee.employment_type, "daily_labour")
 
 
 class PayrollPaysheetViewTests(TestCase):
@@ -53,6 +88,105 @@ class PayrollPaysheetViewTests(TestCase):
         self.assertContains(response, "Paysheet")
         self.assertContains(response, employee.full_name)
         self.assertContains(response, "85000.00")
+
+    def test_payslip_detail_view_renders_individual_payslip(self):
+        user = User.objects.create_superuser(username="payslip_admin", email="admin2@example.com", password="12345")
+        employee = Employee.objects.create(full_name="Nadeesha Silva", designation="Mason")
+        project = Project.objects.create(project_id="PRJ-011", project_name="Office Project", project_type="BL", created_by=user)
+        labour_gl = GLMaster.objects.create(gl_code="5201", gl_name="Direct Labour Cost", gl_type="expense", parent_group="Direct Labour Cost")
+        payable_gl = GLMaster.objects.create(gl_code="2101", gl_name="Salary Payable", gl_type="liability", parent_group="Current Liabilities")
+        bank_gl = GLMaster.objects.create(gl_code="1001", gl_name="Bank", gl_type="asset", parent_group="Current Assets")
+
+        payroll = PayrollEntry.objects.create(
+            employee=employee,
+            project=project,
+            department="Civil",
+            employee_category="Skilled Labour",
+            designation="Mason",
+            salary_period="monthly",
+            working_days=20,
+            ot_hours=0,
+            gross_salary=Decimal("90000"),
+            labour_gl_account=labour_gl,
+            salary_payable_gl_account=payable_gl,
+            bank_gl_account=bank_gl,
+            created_by=user,
+            status="approved",
+        )
+        PayrollAllowance.objects.create(payroll_entry=payroll, allowance_name="Site Allowance", amount=Decimal("5000"))
+        PayrollDeduction.objects.create(payroll_entry=payroll, deduction_type="Salary Advance", amount=Decimal("2000"))
+
+        self.client.force_login(user)
+        response = self.client.get(reverse("payroll_payslip_detail", args=[payroll.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Payslip")
+        self.assertContains(response, employee.full_name)
+        self.assertContains(response, "90000.00")
+        self.assertContains(response, "5000.00")
+        self.assertContains(response, "2000.00")
+        self.assertContains(response, "93000.00")
+
+    def test_draft_payslip_is_blocked_until_approval(self):
+        user = User.objects.create_superuser(username="draft_payslip_admin", email="admin3@example.com", password="12345")
+        employee = Employee.objects.create(full_name="Kasun Perera", designation="Helper")
+        project = Project.objects.create(project_id="PRJ-012", project_name="Bridge Project", project_type="BL", created_by=user)
+        labour_gl = GLMaster.objects.create(gl_code="5202", gl_name="Direct Labour Cost", gl_type="expense", parent_group="Direct Labour Cost")
+        payable_gl = GLMaster.objects.create(gl_code="2102", gl_name="Salary Payable", gl_type="liability", parent_group="Current Liabilities")
+        bank_gl = GLMaster.objects.create(gl_code="1002", gl_name="Bank", gl_type="asset", parent_group="Current Assets")
+
+        payroll = PayrollEntry.objects.create(
+            employee=employee,
+            project=project,
+            department="Civil",
+            employee_category="Unskilled Labour",
+            designation="Helper",
+            salary_period="monthly",
+            working_days=20,
+            ot_hours=0,
+            gross_salary=Decimal("50000"),
+            labour_gl_account=labour_gl,
+            salary_payable_gl_account=payable_gl,
+            bank_gl_account=bank_gl,
+            created_by=user,
+            status="draft",
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(reverse("payroll_payslip_detail", args=[payroll.id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertRedirects(response, reverse("payroll_list"))
+
+    def test_approving_payroll_generates_payslip_number(self):
+        user = User.objects.create_superuser(username="payslip_number_admin", email="admin4@example.com", password="12345")
+        employee = Employee.objects.create(full_name="Ravi Senanayake", designation="Driver")
+        project = Project.objects.create(project_id="PRJ-013", project_name="Road Project", project_type="BL", created_by=user)
+        labour_gl = GLMaster.objects.create(gl_code="5203", gl_name="Direct Labour Cost", gl_type="expense", parent_group="Direct Labour Cost")
+        payable_gl = GLMaster.objects.create(gl_code="2103", gl_name="Salary Payable", gl_type="liability", parent_group="Current Liabilities")
+        bank_gl = GLMaster.objects.create(gl_code="1003", gl_name="Bank", gl_type="asset", parent_group="Current Assets")
+
+        payroll = PayrollEntry.objects.create(
+            employee=employee,
+            project=project,
+            department="Operations",
+            employee_category="Driver",
+            designation="Driver",
+            salary_period="monthly",
+            working_days=20,
+            ot_hours=0,
+            gross_salary=Decimal("60000"),
+            labour_gl_account=labour_gl,
+            salary_payable_gl_account=payable_gl,
+            bank_gl_account=bank_gl,
+            created_by=user,
+            status="draft",
+        )
+
+        payroll.approve(approved_by=user)
+        payroll.refresh_from_db()
+
+        self.assertRegex(payroll.payslip_no, r"^PS-\d{4}-\d{2}-\d{5}$")
 
 
 class PayrollProjectIntegrationTests(TestCase):

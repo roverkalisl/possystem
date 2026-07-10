@@ -75,6 +75,7 @@
                 <tr>
                     <th>Invoice No</th>
                     <th>Date</th>
+                    <th>Type</th>
                     <th>Project</th>
                     <th>Bill To</th>
                     <th>Total</th>
@@ -93,6 +94,7 @@
                 <tr {% if not invoice.is_active %}class="table-danger"{% endif %}>
                     <td>{{ invoice.invoice_no }}</td>
                     <td>{{ invoice.invoice_date|date:"Y-m-d" }}</td>
+                    <td>{{ invoice.get_invoice_type_display }}</td>
                     <td>{{ invoice.project.project_id }}</td>
                     <td>{{ invoice.bill_to_name|default:"-" }}</td>
                     <td class="text-money">{{ invoice.total_amount|money }}</td>

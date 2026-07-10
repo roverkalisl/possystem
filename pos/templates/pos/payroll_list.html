@@ -9,6 +9,7 @@
             <h4 class="mb-0">Payroll Entries</h4>
             <div class="d-flex gap-2">
                 <a href="{% url 'payroll_paysheet' %}" class="btn btn-outline-info btn-sm">Paysheet</a>
+                <button class="btn btn-outline-primary btn-sm" onclick="window.print()">Print View</button>
                 <a href="{% url 'payroll_add' %}" class="btn btn-primary btn-sm">+ Add Payroll</a>
             </div>
         </div>
@@ -43,6 +44,7 @@
                             <a href="{% url 'pay_payroll' payroll.id %}" class="btn btn-sm btn-outline-primary">Pay</a>
                             {% endif %}
                             <a href="{% url 'payroll_pay_entry' payroll.id %}" class="btn btn-sm btn-outline-info">Pay Entry</a>
+                            <a href="{% url 'payroll_payslip_detail' payroll.id %}" class="btn btn-sm btn-outline-secondary">Payslip</a>
                         </td>
                     </tr>
                     {% empty %}

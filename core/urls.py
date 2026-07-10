@@ -133,6 +133,8 @@ urlpatterns = [
     path('payroll/add/', views.payroll_form, name='payroll_add'),
     path('payroll/<int:payroll_id>/edit/', views.payroll_form, name='payroll_edit'),
     path('payroll/<int:payroll_id>/entry/', views.payroll_pay_entry, name='payroll_pay_entry'),
+    path('payroll/<int:payroll_id>/payslip/', views.payroll_payslip_detail, name='payroll_payslip_detail'),
+    path('payroll/<int:payroll_id>/payslip/print/', views.print_payroll_payslip, name='print_payroll_payslip'),
     path('payroll/<int:payroll_id>/approve/', views.approve_payroll, name='approve_payroll'),
     path('payroll/<int:payroll_id>/pay/', views.pay_payroll, name='pay_payroll'),
 

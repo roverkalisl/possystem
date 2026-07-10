@@ -1,7 +1,7 @@
 from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.contrib.auth.models import User
 from django.utils import timezone
 
@@ -675,6 +675,7 @@ class PayrollEntry(models.Model):
     bank_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_bank_entries")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     description = models.TextField(blank=True, null=True)
+    payslip_no = models.CharField(max_length=30, blank=True, null=True)
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_payroll_entries")
     approval_date = models.DateTimeField(blank=True, null=True)
     paid_on = models.DateTimeField(blank=True, null=True)
@@ -684,6 +685,28 @@ class PayrollEntry(models.Model):
 
     class Meta:
         ordering = ["-created_at", "-id"]
+
+    def save(self, *args, **kwargs):
+        if self.status == "approved" and not self.payslip_no:
+            self.ensure_payslip_no()
+        super().save(*args, **kwargs)
+
+    def ensure_payslip_no(self):
+        if self.payslip_no:
+            return self.payslip_no
+
+        today = timezone.now()
+        prefix = f"PS-{today.strftime('%Y')}-{today.strftime('%m')}-"
+        last = PayrollEntry.objects.exclude(payslip_no__isnull=True).filter(payslip_no__startswith=prefix).order_by("-id").first()
+        if last and last.payslip_no:
+            try:
+                sequence = int(str(last.payslip_no).split("-")[-1])
+                self.payslip_no = f"{prefix}{sequence + 1:05d}"
+            except ValueError:
+                self.payslip_no = f"{prefix}00001"
+        else:
+            self.payslip_no = f"{prefix}00001"
+        return self.payslip_no
 
     def __str__(self):
         return f"Payroll {self.id} - {self.employee}"
@@ -697,6 +720,8 @@ class PayrollEntry(models.Model):
         if not self.project and not self.allocations.exists():
             raise ValidationError("A project must be selected before payroll can be approved.")
 
+        self.ensure_payslip_no()
+
         total_allocated = self.allocations.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
         if self.allocations.exists() and Decimal(str(total_allocated)) != Decimal(str(self.gross_salary)):
             raise ValidationError("Payroll allocations must total the gross salary amount.")
@@ -708,7 +733,7 @@ class PayrollEntry(models.Model):
             self.status = "approved"
             self.approved_by = approved_by
             self.approval_date = timezone.now()
-            self.save(update_fields=["status", "approved_by", "approval_date", "updated_at"])
+            self.save(update_fields=["status", "approved_by", "approval_date", "payslip_no", "updated_at"])
 
             self.project_cost_entries.all().delete()
             self.gl_entries.all().delete()
@@ -777,12 +802,44 @@ class PayrollEntry(models.Model):
         return self
 
     @property
+    def is_printable(self):
+        return self.status in {"approved", "paid"}
+
+    @property
     def total_allowances(self):
         return self.allowances.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
 
     @property
     def total_deductions(self):
         return self.deductions.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
+
+    @property
+    def ot_amount(self):
+        if not self.employee:
+            return Decimal("0")
+        return Decimal(str(self.ot_hours or 0)) * Decimal(str(self.employee.daily_rate or 0))
+
+    @property
+    def salary_advance_deduction(self):
+        return self._deduction_total("salary", "advance")
+
+    @property
+    def epf_amount(self):
+        return self._deduction_total("epf")
+
+    @property
+    def etf_amount(self):
+        return self._deduction_total("etf")
+
+    @property
+    def other_deductions(self):
+        return self.total_deductions - self.salary_advance_deduction - self.epf_amount - self.etf_amount
+
+    def _deduction_total(self, *keywords):
+        query = Q()
+        for keyword in keywords:
+            query |= Q(deduction_type__icontains=keyword)
+        return self.deductions.filter(query).aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
     @property
     def net_salary(self):
@@ -1040,6 +1097,11 @@ class Employee(models.Model):
         ("contract", "Contract"),
         ("daily_labour", "Daily Labour"),
     ]
+    SALARY_TYPE_CHOICES = [
+        ("monthly", "Monthly"),
+        ("daily", "Daily"),
+        ("contract", "Contract"),
+    ]
 
     user = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="employee_profile")
     emp_no = models.CharField(max_length=30, unique=True, blank=True, null=True)
@@ -1048,8 +1110,11 @@ class Employee(models.Model):
     employee_category = models.CharField(max_length=100, blank=True, null=True)
     designation = models.CharField(max_length=100, blank=True, null=True)
     department = models.CharField(max_length=100, blank=True, null=True)
+    joining_date = models.DateField(blank=True, null=True)
     basic_salary = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     daily_rate = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    salary_type = models.CharField(max_length=20, choices=SALARY_TYPE_CHOICES, default="monthly")
+    contract_based = models.BooleanField(default=False)
     employment_type = models.CharField(max_length=30, choices=EMPLOYMENT_TYPE_CHOICES, default="permanent")
     epf_etf_applicable = models.BooleanField(default=True)
     bank_name = models.CharField(max_length=255, blank=True, null=True)
@@ -1109,6 +1174,9 @@ class LabourAllocation(models.Model):
     work_type = models.CharField(max_length=100, blank=True, null=True)
     working_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     ot_hours = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    daily_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    ot_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_labour_cost = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     attendance_status = models.CharField(max_length=20, choices=ATTENDANCE_STATUS_CHOICES, default="present")
     remarks = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -1116,6 +1184,19 @@ class LabourAllocation(models.Model):
 
     class Meta:
         ordering = ["-date", "-id"]
+
+    def save(self, *args, **kwargs):
+        employee_rate = Decimal(str(self.employee.daily_rate or 0)) if self.employee_id else Decimal("0")
+        daily_rate = self.daily_rate or employee_rate
+        ot_rate = self.ot_rate or (daily_rate / Decimal("8")) if daily_rate else Decimal("0")
+        working_hours = Decimal(str(self.working_hours or 0))
+        ot_hours = Decimal(str(self.ot_hours or 0))
+        normal_cost = (working_hours / Decimal("8")) * daily_rate if daily_rate else Decimal("0")
+        ot_cost = ot_hours * ot_rate if ot_rate else Decimal("0")
+        self.daily_rate = daily_rate
+        self.ot_rate = ot_rate
+        self.total_labour_cost = normal_cost + ot_cost
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"{self.employee} - {self.project} - {self.date}"
@@ -1245,6 +1326,7 @@ class ProjectInvoice(models.Model):
         ("advance", "Advance"),
         ("progress", "Progress"),
         ("final", "Final"),
+        ("payslip", "Payslip"),
         ("other", "Other"),
     ]
 

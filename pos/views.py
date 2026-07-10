@@ -2972,8 +2972,11 @@ def add_employee(request):
         employee_category = (request.POST.get("employee_category") or "").strip()
         designation = (request.POST.get("designation") or "").strip()
         department = (request.POST.get("department") or "").strip()
+        joining_date = request.POST.get("joining_date") or None
         basic_salary = to_decimal(request.POST.get("basic_salary"))
         daily_rate = to_decimal(request.POST.get("daily_rate"))
+        salary_type = request.POST.get("salary_type") or "monthly"
+        contract_based = request.POST.get("contract_based") == "on"
         employment_type = request.POST.get("employment_type") or "permanent"
         epf_etf_applicable = request.POST.get("epf_etf_applicable") == "on"
         bank_name = (request.POST.get("bank_name") or "").strip()
@@ -2994,8 +2997,11 @@ def add_employee(request):
             employee_category=employee_category,
             designation=designation,
             department=department,
+            joining_date=joining_date or None,
             basic_salary=basic_salary,
             daily_rate=daily_rate,
+            salary_type=salary_type,
+            contract_based=contract_based,
             employment_type=employment_type,
             epf_etf_applicable=epf_etf_applicable,
             bank_name=bank_name,
@@ -3026,8 +3032,11 @@ def edit_employee(request, employee_id):
         employee_category = (request.POST.get("employee_category") or "").strip()
         designation = (request.POST.get("designation") or "").strip()
         department = (request.POST.get("department") or "").strip()
+        joining_date = request.POST.get("joining_date") or None
         basic_salary = to_decimal(request.POST.get("basic_salary"))
         daily_rate = to_decimal(request.POST.get("daily_rate"))
+        salary_type = request.POST.get("salary_type") or "monthly"
+        contract_based = request.POST.get("contract_based") == "on"
         employment_type = request.POST.get("employment_type") or "permanent"
         epf_etf_applicable = request.POST.get("epf_etf_applicable") == "on"
         bank_name = (request.POST.get("bank_name") or "").strip()
@@ -3050,8 +3059,11 @@ def edit_employee(request, employee_id):
         employee.employee_category = employee_category
         employee.designation = designation
         employee.department = department
+        employee.joining_date = joining_date or None
         employee.basic_salary = basic_salary
         employee.daily_rate = daily_rate
+        employee.salary_type = salary_type
+        employee.contract_based = contract_based
         employee.employment_type = employment_type
         employee.epf_etf_applicable = epf_etf_applicable
         employee.bank_name = bank_name
@@ -3092,6 +3104,8 @@ def labour_allocation_form(request):
         work_type = (request.POST.get("work_type") or "").strip()
         working_hours = to_decimal(request.POST.get("working_hours"))
         ot_hours = to_decimal(request.POST.get("ot_hours"))
+        daily_rate = to_decimal(request.POST.get("daily_rate"))
+        ot_rate = to_decimal(request.POST.get("ot_rate"))
         attendance_status = request.POST.get("attendance_status") or "present"
         remarks = (request.POST.get("remarks") or "").strip()
 
@@ -3110,6 +3124,8 @@ def labour_allocation_form(request):
             work_type=work_type,
             working_hours=working_hours,
             ot_hours=ot_hours,
+            daily_rate=daily_rate,
+            ot_rate=ot_rate,
             attendance_status=attendance_status,
             remarks=remarks,
         )
@@ -3137,13 +3153,43 @@ def payroll_list(request):
 
 @user_passes_test(is_owner)
 def payroll_paysheet(request):
-    payrolls = PayrollEntry.objects.select_related("employee", "project").order_by("employee__full_name", "-created_at")
+    payrolls = PayrollEntry.objects.select_related("employee", "project").filter(status__in=["approved", "paid"]).order_by("employee__full_name", "-created_at")
     return render(request, "pos/payroll_paysheet.html", {
         "payrolls": payrolls,
         "total_gross": sum((payroll.gross_salary or Decimal("0")) for payroll in payrolls),
         "total_allowances": sum((payroll.total_allowances or Decimal("0")) for payroll in payrolls),
         "total_deductions": sum((payroll.total_deductions or Decimal("0")) for payroll in payrolls),
         "total_net": sum((payroll.net_salary or Decimal("0")) for payroll in payrolls),
+    })
+
+
+@user_passes_test(is_owner)
+def payroll_payslip_detail(request, payroll_id):
+    payroll = get_object_or_404(PayrollEntry.objects.select_related("employee", "project", "supervisor"), id=payroll_id)
+    if not payroll.is_printable:
+        messages.error(request, "Payslips can only be generated for approved or paid payroll entries.")
+        return redirect("payroll_list")
+
+    return render(request, "pos/payroll_payslip.html", {
+        "payroll": payroll,
+        "company_name": "P&I Constructions",
+        "company_address": "Matara Road, Magalla, Galle",
+        "company_contact": "+94 91 223 4567",
+    })
+
+
+@user_passes_test(is_owner)
+def print_payroll_payslip(request, payroll_id):
+    payroll = get_object_or_404(PayrollEntry.objects.select_related("employee", "project", "supervisor"), id=payroll_id)
+    if not payroll.is_printable:
+        messages.error(request, "Payslips can only be generated for approved or paid payroll entries.")
+        return redirect("payroll_list")
+
+    return render(request, "pos/print_payroll_payslip.html", {
+        "payroll": payroll,
+        "company_name": "P&I Constructions",
+        "company_address": "Matara Road, Magalla, Galle",
+        "company_contact": "+94 91 223 4567",
     })
 
 

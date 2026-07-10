@@ -32,6 +32,9 @@
             <strong>Project:</strong> {{ invoice.project.project_id }}
         </div>
         <div class="col-md-3">
+            <strong>Invoice Type:</strong> {{ invoice.get_invoice_type_display }}
+        </div>
+        <div class="col-md-3">
             <strong>Record:</strong>
             {% if invoice.is_active %}
                 <span class="badge bg-success">Active</span>
