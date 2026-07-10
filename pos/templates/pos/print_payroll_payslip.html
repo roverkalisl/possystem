@@ -114,7 +114,7 @@
                     <div class="company-name">{{ company_name }}</div>
                     <div class="company-meta">{{ company_address }}</div>
                     <div class="company-meta">{{ company_contact }}</div>
-                    <div class="company-meta mt-2">Month of Salary: {{ payroll.approval_date|default:payroll.created_at|date:'F Y' }}</div>
+                    <div class="company-meta mt-2">Month of Salary: {{ payroll.salary_month|default:payroll.approval_date|default:payroll.created_at|date:'F Y' }}</div>
                     <div class="company-meta">Salary Date: {{ payroll.approval_date|date:'Y-m-d'|default:payroll.created_at|date:'Y-m-d' }}</div>
                 </div>
             </div>
@@ -131,7 +131,7 @@
                 <div class="col col-6">
                     <div class="list">
                         <div class="label">Payslip No</div><div class="value">{{ payroll.payslip_no|default:'-' }}</div>
-                        <div class="label">Month of Salary</div><div class="value">{{ payroll.approval_date|default:payroll.created_at|date:'F Y' }}</div>
+                        <div class="label">Month of Salary</div><div class="value">{{ payroll.salary_month|default:payroll.approval_date|default:payroll.created_at|date:'F Y' }}</div>
                         <div class="label">Salary Date</div><div class="value">{{ payroll.approval_date|date:'Y-m-d'|default:payroll.created_at|date:'Y-m-d' }}</div>
                     </div>
                 </div>

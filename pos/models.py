@@ -77,6 +77,12 @@ class GLCreationLog(models.Model):
     gl = models.ForeignKey(GLMaster, on_delete=models.CASCADE, related_name='creation_logs')
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("cancelled", "Cancelled"),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="approved")
     source = models.CharField(max_length=200, blank=True, null=True)
     note = models.TextField(blank=True, null=True)
 
@@ -574,6 +580,12 @@ class SalesReturn(models.Model):
 
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("approved", "Approved"),
+        ("cancelled", "Cancelled"),
+    ]
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="approved")
 
     class Meta:
         ordering = ["-created_at", "-id"]
@@ -667,6 +679,7 @@ class PayrollEntry(models.Model):
     employee_category = models.CharField(max_length=100, blank=True, null=True)
     designation = models.CharField(max_length=100, blank=True, null=True)
     salary_period = models.CharField(max_length=20, choices=SALARY_PERIOD_CHOICES, default="monthly")
+    salary_month = models.DateField(blank=True, null=True)
     working_days = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     ot_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
     gross_salary = models.DecimalField(max_digits=14, decimal_places=2, default=0)

@@ -111,7 +111,7 @@ def to_decimal(val):
 
 
 def get_returned_qty_for_sale_item(sale_item):
-    return sale_item.returns.aggregate(total=Sum("qty"))["total"] or Decimal("0")
+    return sale_item.returns.filter(status="approved").aggregate(total=Sum("qty"))["total"] or Decimal("0")
 
 
 def get_available_qty_for_sale_item(sale_item):
@@ -1690,7 +1690,8 @@ def monthly_report(request):
     # Get sales returns for the month
     sales_returns = SalesReturn.objects.filter(
         created_at__year=year,
-        created_at__month=month
+        created_at__month=month,
+        status="approved",
     ).select_related(
         "sale", "sale_item__item", "created_by"
     ).order_by("-created_at")
@@ -3254,6 +3255,7 @@ def payroll_form(request, payroll_id=None):
         employee_category = (request.POST.get("employee_category") or "").strip()
         designation = (request.POST.get("designation") or "").strip()
         salary_period = request.POST.get("salary_period") or "monthly"
+        salary_month_value = request.POST.get("salary_month") or None
         working_days = to_decimal(request.POST.get("working_days"))
         ot_hours = to_decimal(request.POST.get("ot_hours"))
         gross_salary = to_decimal(request.POST.get("gross_salary"))
@@ -3271,6 +3273,13 @@ def payroll_form(request, payroll_id=None):
                 "gl_accounts": gl_accounts,
             })
 
+        salary_month = None
+        if salary_month_value:
+            try:
+                salary_month = datetime.strptime(salary_month_value, "%Y-%m").date()
+            except ValueError:
+                salary_month = None
+
         if payroll is None:
             payroll = PayrollEntry.objects.create(
                 employee_id=employee_id,
@@ -3280,6 +3289,7 @@ def payroll_form(request, payroll_id=None):
                 employee_category=employee_category,
                 designation=designation,
                 salary_period=salary_period,
+                salary_month=salary_month,
                 working_days=working_days,
                 ot_hours=ot_hours,
                 gross_salary=gross_salary,
@@ -3297,6 +3307,7 @@ def payroll_form(request, payroll_id=None):
             payroll.employee_category = employee_category
             payroll.designation = designation
             payroll.salary_period = salary_period
+            payroll.salary_month = salary_month
             payroll.working_days = working_days
             payroll.ot_hours = ot_hours
             payroll.gross_salary = gross_salary

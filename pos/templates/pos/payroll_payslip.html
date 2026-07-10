@@ -27,7 +27,7 @@
                 </div>
                 <div class="col-md-4 text-center">
                     <div class="fw-bold mb-2">Payslip</div>
-                    <div class="text-muted">Month of Salary: {{ payroll.approval_date|default:payroll.created_at|date:'F Y' }}</div>
+                    <div class="text-muted">Month of Salary: {{ payroll.salary_month|default:payroll.approval_date|default:payroll.created_at|date:'F Y' }}</div>
                     <div class="text-muted">Salary Date: {{ payroll.approval_date|date:'Y-m-d'|default:payroll.created_at|date:'Y-m-d' }}</div>
                 </div>
                 <div class="col-md-4 text-md-end">
