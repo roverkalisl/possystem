@@ -1,0 +1,67 @@
+{% extends 'base.html' %}
+{% block title %}{% if issue %}Edit{% else %}Issue{% endif %} Safety Item{% endblock %}
+{% block page_title %}{% if issue %}Edit{% else %}Issue{% endif %} Safety Item{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Employee <span class="text-danger">*</span></label>
+                    <select name="employee" class="form-select" required>
+                        <option value="">Select Employee</option>
+                        {% for e in employees %}
+                        <option value="{{ e.id }}" {% if issue and issue.employee_id == e.id %}selected{% endif %}>{{ e.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Safety Item <span class="text-danger">*</span></label>
+                    <input type="text" name="safety_item" class="form-control" value="{{ issue.safety_item|default:'' }}" placeholder="Helmet, Boots, Gloves..." required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Issue Date</label>
+                    <input type="date" name="issue_date" class="form-control" value="{% if issue %}{{ issue.issue_date|date:'Y-m-d' }}{% else %}{% now 'Y-m-d' %}{% endif %}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Quantity</label>
+                    <input type="number" step="0.01" min="0" name="quantity" class="form-control" value="{{ issue.quantity|default:'1' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Unit Value</label>
+                    <input type="number" step="0.01" min="0" name="item_value" class="form-control" value="{{ issue.item_value|default:'0' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Deduction Month</label>
+                    <input type="month" name="deduction_month" class="form-control" value="{% if issue and issue.deduction_month %}{{ issue.deduction_month|date:'Y-m' }}{% endif %}">
+                </div>
+                {% if issue %}
+                <div class="col-md-3">
+                    <label class="form-label">Status</label>
+                    <select name="status" class="form-select">
+                        <option value="pending" {% if issue.status == 'pending' %}selected{% endif %}>Pending</option>
+                        <option value="waived" {% if issue.status == 'waived' %}selected{% endif %}>Waived</option>
+                    </select>
+                </div>
+                {% endif %}
+                <div class="col-md-3 d-flex align-items-center">
+                    <div class="form-check mt-4">
+                        <input class="form-check-input" type="checkbox" name="deduct_from_salary" id="deduct_from_salary" {% if not issue or issue.deduct_from_salary %}checked{% endif %}>
+                        <label class="form-check-label" for="deduct_from_salary">Deduct from salary</label>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Remarks</label>
+                    <input type="text" name="remarks" class="form-control" value="{{ issue.remarks|default:'' }}">
+                </div>
+            </div>
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">{% if issue %}Update{% else %}Save{% endif %}</button>
+                <a href="{% url 'safety_item_list' %}" class="btn btn-outline-secondary">Back</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

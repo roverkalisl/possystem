@@ -22,6 +22,8 @@ from .models import (
     PayrollProjectCostEntry,
     PayrollGLEntry,
     SalaryAdvance,
+    SafetyItemIssue,
+    Attendance,
 )
 
 
@@ -166,9 +168,23 @@ class PayrollEntryAdmin(admin.ModelAdmin):
 
 @admin.register(SalaryAdvance)
 class SalaryAdvanceAdmin(admin.ModelAdmin):
-    list_display = ['employee', 'advance_date', 'amount', 'status', 'approved_by']
-    list_filter = ['status', 'advance_date']
+    list_display = ['employee', 'advance_date', 'amount', 'deducted_amount', 'remaining_balance', 'deduction_month', 'status', 'approved_by']
+    list_filter = ['status', 'advance_date', 'deduction_month']
     search_fields = ['employee__full_name', 'reason']
+
+
+@admin.register(SafetyItemIssue)
+class SafetyItemIssueAdmin(admin.ModelAdmin):
+    list_display = ['employee', 'safety_item', 'issue_date', 'quantity', 'item_value', 'total_value', 'deduction_month', 'deduct_from_salary', 'status']
+    list_filter = ['status', 'deduct_from_salary', 'issue_date', 'deduction_month']
+    search_fields = ['employee__full_name', 'safety_item']
+
+
+@admin.register(Attendance)
+class AttendanceAdmin(admin.ModelAdmin):
+    list_display = ['employee', 'date', 'project', 'status', 'remarks']
+    list_filter = ['status', 'date']
+    search_fields = ['employee__full_name']
 
 
 @admin.register(PayrollAllowance)

@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+{% block title %}Edit Salary Advance{% endblock %}
+{% block page_title %}Edit Salary Advance{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Employee <span class="text-danger">*</span></label>
+                    <select name="employee" class="form-select" required>
+                        {% for e in employees %}
+                        <option value="{{ e.id }}" {% if advance.employee_id == e.id %}selected{% endif %}>{{ e.full_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Advance Date</label>
+                    <input type="date" name="advance_date" class="form-control" value="{{ advance.advance_date|date:'Y-m-d' }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Amount <span class="text-danger">*</span></label>
+                    <input type="number" step="0.01" min="0" name="amount" class="form-control" value="{{ advance.amount }}" required>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Deduction Month</label>
+                    <input type="month" name="deduction_month" class="form-control" value="{% if advance.deduction_month %}{{ advance.deduction_month|date:'Y-m' }}{% endif %}">
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label">Reason</label>
+                    <input type="text" name="reason" class="form-control" value="{{ advance.reason|default:'' }}">
+                </div>
+            </div>
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Update Advance</button>
+                <a href="{% url 'salary_advance_list' %}" class="btn btn-outline-secondary">Back</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

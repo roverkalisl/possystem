@@ -97,6 +97,43 @@
                         {% endfor %}
                     </select>
                 </div>
+                <div class="col-12"><hr class="my-1"><small class="text-muted">Employer statutory (EPF 12% / ETF 3%) — optional GL accounts. Leave blank to skip those postings.</small></div>
+                <div class="col-md-3">
+                    <label class="form-label">EPF Expense GL</label>
+                    <select name="epf_expense_gl_account" class="form-select">
+                        <option value="">Select GL</option>
+                        {% for gl in gl_accounts %}
+                        <option value="{{ gl.id }}" {% if payroll and payroll.epf_expense_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">EPF Payable GL</label>
+                    <select name="epf_payable_gl_account" class="form-select">
+                        <option value="">Select GL</option>
+                        {% for gl in gl_accounts %}
+                        <option value="{{ gl.id }}" {% if payroll and payroll.epf_payable_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">ETF Expense GL</label>
+                    <select name="etf_expense_gl_account" class="form-select">
+                        <option value="">Select GL</option>
+                        {% for gl in gl_accounts %}
+                        <option value="{{ gl.id }}" {% if payroll and payroll.etf_expense_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">ETF Payable GL</label>
+                    <select name="etf_payable_gl_account" class="form-select">
+                        <option value="">Select GL</option>
+                        {% for gl in gl_accounts %}
+                        <option value="{{ gl.id }}" {% if payroll and payroll.etf_payable_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <div class="col-12">
                     <label class="form-label">Notes</label>
                     <textarea name="description" class="form-control" rows="3">{{ payroll.description|default:'' }}</textarea>
@@ -104,9 +141,50 @@
             </div>
             <div class="mt-4 d-flex gap-2">
                 <button type="submit" class="btn btn-primary">Save Payroll</button>
+                {% if payroll and payroll.status == 'draft' %}
+                <a href="{% url 'payroll_process' payroll.id %}" class="btn btn-success"
+                   onclick="return confirm('Auto-calculate working days, OT, EPF and deductions from attendance, labour and advances for this month?');">
+                    ⚙️ Process (auto-calc)
+                </a>
+                {% endif %}
                 <a href="{% url 'payroll_list' %}" class="btn btn-outline-secondary">Cancel</a>
             </div>
         </form>
     </div>
 </div>
+
+{% if payroll %}
+<div class="card shadow-sm mt-3">
+    <div class="card-header fw-semibold">Salary Summary (Status: {{ payroll.get_status_display }})</div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h6>Earnings</h6>
+                <table class="table table-sm mb-3">
+                    <tr><td>Gross (Basic + OT)</td><td class="text-end">{{ payroll.gross_salary }}</td></tr>
+                    {% for a in payroll.allowances.all %}
+                    <tr><td>{{ a.allowance_name }}</td><td class="text-end">{{ a.amount }}</td></tr>
+                    {% endfor %}
+                    <tr class="fw-semibold"><td>Total Allowances</td><td class="text-end">{{ payroll.total_allowances }}</td></tr>
+                </table>
+            </div>
+            <div class="col-md-6">
+                <h6>Deductions</h6>
+                <table class="table table-sm mb-3">
+                    {% for d in payroll.deductions.all %}
+                    <tr><td>{{ d.deduction_type }}{% if d.description %} <small class="text-muted">{{ d.description }}</small>{% endif %}</td><td class="text-end">{{ d.amount }}</td></tr>
+                    {% empty %}
+                    <tr><td colspan="2" class="text-muted">No deductions. Use "Process" to auto-calculate.</td></tr>
+                    {% endfor %}
+                    <tr class="fw-semibold"><td>Total Deductions</td><td class="text-end">{{ payroll.total_deductions }}</td></tr>
+                </table>
+            </div>
+        </div>
+        <div class="d-flex justify-content-between align-items-center border-top pt-2">
+            <span class="fw-bold fs-5">Net Salary Payable</span>
+            <span class="fw-bold fs-5">{{ payroll.net_salary }}</span>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

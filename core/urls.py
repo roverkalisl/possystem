@@ -126,12 +126,34 @@ urlpatterns = [
     path('labour-allocations/add/', views.labour_allocation_form, name='labour_allocation_add'),
 
     # =========================
+    # ATTENDANCE
+    # =========================
+    path('attendance/', views.attendance_list, name='attendance_list'),
+    path('attendance/entry/', views.attendance_entry, name='attendance_entry'),
+
+    # =========================
+    # SALARY ADVANCE
+    # =========================
+    path('salary-advances/', views.salary_advance_list, name='salary_advance_list'),
+    path('salary-advances/add/', views.add_salary_advance, name='add_salary_advance'),
+    path('salary-advances/<int:advance_id>/edit/', views.edit_salary_advance, name='edit_salary_advance'),
+    path('salary-advances/<int:advance_id>/approve/', views.approve_salary_advance, name='approve_salary_advance'),
+
+    # =========================
+    # SAFETY SUPPLY
+    # =========================
+    path('safety-items/', views.safety_item_list, name='safety_item_list'),
+    path('safety-items/add/', views.add_safety_item, name='add_safety_item'),
+    path('safety-items/<int:issue_id>/edit/', views.edit_safety_item, name='edit_safety_item'),
+
+    # =========================
     # PAYROLL
     # =========================
     path('payroll/', views.payroll_list, name='payroll_list'),
     path('payroll/paysheet/', views.payroll_paysheet, name='payroll_paysheet'),
     path('payroll/add/', views.payroll_form, name='payroll_add'),
     path('payroll/<int:payroll_id>/edit/', views.payroll_form, name='payroll_edit'),
+    path('payroll/<int:payroll_id>/process/', views.payroll_process, name='payroll_process'),
     path('payroll/<int:payroll_id>/entry/', views.payroll_pay_entry, name='payroll_pay_entry'),
     path('payroll/<int:payroll_id>/payslip/', views.payroll_payslip_detail, name='payroll_payslip_detail'),
     path('payroll/<int:payroll_id>/payslip/print/', views.print_payroll_payslip, name='print_payroll_payslip'),

@@ -25,7 +25,9 @@ from .models import (
     LicenseRenewal, ProjectInvoice, ProjectInvoicePayment, ProjectInvoiceItem,
     SupplierAdvance, SupplierSettlement, PurchaseOrder, PurchaseOrderItem,
     GRN, GRNItem, CompanyAsset, PayrollEntry, PayrollAllowance,
-    PayrollDeduction, PayrollAllocation, LabourAllocation
+    PayrollDeduction, PayrollAllocation, LabourAllocation,
+    SalaryAdvance, SafetyItemIssue, Attendance,
+    EPF_EMPLOYEE_RATE,
 )
 
 from .forms import QuotationForm, QuotationItemFormSet
@@ -215,6 +217,36 @@ def can_use_gl(user):
 
 def can_manage_items(user):
     return is_owner(user) or is_manager(user) or is_clerk(user)
+
+
+def is_hr_manager(user):
+    return user.groups.filter(name__iexact="HR Manager").exists()
+
+
+def is_finance_manager(user):
+    return user.groups.filter(name__iexact="Finance Manager").exists()
+
+
+def is_project_manager(user):
+    return user.groups.filter(name__iexact="Project Manager").exists()
+
+
+def can_manage_employees(user):
+    return is_owner(user) or is_hr_manager(user)
+
+
+def can_process_payroll(user):
+    # Prepare / edit payroll, record attendance, advances, safety issues.
+    return is_owner(user) or is_hr_manager(user)
+
+
+def can_approve_payroll(user):
+    # Only finance (or owner) may approve payroll and pay salaries.
+    return is_owner(user) or is_finance_manager(user)
+
+
+def can_view_salary(user):
+    return is_owner(user) or is_hr_manager(user) or is_finance_manager(user)
 
 
 def generate_project_id(project_type):
@@ -2954,7 +2986,7 @@ def retail_vs_project_profit_dashboard(request):
 # =========================
 # EMPLOYEES
 # =========================
-@user_passes_test(is_owner)
+@user_passes_test(can_manage_employees)
 def employee_list(request):
     employees = Employee.objects.select_related("user").order_by("emp_no")
     return render(request, "pos/employee_list.html", {
@@ -2962,7 +2994,7 @@ def employee_list(request):
     })
 
 
-@user_passes_test(is_owner)
+@user_passes_test(can_manage_employees)
 def add_employee(request):
     users = User.objects.filter(is_active=True).order_by("username")
 
@@ -3021,7 +3053,7 @@ def add_employee(request):
     })
 
 
-@user_passes_test(is_owner)
+@user_passes_test(can_manage_employees)
 def edit_employee(request, employee_id):
     employee = get_object_or_404(Employee, id=employee_id)
     users = User.objects.filter(is_active=True).order_by("username")
@@ -3084,7 +3116,7 @@ def edit_employee(request, employee_id):
     })
 
 
-@user_passes_test(is_owner)
+@user_passes_test(can_process_payroll)
 def labour_allocation_list(request):
     allocations = LabourAllocation.objects.select_related("employee", "project", "supervisor").order_by("-date", "-id")
     return render(request, "pos/labour_allocation_list.html", {
@@ -3092,7 +3124,7 @@ def labour_allocation_list(request):
     })
 
 
-@user_passes_test(is_owner)
+@user_passes_test(can_process_payroll)
 def labour_allocation_form(request):
     employees = Employee.objects.filter(is_active=True).order_by("full_name")
     projects = Project.objects.filter(is_active=True).order_by("-id")
@@ -3142,7 +3174,7 @@ def labour_allocation_form(request):
 # =========================
 # PAYROLL
 # =========================
-@user_passes_test(is_owner)
+@user_passes_test(can_view_salary)
 def payroll_list(request):
     payrolls = PayrollEntry.objects.select_related("employee", "project", "supervisor", "created_by", "approved_by").order_by("-created_at")
     return render(request, "pos/payroll_list.html", {
@@ -3152,7 +3184,7 @@ def payroll_list(request):
     })
 
 
-@user_passes_test(is_owner)
+@user_passes_test(can_view_salary)
 def payroll_paysheet(request):
     payrolls = PayrollEntry.objects.select_related("employee", "project").filter(status__in=["approved", "paid"]).order_by("employee__full_name", "-created_at")
     return render(request, "pos/payroll_paysheet.html", {
@@ -3164,7 +3196,7 @@ def payroll_paysheet(request):
     })
 
 
-@user_passes_test(is_owner)
+@user_passes_test(can_view_salary)
 def payroll_payslip_detail(request, payroll_id):
     payroll = get_object_or_404(PayrollEntry.objects.select_related("employee", "project", "supervisor"), id=payroll_id)
     if not payroll.is_printable:
@@ -3179,7 +3211,7 @@ def payroll_payslip_detail(request, payroll_id):
     })
 
 
-@user_passes_test(is_owner)
+@user_passes_test(can_view_salary)
 def print_payroll_payslip(request, payroll_id):
     payroll = get_object_or_404(PayrollEntry.objects.select_related("employee", "project", "supervisor"), id=payroll_id)
     if not payroll.is_printable:
@@ -3194,7 +3226,7 @@ def print_payroll_payslip(request, payroll_id):
     })
 
 
-@user_passes_test(is_owner)
+@user_passes_test(can_approve_payroll)
 def payroll_pay_entry(request, payroll_id):
     payroll = get_object_or_404(PayrollEntry, id=payroll_id)
     gl_accounts = GLMaster.objects.filter(is_active=True).order_by("gl_code")
@@ -3240,7 +3272,7 @@ def payroll_pay_entry(request, payroll_id):
     })
 
 
-@user_passes_test(is_owner)
+@user_passes_test(can_process_payroll)
 def payroll_form(request, payroll_id=None):
     payroll = get_object_or_404(PayrollEntry, id=payroll_id) if payroll_id else None
     employees = Employee.objects.filter(is_active=True).order_by("full_name")
@@ -3262,6 +3294,10 @@ def payroll_form(request, payroll_id=None):
         labour_gl_id = request.POST.get("labour_gl_account") or None
         payable_gl_id = request.POST.get("salary_payable_gl_account") or None
         bank_gl_id = request.POST.get("bank_gl_account") or None
+        epf_expense_gl_id = request.POST.get("epf_expense_gl_account") or None
+        epf_payable_gl_id = request.POST.get("epf_payable_gl_account") or None
+        etf_expense_gl_id = request.POST.get("etf_expense_gl_account") or None
+        etf_payable_gl_id = request.POST.get("etf_payable_gl_account") or None
         description = (request.POST.get("description") or "").strip()
 
         if not employee_id:
@@ -3296,6 +3332,10 @@ def payroll_form(request, payroll_id=None):
                 labour_gl_account_id=labour_gl_id,
                 salary_payable_gl_account_id=payable_gl_id,
                 bank_gl_account_id=bank_gl_id,
+                epf_expense_gl_account_id=epf_expense_gl_id,
+                epf_payable_gl_account_id=epf_payable_gl_id,
+                etf_expense_gl_account_id=etf_expense_gl_id,
+                etf_payable_gl_account_id=etf_payable_gl_id,
                 description=description,
                 created_by=request.user,
             )
@@ -3314,6 +3354,10 @@ def payroll_form(request, payroll_id=None):
             payroll.labour_gl_account_id = labour_gl_id
             payroll.salary_payable_gl_account_id = payable_gl_id
             payroll.bank_gl_account_id = bank_gl_id
+            payroll.epf_expense_gl_account_id = epf_expense_gl_id
+            payroll.epf_payable_gl_account_id = epf_payable_gl_id
+            payroll.etf_expense_gl_account_id = etf_expense_gl_id
+            payroll.etf_payable_gl_account_id = etf_payable_gl_id
             payroll.description = description
             payroll.save()
 
@@ -3332,7 +3376,7 @@ def payroll_form(request, payroll_id=None):
     })
 
 
-@user_passes_test(is_owner)
+@user_passes_test(can_approve_payroll)
 def approve_payroll(request, payroll_id):
     payroll = get_object_or_404(PayrollEntry, id=payroll_id)
     try:
@@ -3345,7 +3389,7 @@ def approve_payroll(request, payroll_id):
     return redirect("payroll_list")
 
 
-@user_passes_test(is_owner)
+@user_passes_test(can_approve_payroll)
 def pay_payroll(request, payroll_id):
     payroll = get_object_or_404(PayrollEntry, id=payroll_id)
     try:
@@ -3356,6 +3400,330 @@ def pay_payroll(request, payroll_id):
 
     messages.success(request, "Payroll paid and journal entries created.")
     return redirect("payroll_list")
+
+
+# Auto-generated payroll deductions carry this tag in their description so they
+# can be rebuilt on re-processing without disturbing manually-added deductions.
+AUTO_DEDUCTION_TAG = "[AUTO]"
+
+
+@user_passes_test(can_process_payroll)
+def payroll_process(request, payroll_id):
+    payroll = get_object_or_404(PayrollEntry.objects.select_related("employee"), id=payroll_id)
+
+    if payroll.status not in ("draft", "rejected"):
+        messages.error(request, "Only draft payroll can be processed. Approved payroll is locked.")
+        return redirect("payroll_edit", payroll_id=payroll.id)
+    if not payroll.salary_month:
+        messages.error(request, "Set a salary month on the payroll before processing.")
+        return redirect("payroll_edit", payroll_id=payroll.id)
+
+    employee = payroll.employee
+    month = payroll.salary_month
+
+    # Working days come from the Attendance module; OT hours from labour allocation.
+    attendance = Attendance.objects.filter(
+        employee=employee, date__year=month.year, date__month=month.month
+    )
+    working_days = sum((Attendance.day_value(a.status) for a in attendance), Decimal("0"))
+    ot_hours = LabourAllocation.objects.filter(
+        employee=employee, date__year=month.year, date__month=month.month
+    ).aggregate(total=Sum("ot_hours"))["total"] or Decimal("0")
+    ot_hours = Decimal(str(ot_hours))
+
+    is_daily = employee.salary_type == "daily" or employee.employment_type == "daily_labour"
+    if is_daily:
+        basic = employee.effective_daily_rate * working_days
+    else:
+        basic = Decimal(str(employee.basic_salary or 0))
+    ot_pay = ot_hours * employee.hourly_ot_rate
+    gross = (basic + ot_pay).quantize(Decimal("0.01"))
+
+    with transaction.atomic():
+        payroll.working_days = working_days
+        payroll.ot_hours = ot_hours
+        payroll.gross_salary = gross
+        payroll.save(update_fields=["working_days", "ot_hours", "gross_salary", "updated_at"])
+
+        # Rebuild only the auto deductions; keep any manual ones intact.
+        payroll.deductions.filter(description__startswith=AUTO_DEDUCTION_TAG).delete()
+
+        if employee.epf_etf_applicable:
+            epf_amount = (gross * EPF_EMPLOYEE_RATE).quantize(Decimal("0.01"))
+            if epf_amount > 0:
+                PayrollDeduction.objects.create(
+                    payroll_entry=payroll,
+                    deduction_type="EPF",
+                    amount=epf_amount,
+                    description=f"{AUTO_DEDUCTION_TAG} Employee EPF 8%",
+                )
+
+        advances = SalaryAdvance.objects.filter(
+            employee=employee, status="approved",
+            deduction_month__year=month.year, deduction_month__month=month.month,
+        )
+        for advance in advances:
+            balance = advance.remaining_balance
+            if balance > 0:
+                PayrollDeduction.objects.create(
+                    payroll_entry=payroll,
+                    deduction_type="Salary Advance",
+                    amount=balance,
+                    description=f"{AUTO_DEDUCTION_TAG} Salary advance #{advance.id}",
+                )
+
+        safety_issues = SafetyItemIssue.objects.filter(
+            employee=employee, deduct_from_salary=True, status="pending",
+            deduction_month__year=month.year, deduction_month__month=month.month,
+        )
+        for issue in safety_issues:
+            if issue.total_value and issue.total_value > 0:
+                PayrollDeduction.objects.create(
+                    payroll_entry=payroll,
+                    deduction_type="Safety Supply",
+                    amount=issue.total_value,
+                    description=f"{AUTO_DEDUCTION_TAG} {issue.safety_item}",
+                )
+
+    messages.success(
+        request,
+        f"Payroll processed — working days: {working_days}, OT: {ot_hours} hrs, gross: {gross}. "
+        "Review deductions, then approve.",
+    )
+    return redirect("payroll_edit", payroll_id=payroll.id)
+
+
+def _parse_month(value):
+    """Parse a browser <input type=month> value (YYYY-MM) into a first-of-month date."""
+    if not value:
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m").date()
+    except ValueError:
+        return None
+
+
+# =========================
+# SALARY ADVANCE
+# =========================
+@user_passes_test(can_process_payroll)
+def salary_advance_list(request):
+    advances = SalaryAdvance.objects.select_related("employee", "approved_by").order_by("-advance_date", "-id")
+    employee_id = request.GET.get("employee")
+    status = request.GET.get("status")
+    if employee_id:
+        advances = advances.filter(employee_id=employee_id)
+    if status:
+        advances = advances.filter(status=status)
+    return render(request, "pos/salary_advance_list.html", {
+        "advances": advances,
+        "employees": Employee.objects.filter(is_active=True).order_by("full_name"),
+        "selected_employee": employee_id or "",
+        "selected_status": status or "",
+    })
+
+
+@user_passes_test(can_process_payroll)
+def add_salary_advance(request):
+    employees = Employee.objects.filter(is_active=True).order_by("full_name")
+    if request.method == "POST":
+        employee_id = request.POST.get("employee") or None
+        advance_date = request.POST.get("advance_date") or timezone.localdate()
+        amount = to_decimal(request.POST.get("amount"))
+        reason = (request.POST.get("reason") or "").strip()
+        deduction_month = _parse_month(request.POST.get("deduction_month"))
+
+        if not employee_id or amount <= 0:
+            messages.error(request, "Employee and a positive amount are required.")
+            return render(request, "pos/add_salary_advance.html", {"employees": employees})
+
+        SalaryAdvance.objects.create(
+            employee_id=employee_id,
+            advance_date=advance_date,
+            amount=amount,
+            reason=reason,
+            deduction_month=deduction_month,
+        )
+        messages.success(request, "Salary advance recorded (pending approval).")
+        return redirect("salary_advance_list")
+
+    return render(request, "pos/add_salary_advance.html", {"employees": employees})
+
+
+@user_passes_test(can_process_payroll)
+def edit_salary_advance(request, advance_id):
+    advance = get_object_or_404(SalaryAdvance, id=advance_id)
+    employees = Employee.objects.filter(is_active=True).order_by("full_name")
+    if request.method == "POST":
+        if advance.deducted_amount and advance.deducted_amount > 0:
+            messages.error(request, "This advance has already been deducted and cannot be edited.")
+            return redirect("salary_advance_list")
+        advance.employee_id = request.POST.get("employee") or advance.employee_id
+        advance.advance_date = request.POST.get("advance_date") or advance.advance_date
+        advance.amount = to_decimal(request.POST.get("amount"))
+        advance.reason = (request.POST.get("reason") or "").strip()
+        advance.deduction_month = _parse_month(request.POST.get("deduction_month"))
+        advance.save()
+        messages.success(request, "Salary advance updated.")
+        return redirect("salary_advance_list")
+
+    return render(request, "pos/edit_salary_advance.html", {
+        "advance": advance,
+        "employees": employees,
+    })
+
+
+@user_passes_test(can_approve_payroll)
+def approve_salary_advance(request, advance_id):
+    advance = get_object_or_404(SalaryAdvance, id=advance_id)
+    advance.status = "approved"
+    advance.approved_by = request.user
+    advance.save(update_fields=["status", "approved_by", "updated_at"])
+    messages.success(request, "Salary advance approved.")
+    return redirect("salary_advance_list")
+
+
+# =========================
+# SAFETY SUPPLY ISSUE
+# =========================
+@user_passes_test(can_process_payroll)
+def safety_item_list(request):
+    issues = SafetyItemIssue.objects.select_related("employee").order_by("-issue_date", "-id")
+    employee_id = request.GET.get("employee")
+    status = request.GET.get("status")
+    if employee_id:
+        issues = issues.filter(employee_id=employee_id)
+    if status:
+        issues = issues.filter(status=status)
+    return render(request, "pos/safety_item_list.html", {
+        "issues": issues,
+        "employees": Employee.objects.filter(is_active=True).order_by("full_name"),
+        "selected_employee": employee_id or "",
+        "selected_status": status or "",
+    })
+
+
+@user_passes_test(can_process_payroll)
+def add_safety_item(request):
+    employees = Employee.objects.filter(is_active=True).order_by("full_name")
+    if request.method == "POST":
+        employee_id = request.POST.get("employee") or None
+        safety_item = (request.POST.get("safety_item") or "").strip()
+        issue_date = request.POST.get("issue_date") or timezone.localdate()
+        quantity = to_decimal(request.POST.get("quantity")) or Decimal("1")
+        item_value = to_decimal(request.POST.get("item_value"))
+        deduction_month = _parse_month(request.POST.get("deduction_month"))
+        deduct_from_salary = request.POST.get("deduct_from_salary") == "on"
+        remarks = (request.POST.get("remarks") or "").strip()
+
+        if not employee_id or not safety_item:
+            messages.error(request, "Employee and safety item are required.")
+            return render(request, "pos/add_safety_item.html", {"employees": employees})
+
+        SafetyItemIssue.objects.create(
+            employee_id=employee_id,
+            safety_item=safety_item,
+            issue_date=issue_date,
+            quantity=quantity,
+            item_value=item_value,
+            deduction_month=deduction_month,
+            deduct_from_salary=deduct_from_salary,
+            remarks=remarks,
+        )
+        messages.success(request, "Safety item issue recorded.")
+        return redirect("safety_item_list")
+
+    return render(request, "pos/add_safety_item.html", {"employees": employees})
+
+
+@user_passes_test(can_process_payroll)
+def edit_safety_item(request, issue_id):
+    issue = get_object_or_404(SafetyItemIssue, id=issue_id)
+    employees = Employee.objects.filter(is_active=True).order_by("full_name")
+    if request.method == "POST":
+        if issue.status == "deducted":
+            messages.error(request, "This safety issue is already deducted and cannot be edited.")
+            return redirect("safety_item_list")
+        issue.employee_id = request.POST.get("employee") or issue.employee_id
+        issue.safety_item = (request.POST.get("safety_item") or "").strip()
+        issue.issue_date = request.POST.get("issue_date") or issue.issue_date
+        issue.quantity = to_decimal(request.POST.get("quantity")) or Decimal("1")
+        issue.item_value = to_decimal(request.POST.get("item_value"))
+        issue.deduction_month = _parse_month(request.POST.get("deduction_month"))
+        issue.deduct_from_salary = request.POST.get("deduct_from_salary") == "on"
+        issue.status = request.POST.get("status") or issue.status
+        issue.remarks = (request.POST.get("remarks") or "").strip()
+        issue.save()
+        messages.success(request, "Safety item issue updated.")
+        return redirect("safety_item_list")
+
+    return render(request, "pos/add_safety_item.html", {
+        "employees": employees,
+        "issue": issue,
+    })
+
+
+# =========================
+# ATTENDANCE
+# =========================
+@user_passes_test(can_process_payroll)
+def attendance_list(request):
+    records = Attendance.objects.select_related("employee", "project").order_by("-date", "employee__full_name")
+    month = _parse_month(request.GET.get("month"))
+    employee_id = request.GET.get("employee")
+    if month:
+        records = records.filter(date__year=month.year, date__month=month.month)
+    if employee_id:
+        records = records.filter(employee_id=employee_id)
+    return render(request, "pos/attendance_list.html", {
+        "records": records[:500],
+        "employees": Employee.objects.filter(is_active=True).order_by("full_name"),
+        "selected_month": request.GET.get("month", ""),
+        "selected_employee": employee_id or "",
+    })
+
+
+@user_passes_test(can_process_payroll)
+def attendance_entry(request):
+    employees = Employee.objects.filter(is_active=True).order_by("full_name")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+    status_choices = Attendance.STATUS_CHOICES
+
+    if request.method == "POST":
+        date_value = request.POST.get("date") or timezone.localdate()
+        project_id = request.POST.get("project") or None
+        saved = 0
+        for employee in employees:
+            status = request.POST.get(f"status_{employee.id}")
+            if not status:
+                continue
+            remarks = (request.POST.get(f"remarks_{employee.id}") or "").strip()
+            Attendance.objects.update_or_create(
+                employee=employee,
+                date=date_value,
+                defaults={
+                    "project_id": project_id if project_id else None,
+                    "status": status,
+                    "remarks": remarks,
+                },
+            )
+            saved += 1
+        messages.success(request, f"Attendance saved for {saved} employee(s) on {date_value}.")
+        return redirect("attendance_list")
+
+    # Pre-fill from any existing records for the selected date.
+    selected_date = request.GET.get("date") or str(timezone.localdate())
+    existing = {
+        a.employee_id: a
+        for a in Attendance.objects.filter(date=selected_date)
+    }
+    rows = [{"employee": e, "record": existing.get(e.id)} for e in employees]
+    return render(request, "pos/attendance_entry.html", {
+        "rows": rows,
+        "projects": projects,
+        "status_choices": status_choices,
+        "selected_date": selected_date,
+    })
 
 
 @user_passes_test(can_use_income)

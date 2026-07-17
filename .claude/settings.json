@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python.exe \"C:/Users/NISHAN~1/AppData/Local/Temp/claude/c--P-I-Constructions-NewPOSSystem-pos-system/45bbf048-532c-40cc-8556-dbcc893e2d40/scratchpad/verify_ot_fix.py\")",
+      "Bash(.venv/Scripts/python.exe -c \"import qrcode; print\\('qrcode OK', qrcode.__version__\\)\")",
+      "Bash(.venv/Scripts/python.exe -c \"import PIL; print\\('Pillow OK', PIL.__version__\\)\")"
+    ]
+  }
+}

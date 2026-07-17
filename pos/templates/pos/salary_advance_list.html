@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+{% block title %}Salary Advances{% endblock %}
+{% block page_title %}Salary Advances{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">Salary Advances</h4>
+            <a href="{% url 'add_salary_advance' %}" class="btn btn-primary btn-sm">+ Add Advance</a>
+        </div>
+
+        <form method="get" class="row g-2 mb-3">
+            <div class="col-md-4">
+                <select name="employee" class="form-select form-select-sm">
+                    <option value="">All Employees</option>
+                    {% for e in employees %}
+                    <option value="{{ e.id }}" {% if selected_employee == e.id|stringformat:'s' %}selected{% endif %}>{{ e.full_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">All Status</option>
+                    <option value="pending" {% if selected_status == 'pending' %}selected{% endif %}>Pending</option>
+                    <option value="approved" {% if selected_status == 'approved' %}selected{% endif %}>Approved</option>
+                    <option value="rejected" {% if selected_status == 'rejected' %}selected{% endif %}>Rejected</option>
+                </select>
+            </div>
+            <div class="col-md-2"><button class="btn btn-outline-secondary btn-sm w-100">Filter</button></div>
+        </form>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped align-middle">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Employee</th>
+                        <th>Reason</th>
+                        <th>Deduction Month</th>
+                        <th class="text-end">Amount</th>
+                        <th class="text-end">Deducted</th>
+                        <th class="text-end">Balance</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for a in advances %}
+                    <tr>
+                        <td>{{ a.advance_date }}</td>
+                        <td>{{ a.employee.full_name }}</td>
+                        <td>{{ a.reason|default:'-' }}</td>
+                        <td>{% if a.deduction_month %}{{ a.deduction_month|date:'M Y' }}{% else %}-{% endif %}</td>
+                        <td class="text-end">{{ a.amount }}</td>
+                        <td class="text-end">{{ a.deducted_amount }}</td>
+                        <td class="text-end">{{ a.remaining_balance }}</td>
+                        <td>{{ a.get_status_display }}</td>
+                        <td>
+                            {% if a.status == 'pending' %}
+                            <a href="{% url 'edit_salary_advance' a.id %}" class="btn btn-sm btn-outline-secondary">Edit</a>
+                            <a href="{% url 'approve_salary_advance' a.id %}" class="btn btn-sm btn-outline-success">Approve</a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="9" class="text-center text-muted">No salary advances yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

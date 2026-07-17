@@ -7,6 +7,21 @@ from django.utils import timezone
 
 
 # =========================
+# PAYROLL STATUTORY RATES (Sri Lanka)
+# =========================
+# EPF: employee contributes 8% of gross (deducted from salary),
+# employer contributes 12%. ETF: employer contributes 3% (not deducted
+# from the employee). Rates are kept here so a single edit updates payroll.
+EPF_EMPLOYEE_RATE = Decimal("0.08")
+EPF_EMPLOYER_RATE = Decimal("0.12")
+ETF_EMPLOYER_RATE = Decimal("0.03")
+
+# Used to derive a daily/hourly rate for monthly-salary employees (who have
+# no daily_rate set) so their OT hours can still be priced.
+STANDARD_MONTHLY_WORKING_DAYS = Decimal("30")
+
+
+# =========================
 # MASTER TABLES
 # =========================
 class Category(models.Model):
@@ -645,6 +660,8 @@ class SalaryAdvance(models.Model):
     amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     reason = models.CharField(max_length=255, blank=True, null=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    deduction_month = models.DateField(blank=True, null=True)
+    deducted_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_salary_advances")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -654,7 +671,7 @@ class SalaryAdvance(models.Model):
 
     @property
     def remaining_balance(self):
-        return Decimal(str(self.amount or 0))
+        return Decimal(str(self.amount or 0)) - Decimal(str(self.deducted_amount or 0))
 
     def __str__(self):
         return f"Advance {self.id} - {self.employee}"
@@ -686,6 +703,10 @@ class PayrollEntry(models.Model):
     labour_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_labour_entries")
     salary_payable_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_payable_entries")
     bank_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_bank_entries")
+    epf_expense_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_epf_expense_entries")
+    epf_payable_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_epf_payable_entries")
+    etf_expense_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_etf_expense_entries")
+    etf_payable_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_etf_payable_entries")
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
     description = models.TextField(blank=True, null=True)
     payslip_no = models.CharField(max_length=30, blank=True, null=True)
@@ -782,7 +803,69 @@ class PayrollEntry(models.Model):
                     description="Payroll salary payable created",
                 )
 
+            self._post_employer_statutory_gl()
+            self._apply_deduction_balances()
+
         return self
+
+    def _post_employer_statutory_gl(self):
+        """Post employer EPF (12%) and ETF (3%) as debit expense / credit payable."""
+        if not (self.employee and self.employee.epf_etf_applicable):
+            return
+
+        gross = Decimal(str(self.gross_salary or 0))
+        statutory = [
+            (EPF_EMPLOYER_RATE, self.epf_expense_gl_account, self.epf_payable_gl_account, "Employer EPF"),
+            (ETF_EMPLOYER_RATE, self.etf_expense_gl_account, self.etf_payable_gl_account, "Employer ETF"),
+        ]
+        for rate, expense_gl, payable_gl, label in statutory:
+            if not (expense_gl and payable_gl):
+                continue
+            amount = (gross * rate).quantize(Decimal("0.01"))
+            if amount <= 0:
+                continue
+            PayrollGLEntry.objects.create(
+                payroll_entry=self,
+                entry_type="approval",
+                gl_account=expense_gl,
+                direction="debit",
+                amount=amount,
+                description=f"{label} contribution expense",
+            )
+            PayrollGLEntry.objects.create(
+                payroll_entry=self,
+                entry_type="approval",
+                gl_account=payable_gl,
+                direction="credit",
+                amount=amount,
+                description=f"{label} payable created",
+            )
+
+    def _apply_deduction_balances(self):
+        """Update salary-advance balances and safety-item status for deductions on this month."""
+        if not (self.employee and self.salary_month):
+            return
+
+        month = self.salary_month
+        advances = SalaryAdvance.objects.filter(
+            employee=self.employee,
+            status="approved",
+            deduction_month__year=month.year,
+            deduction_month__month=month.month,
+        )
+        for advance in advances:
+            remaining = advance.remaining_balance
+            if remaining > 0:
+                advance.deducted_amount = Decimal(str(advance.deducted_amount or 0)) + remaining
+                advance.save(update_fields=["deducted_amount", "updated_at"])
+
+        SafetyItemIssue.objects.filter(
+            employee=self.employee,
+            deduct_from_salary=True,
+            status="pending",
+            deduction_month__year=month.year,
+            deduction_month__month=month.month,
+        ).update(status="deducted")
 
     def pay(self, paid_by=None):
         if self.status != "approved":
@@ -830,7 +913,7 @@ class PayrollEntry(models.Model):
     def ot_amount(self):
         if not self.employee:
             return Decimal("0")
-        return Decimal(str(self.ot_hours or 0)) * Decimal(str(self.employee.daily_rate or 0))
+        return (Decimal(str(self.ot_hours or 0)) * self.employee.hourly_ot_rate).quantize(Decimal("0.01"))
 
     @property
     def salary_advance_deduction(self):
@@ -1166,6 +1249,21 @@ class Employee(models.Model):
 
         return Decimal(str(total_issued)) - Decimal(str(total_spent))
 
+    @property
+    def effective_daily_rate(self):
+        """Daily rate to use for OT/day-rate pricing, derived from basic_salary
+        for monthly-salary employees who don't have daily_rate set."""
+        if self.daily_rate:
+            return Decimal(str(self.daily_rate))
+        if self.basic_salary:
+            return Decimal(str(self.basic_salary)) / STANDARD_MONTHLY_WORKING_DAYS
+        return Decimal("0")
+
+    @property
+    def hourly_ot_rate(self):
+        rate = self.effective_daily_rate
+        return (rate / Decimal("8")) if rate else Decimal("0")
+
     def __str__(self):
         return f"{self.emp_no} - {self.full_name}"
 
@@ -1213,6 +1311,73 @@ class LabourAllocation(models.Model):
 
     def __str__(self):
         return f"{self.employee} - {self.project} - {self.date}"
+
+
+class Attendance(models.Model):
+    STATUS_CHOICES = LabourAllocation.ATTENDANCE_STATUS_CHOICES
+
+    # Day value used for payroll working-day totals.
+    STATUS_DAY_VALUE = {
+        "present": Decimal("1"),
+        "late": Decimal("1"),
+        "half_day": Decimal("0.5"),
+        "absent": Decimal("0"),
+        "leave": Decimal("0"),
+        "holiday": Decimal("0"),
+    }
+
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="attendance_records")
+    date = models.DateField(default=timezone.now)
+    project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name="attendance_records")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="present")
+    remarks = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date", "employee__full_name"]
+        unique_together = ("employee", "date")
+
+    @classmethod
+    def day_value(cls, status):
+        return cls.STATUS_DAY_VALUE.get(status, Decimal("0"))
+
+    @property
+    def day_count(self):
+        return self.day_value(self.status)
+
+    def __str__(self):
+        return f"{self.employee} - {self.date} - {self.status}"
+
+
+class SafetyItemIssue(models.Model):
+    STATUS_CHOICES = [
+        ("pending", "Pending"),
+        ("deducted", "Deducted"),
+        ("waived", "Waived"),
+    ]
+
+    employee = models.ForeignKey(Employee, on_delete=models.CASCADE, related_name="safety_item_issues")
+    safety_item = models.CharField(max_length=255)
+    issue_date = models.DateField(default=timezone.now)
+    quantity = models.DecimalField(max_digits=12, decimal_places=2, default=1)
+    item_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    deduction_month = models.DateField(blank=True, null=True)
+    deduct_from_salary = models.BooleanField(default=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="pending")
+    remarks = models.CharField(max_length=255, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-issue_date", "-id"]
+
+    def save(self, *args, **kwargs):
+        self.total_value = Decimal(str(self.quantity or 0)) * Decimal(str(self.item_value or 0))
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.employee} - {self.safety_item}"
 
 
 class ProjectPettyCash(models.Model):
