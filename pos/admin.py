@@ -24,6 +24,7 @@ from .models import (
     SalaryAdvance,
     SafetyItemIssue,
     Attendance,
+    PayrollSettings,
 )
 
 
@@ -218,3 +219,17 @@ class PayrollGLEntryAdmin(admin.ModelAdmin):
     list_display = ['payroll_entry', 'entry_type', 'gl_account', 'direction', 'amount', 'created_at']
     list_filter = ['entry_type', 'direction', 'gl_account', 'created_at']
     search_fields = ['payroll_entry__employee__full_name', 'description']
+
+
+@admin.register(PayrollSettings)
+class PayrollSettingsAdmin(admin.ModelAdmin):
+    list_display = [
+        'default_salary_payable_gl_account', 'default_bank_gl_account',
+        'default_epf_expense_gl_account', 'default_epf_payable_gl_account',
+        'default_etf_expense_gl_account', 'default_etf_payable_gl_account',
+        'updated_at',
+    ]
+
+    def has_add_permission(self, request):
+        # Singleton: only one PayrollSettings row should ever exist.
+        return not PayrollSettings.objects.exists()

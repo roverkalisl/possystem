@@ -27,6 +27,7 @@ from .models import (
     GRN, GRNItem, CompanyAsset, PayrollEntry, PayrollAllowance,
     PayrollDeduction, PayrollAllocation, LabourAllocation,
     SalaryAdvance, SafetyItemIssue, Attendance, PayrollProjectCostEntry,
+    PayrollSettings, compute_payroll_preview,
     EPF_EMPLOYEE_RATE,
 )
 
@@ -247,6 +248,13 @@ def can_approve_payroll(user):
 
 def can_view_salary(user):
     return is_owner(user) or is_hr_manager(user) or is_finance_manager(user)
+
+
+def can_override_payroll_defaults(user):
+    # Only Owner/Finance Manager may override auto-loaded Supervisor, OT Hours,
+    # or GL accounts on the payroll entry screen. Enforced server-side in
+    # payroll_form — not just by disabling inputs client-side.
+    return can_approve_payroll(user)
 
 
 def generate_project_id(project_type):
@@ -1849,6 +1857,9 @@ def create_project(request):
             client_name=request.POST.get("client_name"),
             location=request.POST.get("location"),
             estimated_value=request.POST.get("estimated_value") or 0,
+            default_labour_gl_account_id=request.POST.get("default_labour_gl_account") or None,
+            default_cost_gl_account_id=request.POST.get("default_cost_gl_account") or None,
+            default_supervisor_id=request.POST.get("default_supervisor") or None,
             created_by=request.user,
             updated_by=request.user,
         )
@@ -1856,13 +1867,18 @@ def create_project(request):
         messages.success(request, "Project created successfully")
         return redirect("project_list")
 
-    return render(request, "pos/create_project.html")
+    return render(request, "pos/create_project.html", {
+        "gl_accounts": GLMaster.objects.filter(is_active=True).order_by("gl_code"),
+        "employees": Employee.objects.filter(is_active=True).order_by("full_name"),
+    })
 
 
 @user_passes_test(is_owner)
 def edit_project(request, project_id):
     project = get_object_or_404(Project, id=project_id)
     project_types = Project.PROJECT_TYPE_CHOICES
+    gl_accounts = GLMaster.objects.filter(is_active=True).order_by("gl_code")
+    employees = Employee.objects.filter(is_active=True).order_by("full_name")
 
     if request.method == "POST":
         project.project_name = (request.POST.get("project_name") or "").strip()
@@ -1871,6 +1887,9 @@ def edit_project(request, project_id):
         project.location = (request.POST.get("location") or "").strip()
         project.estimated_value = to_decimal(request.POST.get("estimated_value"))
         project.status = request.POST.get("status") or project.status
+        project.default_labour_gl_account_id = request.POST.get("default_labour_gl_account") or None
+        project.default_cost_gl_account_id = request.POST.get("default_cost_gl_account") or None
+        project.default_supervisor_id = request.POST.get("default_supervisor") or None
         project.is_active = request.POST.get("is_active") == "on"
         project.updated_by = request.user
         project.save()
@@ -1881,6 +1900,8 @@ def edit_project(request, project_id):
     return render(request, "pos/edit_project.html", {
         "project": project,
         "project_types": project_types,
+        "gl_accounts": gl_accounts,
+        "employees": employees,
     })
 
 
@@ -3041,6 +3062,8 @@ def employee_list(request):
 @user_passes_test(can_manage_employees)
 def add_employee(request):
     users = User.objects.filter(is_active=True).order_by("username")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+    supervisors = Employee.objects.filter(is_active=True).order_by("full_name")
 
     if request.method == "POST":
         user_id = request.POST.get("user") or None
@@ -3052,10 +3075,13 @@ def add_employee(request):
         joining_date = request.POST.get("joining_date") or None
         basic_salary = to_decimal(request.POST.get("basic_salary"))
         daily_rate = to_decimal(request.POST.get("daily_rate"))
+        ot_rate = to_decimal(request.POST.get("ot_rate"))
         salary_type = request.POST.get("salary_type") or "monthly"
         contract_based = request.POST.get("contract_based") == "on"
         employment_type = request.POST.get("employment_type") or "permanent"
         epf_etf_applicable = request.POST.get("epf_etf_applicable") == "on"
+        default_project_id = request.POST.get("default_project") or None
+        default_supervisor_id = request.POST.get("default_supervisor") or None
         bank_name = (request.POST.get("bank_name") or "").strip()
         bank_account_no = (request.POST.get("bank_account_no") or "").strip()
         address = (request.POST.get("address") or "").strip()
@@ -3065,7 +3091,7 @@ def add_employee(request):
 
         if not full_name:
             messages.error(request, "Employee name is required.")
-            return render(request, "pos/add_employee.html", {"users": users})
+            return render(request, "pos/add_employee.html", {"users": users, "projects": projects, "supervisors": supervisors})
 
         Employee.objects.create(
             user_id=user_id if user_id else None,
@@ -3077,10 +3103,13 @@ def add_employee(request):
             joining_date=joining_date or None,
             basic_salary=basic_salary,
             daily_rate=daily_rate,
+            ot_rate=ot_rate,
             salary_type=salary_type,
             contract_based=contract_based,
             employment_type=employment_type,
             epf_etf_applicable=epf_etf_applicable,
+            default_project_id=default_project_id,
+            default_supervisor_id=default_supervisor_id,
             bank_name=bank_name,
             bank_account_no=bank_account_no,
             address=address,
@@ -3094,6 +3123,8 @@ def add_employee(request):
 
     return render(request, "pos/add_employee.html", {
         "users": users,
+        "projects": projects,
+        "supervisors": supervisors,
     })
 
 
@@ -3101,6 +3132,8 @@ def add_employee(request):
 def edit_employee(request, employee_id):
     employee = get_object_or_404(Employee, id=employee_id)
     users = User.objects.filter(is_active=True).order_by("username")
+    projects = Project.objects.filter(is_active=True).order_by("-id")
+    supervisors = Employee.objects.filter(is_active=True).exclude(id=employee.id).order_by("full_name")
 
     if request.method == "POST":
         user_id = request.POST.get("user") or None
@@ -3112,10 +3145,13 @@ def edit_employee(request, employee_id):
         joining_date = request.POST.get("joining_date") or None
         basic_salary = to_decimal(request.POST.get("basic_salary"))
         daily_rate = to_decimal(request.POST.get("daily_rate"))
+        ot_rate = to_decimal(request.POST.get("ot_rate"))
         salary_type = request.POST.get("salary_type") or "monthly"
         contract_based = request.POST.get("contract_based") == "on"
         employment_type = request.POST.get("employment_type") or "permanent"
         epf_etf_applicable = request.POST.get("epf_etf_applicable") == "on"
+        default_project_id = request.POST.get("default_project") or None
+        default_supervisor_id = request.POST.get("default_supervisor") or None
         bank_name = (request.POST.get("bank_name") or "").strip()
         bank_account_no = (request.POST.get("bank_account_no") or "").strip()
         address = (request.POST.get("address") or "").strip()
@@ -3128,6 +3164,8 @@ def edit_employee(request, employee_id):
             return render(request, "pos/edit_employee.html", {
                 "employee": employee,
                 "users": users,
+                "projects": projects,
+                "supervisors": supervisors,
             })
 
         employee.user_id = user_id if user_id else None
@@ -3139,10 +3177,13 @@ def edit_employee(request, employee_id):
         employee.joining_date = joining_date or None
         employee.basic_salary = basic_salary
         employee.daily_rate = daily_rate
+        employee.ot_rate = ot_rate
         employee.salary_type = salary_type
         employee.contract_based = contract_based
         employee.employment_type = employment_type
         employee.epf_etf_applicable = epf_etf_applicable
+        employee.default_project_id = default_project_id
+        employee.default_supervisor_id = default_supervisor_id
         employee.bank_name = bank_name
         employee.bank_account_no = bank_account_no
         employee.address = address
@@ -3157,6 +3198,8 @@ def edit_employee(request, employee_id):
     return render(request, "pos/edit_employee.html", {
         "employee": employee,
         "users": users,
+        "projects": projects,
+        "supervisors": supervisors,
     })
 
 
@@ -3316,108 +3359,179 @@ def payroll_pay_entry(request, payroll_id):
     })
 
 
+def _decimal_or_none(value):
+    if value in (None, ""):
+        return None
+    return to_decimal(value)
+
+
+def _gl_json(gl_account):
+    if not gl_account:
+        return {"id": None, "label": ""}
+    return {"id": gl_account.id, "label": f"{gl_account.gl_code} - {gl_account.gl_name}"}
+
+
+@login_required
+def employee_payroll_defaults(request, employee_id):
+    employee = get_object_or_404(Employee, id=employee_id)
+    return JsonResponse({
+        "emp_no": employee.emp_no or "",
+        "full_name": employee.full_name,
+        "employee_category": employee.employee_category or "",
+        "designation": employee.designation or "",
+        "department": employee.department or "",
+        "default_project_id": employee.default_project_id,
+        "default_project_label": str(employee.default_project) if employee.default_project_id else "",
+        "default_supervisor_id": employee.default_supervisor_id,
+        "default_supervisor_label": employee.default_supervisor.full_name if employee.default_supervisor_id else "",
+        "salary_type": employee.salary_type,
+        "employment_type": employee.employment_type,
+        "basic_salary": str(employee.basic_salary or 0),
+        "ot_rate": str(employee.hourly_ot_rate),
+        "epf_etf_applicable": employee.epf_etf_applicable,
+    })
+
+
+@login_required
+def project_payroll_defaults(request, project_id):
+    project = get_object_or_404(Project, id=project_id)
+    return JsonResponse({
+        "project_code": project.project_id,
+        "labour_gl_account": _gl_json(project.default_labour_gl_account),
+        "cost_gl_account": _gl_json(project.default_cost_gl_account),
+        "supervisor_id": project.default_supervisor_id,
+        "supervisor_label": project.default_supervisor.full_name if project.default_supervisor_id else "",
+    })
+
+
+@login_required
+def payroll_preview_json(request):
+    employee = Employee.objects.filter(id=request.GET.get("employee")).first()
+    project = Project.objects.filter(id=request.GET.get("project")).first()
+    salary_month = _parse_month(request.GET.get("month"))
+    payroll_entry = PayrollEntry.objects.filter(id=request.GET.get("payroll_id")).first()
+
+    ot_hours_override = None
+    if can_override_payroll_defaults(request.user):
+        ot_hours_override = _decimal_or_none(request.GET.get("ot_hours"))
+
+    preview = compute_payroll_preview(
+        employee, project, salary_month, payroll_entry=payroll_entry, ot_hours_override=ot_hours_override
+    )
+
+    def to_json(value):
+        if isinstance(value, Decimal):
+            return str(value)
+        if isinstance(value, list):
+            return [{k: (str(v) if isinstance(v, Decimal) else v) for k, v in item.items()} for item in value]
+        return value
+
+    return JsonResponse({key: to_json(value) for key, value in preview.items()})
+
+
 @user_passes_test(can_process_payroll)
 def payroll_form(request, payroll_id=None):
     payroll = get_object_or_404(PayrollEntry, id=payroll_id) if payroll_id else None
     employees = Employee.objects.filter(is_active=True).order_by("full_name")
     projects = Project.objects.filter(is_active=True).order_by("-id")
     gl_accounts = GLMaster.objects.filter(is_active=True).order_by("gl_code")
+    can_override = can_override_payroll_defaults(request.user)
+    payroll_settings = PayrollSettings.get_solo()
+
+    def render_form(error=None):
+        if error:
+            messages.error(request, error)
+        return render(request, "pos/payroll_form.html", {
+            "payroll": payroll,
+            "employees": employees,
+            "projects": projects,
+            "gl_accounts": gl_accounts,
+            "can_override": can_override,
+            "payroll_settings": payroll_settings,
+        })
 
     if request.method == "POST":
         employee_id = request.POST.get("employee") or None
-        project_id = request.POST.get("project") or None
-        supervisor_id = request.POST.get("supervisor") or None
-        department = (request.POST.get("department") or "").strip()
-        employee_category = (request.POST.get("employee_category") or "").strip()
-        designation = (request.POST.get("designation") or "").strip()
-        salary_period = request.POST.get("salary_period") or "monthly"
-        salary_month_value = request.POST.get("salary_month") or None
-        working_days = to_decimal(request.POST.get("working_days"))
-        ot_hours = to_decimal(request.POST.get("ot_hours"))
-        gross_salary = to_decimal(request.POST.get("gross_salary"))
-        labour_gl_id = request.POST.get("labour_gl_account") or None
-        payable_gl_id = request.POST.get("salary_payable_gl_account") or None
-        bank_gl_id = request.POST.get("bank_gl_account") or None
-        epf_expense_gl_id = request.POST.get("epf_expense_gl_account") or None
-        epf_payable_gl_id = request.POST.get("epf_payable_gl_account") or None
-        etf_expense_gl_id = request.POST.get("etf_expense_gl_account") or None
-        etf_payable_gl_id = request.POST.get("etf_payable_gl_account") or None
-        description = (request.POST.get("description") or "").strip()
-
         if not employee_id:
-            messages.error(request, "Employee is required.")
-            return render(request, "pos/payroll_form.html", {
-                "payroll": payroll,
-                "employees": employees,
-                "projects": projects,
-                "gl_accounts": gl_accounts,
-            })
+            return render_form("Employee is required.")
+        employee = get_object_or_404(Employee, id=employee_id)
 
-        salary_month = None
-        if salary_month_value:
-            try:
-                salary_month = datetime.strptime(salary_month_value, "%Y-%m").date()
-            except ValueError:
-                salary_month = None
+        salary_month = _parse_month(request.POST.get("salary_month"))
+        if not salary_month:
+            return render_form("Salary month is required.")
+
+        project_id = request.POST.get("project") or employee.default_project_id or None
+        project = Project.objects.filter(id=project_id).first() if project_id else None
+        if not project and not payroll:
+            return render_form("A project must be selected (or set as the employee's default project).")
+
+        # Supervisor: Project's own default takes precedence over the employee's
+        # personal default. A posted override is only honored for privileged users.
+        default_supervisor_id = (project.default_supervisor_id if project else None) or employee.default_supervisor_id
+        posted_supervisor_id = request.POST.get("supervisor") or None
+        supervisor_id = posted_supervisor_id if (can_override and posted_supervisor_id) else default_supervisor_id
+
+        def resolve_gl(field_name, default_id):
+            posted = request.POST.get(field_name) or None
+            return posted if (can_override and posted) else default_id
+
+        labour_gl_id = resolve_gl("labour_gl_account", project.default_labour_gl_account_id if project else None)
+        payable_gl_id = resolve_gl("salary_payable_gl_account", payroll_settings.default_salary_payable_gl_account_id)
+        bank_gl_id = resolve_gl("bank_gl_account", payroll_settings.default_bank_gl_account_id)
+        epf_expense_gl_id = resolve_gl("epf_expense_gl_account", payroll_settings.default_epf_expense_gl_account_id)
+        epf_payable_gl_id = resolve_gl("epf_payable_gl_account", payroll_settings.default_epf_payable_gl_account_id)
+        etf_expense_gl_id = resolve_gl("etf_expense_gl_account", payroll_settings.default_etf_expense_gl_account_id)
+        etf_payable_gl_id = resolve_gl("etf_payable_gl_account", payroll_settings.default_etf_payable_gl_account_id)
 
         if payroll is None:
-            payroll = PayrollEntry.objects.create(
-                employee_id=employee_id,
-                project_id=project_id,
-                supervisor_id=supervisor_id,
-                department=department,
-                employee_category=employee_category,
-                designation=designation,
-                salary_period=salary_period,
-                salary_month=salary_month,
-                working_days=working_days,
-                ot_hours=ot_hours,
-                gross_salary=gross_salary,
-                labour_gl_account_id=labour_gl_id,
-                salary_payable_gl_account_id=payable_gl_id,
-                bank_gl_account_id=bank_gl_id,
-                epf_expense_gl_account_id=epf_expense_gl_id,
-                epf_payable_gl_account_id=epf_payable_gl_id,
-                etf_expense_gl_account_id=etf_expense_gl_id,
-                etf_payable_gl_account_id=etf_payable_gl_id,
-                description=description,
-                created_by=request.user,
-            )
-        else:
-            payroll.employee_id = employee_id
-            payroll.project_id = project_id
-            payroll.supervisor_id = supervisor_id
-            payroll.department = department
-            payroll.employee_category = employee_category
-            payroll.designation = designation
-            payroll.salary_period = salary_period
-            payroll.salary_month = salary_month
-            payroll.working_days = working_days
-            payroll.ot_hours = ot_hours
-            payroll.gross_salary = gross_salary
-            payroll.labour_gl_account_id = labour_gl_id
-            payroll.salary_payable_gl_account_id = payable_gl_id
-            payroll.bank_gl_account_id = bank_gl_id
-            payroll.epf_expense_gl_account_id = epf_expense_gl_id
-            payroll.epf_payable_gl_account_id = epf_payable_gl_id
-            payroll.etf_expense_gl_account_id = etf_expense_gl_id
-            payroll.etf_payable_gl_account_id = etf_payable_gl_id
-            payroll.description = description
-            payroll.save()
+            payroll = PayrollEntry(created_by=request.user)
+
+        payroll.employee = employee
+        payroll.project_id = project_id
+        payroll.supervisor_id = supervisor_id
+        # Department/Designation/Category are never taken from POST — always the
+        # Employee Master's current values (no duplicate manual entry).
+        payroll.department = employee.department
+        payroll.employee_category = employee.employee_category
+        payroll.designation = employee.designation
+        payroll.salary_period = request.POST.get("salary_period") or "monthly"
+        payroll.salary_month = salary_month
+        payroll.payment_method = request.POST.get("payment_method") or "bank"
+        payroll.labour_gl_account_id = labour_gl_id
+        payroll.salary_payable_gl_account_id = payable_gl_id
+        payroll.bank_gl_account_id = bank_gl_id
+        payroll.epf_expense_gl_account_id = epf_expense_gl_id
+        payroll.epf_payable_gl_account_id = epf_payable_gl_id
+        payroll.etf_expense_gl_account_id = etf_expense_gl_id
+        payroll.etf_payable_gl_account_id = etf_payable_gl_id
+        payroll.description = (request.POST.get("description") or "").strip()
+
+        # Working Days, Basic Salary, and OT Rate are always system-computed.
+        # OT Hours may only be overridden by a privileged user.
+        preview = compute_payroll_preview(employee, project, salary_month, payroll_entry=payroll if payroll.pk else None)
+        posted_ot_hours = _decimal_or_none(request.POST.get("ot_hours"))
+        payroll.ot_hours = posted_ot_hours if (can_override and posted_ot_hours is not None) else preview["ot_hours"]
+        payroll.working_days = preview["working_days"]
+        payroll.present_days = preview["present_days"]
+        payroll.leave_days = preview["leave_days"]
+        payroll.no_pay_days = preview["no_pay_days"]
+        payroll.holiday_days = preview["holiday_days"]
+        payroll.basic_salary = preview["basic_salary"]
+        payroll.ot_rate = preview["ot_rate"]
+        payroll.save()
+
+        gross = payroll.recompute_gross()
 
         if project_id:
             payroll.allocations.all().delete()
-            PayrollAllocation.objects.create(payroll_entry=payroll, project_id=project_id, amount=gross_salary)
+            PayrollAllocation.objects.create(payroll_entry=payroll, project_id=project_id, amount=gross)
+
+        payroll.rebuild_auto_deductions()
 
         messages.success(request, "Payroll entry saved successfully.")
-        return redirect("payroll_list")
+        return redirect("payroll_edit", payroll_id=payroll.id)
 
-    return render(request, "pos/payroll_form.html", {
-        "payroll": payroll,
-        "employees": employees,
-        "projects": projects,
-        "gl_accounts": gl_accounts,
-    })
+    return render_form()
 
 
 @user_passes_test(can_approve_payroll)
@@ -3446,14 +3560,13 @@ def pay_payroll(request, payroll_id):
     return redirect("payroll_list")
 
 
-# Auto-generated payroll deductions carry this tag in their description so they
-# can be rebuilt on re-processing without disturbing manually-added deductions.
-AUTO_DEDUCTION_TAG = "[AUTO]"
-
-
 @user_passes_test(can_process_payroll)
 def payroll_process(request, payroll_id):
-    payroll = get_object_or_404(PayrollEntry.objects.select_related("employee"), id=payroll_id)
+    """Re-sync an existing draft's Working Days/OT/Basic/auto-deductions against
+    current Attendance/LabourAllocation/Advance/Safety data (e.g. after attendance
+    was updated post-creation). Uses the same compute_payroll_preview() formula
+    that payroll_form's save path and the live JSON preview endpoint use."""
+    payroll = get_object_or_404(PayrollEntry.objects.select_related("employee", "project"), id=payroll_id)
 
     if payroll.status not in ("draft", "rejected"):
         messages.error(request, "Only draft payroll can be processed. Approved payroll is locked.")
@@ -3462,76 +3575,24 @@ def payroll_process(request, payroll_id):
         messages.error(request, "Set a salary month on the payroll before processing.")
         return redirect("payroll_edit", payroll_id=payroll.id)
 
-    employee = payroll.employee
-    month = payroll.salary_month
-
-    # Working days come from the Attendance module; OT hours from labour allocation.
-    attendance = Attendance.objects.filter(
-        employee=employee, date__year=month.year, date__month=month.month
-    )
-    working_days = sum((Attendance.day_value(a.status) for a in attendance), Decimal("0"))
-    ot_hours = LabourAllocation.objects.filter(
-        employee=employee, date__year=month.year, date__month=month.month
-    ).aggregate(total=Sum("ot_hours"))["total"] or Decimal("0")
-    ot_hours = Decimal(str(ot_hours))
-
-    is_daily = employee.salary_type == "daily" or employee.employment_type == "daily_labour"
-    if is_daily:
-        basic = employee.effective_daily_rate * working_days
-    else:
-        basic = Decimal(str(employee.basic_salary or 0))
-    ot_pay = ot_hours * employee.hourly_ot_rate
-    gross = (basic + ot_pay).quantize(Decimal("0.01"))
-
     with transaction.atomic():
-        payroll.working_days = working_days
-        payroll.ot_hours = ot_hours
-        payroll.gross_salary = gross
-        payroll.save(update_fields=["working_days", "ot_hours", "gross_salary", "updated_at"])
+        preview = compute_payroll_preview(payroll.employee, payroll.project, payroll.salary_month, payroll_entry=payroll)
+        payroll.working_days = preview["working_days"]
+        payroll.present_days = preview["present_days"]
+        payroll.leave_days = preview["leave_days"]
+        payroll.no_pay_days = preview["no_pay_days"]
+        payroll.holiday_days = preview["holiday_days"]
+        payroll.ot_hours = preview["ot_hours"]
+        payroll.ot_rate = preview["ot_rate"]
+        payroll.basic_salary = preview["basic_salary"]
+        payroll.save()
 
-        # Rebuild only the auto deductions; keep any manual ones intact.
-        payroll.deductions.filter(description__startswith=AUTO_DEDUCTION_TAG).delete()
-
-        if employee.epf_etf_applicable:
-            epf_amount = (gross * EPF_EMPLOYEE_RATE).quantize(Decimal("0.01"))
-            if epf_amount > 0:
-                PayrollDeduction.objects.create(
-                    payroll_entry=payroll,
-                    deduction_type="EPF",
-                    amount=epf_amount,
-                    description=f"{AUTO_DEDUCTION_TAG} Employee EPF 8%",
-                )
-
-        advances = SalaryAdvance.objects.filter(
-            employee=employee, status="approved",
-            deduction_month__year=month.year, deduction_month__month=month.month,
-        )
-        for advance in advances:
-            balance = advance.remaining_balance
-            if balance > 0:
-                PayrollDeduction.objects.create(
-                    payroll_entry=payroll,
-                    deduction_type="Salary Advance",
-                    amount=balance,
-                    description=f"{AUTO_DEDUCTION_TAG} Salary advance #{advance.id}",
-                )
-
-        safety_issues = SafetyItemIssue.objects.filter(
-            employee=employee, deduct_from_salary=True, status="pending",
-            deduction_month__year=month.year, deduction_month__month=month.month,
-        )
-        for issue in safety_issues:
-            if issue.total_value and issue.total_value > 0:
-                PayrollDeduction.objects.create(
-                    payroll_entry=payroll,
-                    deduction_type="Safety Supply",
-                    amount=issue.total_value,
-                    description=f"{AUTO_DEDUCTION_TAG} {issue.safety_item}",
-                )
+        gross = payroll.recompute_gross()
+        payroll.rebuild_auto_deductions()
 
     messages.success(
         request,
-        f"Payroll processed — working days: {working_days}, OT: {ot_hours} hrs, gross: {gross}. "
+        f"Payroll processed — working days: {payroll.working_days}, OT: {payroll.ot_hours} hrs, gross: {gross}. "
         "Review deductions, then approve.",
     )
     return redirect("payroll_edit", payroll_id=payroll.id)

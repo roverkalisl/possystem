@@ -3,188 +3,401 @@
 {% block page_title %}{% if payroll %}Edit Payroll{% else %}Add Payroll{% endif %}{% endblock %}
 
 {% block content %}
-<div class="card shadow-sm">
-    <div class="card-body">
-        <form method="post">
-            {% csrf_token %}
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="form-label">Employee</label>
-                    <select name="employee" class="form-select" required>
-                        <option value="">Select Employee</option>
-                        {% for employee in employees %}
-                        <option value="{{ employee.id }}" {% if payroll and payroll.employee_id == employee.id %}selected{% endif %}>{{ employee.full_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Project</label>
-                    <select name="project" class="form-select">
-                        <option value="">Select Project</option>
-                        {% for project in projects %}
-                        <option value="{{ project.id }}" {% if payroll and payroll.project_id == project.id %}selected{% endif %}>{{ project.project_id }} - {{ project.project_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Supervisor / Site Supervisor</label>
-                    <select name="supervisor" class="form-select">
-                        <option value="">Select Supervisor</option>
-                        {% for employee in employees %}
-                        <option value="{{ employee.id }}" {% if payroll and payroll.supervisor_id == employee.id %}selected{% endif %}>{{ employee.full_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Department</label>
-                    <input type="text" name="department" class="form-control" value="{{ payroll.department|default:'' }}">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Employee Category</label>
-                    <input type="text" name="employee_category" class="form-control" value="{{ payroll.employee_category|default:'' }}">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Designation</label>
-                    <input type="text" name="designation" class="form-control" value="{{ payroll.designation|default:'' }}">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Salary Period</label>
-                    <select name="salary_period" class="form-select">
-                        <option value="monthly" {% if payroll and payroll.salary_period == 'monthly' %}selected{% endif %}>Monthly</option>
-                        <option value="weekly" {% if payroll and payroll.salary_period == 'weekly' %}selected{% endif %}>Weekly</option>
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Salary Month</label>
-                    <input type="month" name="salary_month" class="form-control" value="{% if payroll and payroll.salary_month %}{{ payroll.salary_month|date:'Y-m' }}{% endif %}">
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Working Days</label>
-                    <input type="number" step="0.01" name="working_days" class="form-control" value="{{ payroll.working_days|default:'' }}">
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">OT Hours</label>
-                    <input type="number" step="0.01" name="ot_hours" class="form-control" value="{{ payroll.ot_hours|default:'' }}">
-                </div>
-                <div class="col-md-6">
-                    <label class="form-label">Gross Salary</label>
-                    <input type="number" step="0.01" name="gross_salary" class="form-control" value="{{ payroll.gross_salary|default:'' }}" required>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Labour GL Account</label>
-                    <select name="labour_gl_account" class="form-select">
-                        <option value="">Select GL</option>
-                        {% for gl in gl_accounts %}
-                        <option value="{{ gl.id }}" {% if payroll and payroll.labour_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Salary Payable GL</label>
-                    <select name="salary_payable_gl_account" class="form-select">
-                        <option value="">Select GL</option>
-                        {% for gl in gl_accounts %}
-                        <option value="{{ gl.id }}" {% if payroll and payroll.salary_payable_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">Bank / Cash GL</label>
-                    <select name="bank_gl_account" class="form-select">
-                        <option value="">Select GL</option>
-                        {% for gl in gl_accounts %}
-                        <option value="{{ gl.id }}" {% if payroll and payroll.bank_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-12"><hr class="my-1"><small class="text-muted">Employer statutory (EPF 12% / ETF 3%) — optional GL accounts. Leave blank to skip those postings.</small></div>
-                <div class="col-md-3">
-                    <label class="form-label">EPF Expense GL</label>
-                    <select name="epf_expense_gl_account" class="form-select">
-                        <option value="">Select GL</option>
-                        {% for gl in gl_accounts %}
-                        <option value="{{ gl.id }}" {% if payroll and payroll.epf_expense_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">EPF Payable GL</label>
-                    <select name="epf_payable_gl_account" class="form-select">
-                        <option value="">Select GL</option>
-                        {% for gl in gl_accounts %}
-                        <option value="{{ gl.id }}" {% if payroll and payroll.epf_payable_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">ETF Expense GL</label>
-                    <select name="etf_expense_gl_account" class="form-select">
-                        <option value="">Select GL</option>
-                        {% for gl in gl_accounts %}
-                        <option value="{{ gl.id }}" {% if payroll and payroll.etf_expense_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-3">
-                    <label class="form-label">ETF Payable GL</label>
-                    <select name="etf_payable_gl_account" class="form-select">
-                        <option value="">Select GL</option>
-                        {% for gl in gl_accounts %}
-                        <option value="{{ gl.id }}" {% if payroll and payroll.etf_payable_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-12">
-                    <label class="form-label">Notes</label>
-                    <textarea name="description" class="form-control" rows="3">{{ payroll.description|default:'' }}</textarea>
-                </div>
-            </div>
-            <div class="mt-4 d-flex gap-2">
-                <button type="submit" class="btn btn-primary">Save Payroll</button>
-                {% if payroll and payroll.status == 'draft' %}
-                <a href="{% url 'payroll_process' payroll.id %}" class="btn btn-success"
-                   onclick="return confirm('Auto-calculate working days, OT, EPF and deductions from attendance, labour and advances for this month?');">
-                    ⚙️ Process (auto-calc)
-                </a>
-                {% endif %}
-                <a href="{% url 'payroll_list' %}" class="btn btn-outline-secondary">Cancel</a>
-            </div>
-        </form>
-    </div>
-</div>
+<div class="row g-3">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-body">
+                <form method="post" id="payroll-entry-form">
+                    {% csrf_token %}
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label">Employee <span class="text-danger">*</span></label>
+                            <select name="employee" id="id_employee" class="form-select" required>
+                                <option value="">Select Employee</option>
+                                {% for employee in employees %}
+                                <option value="{{ employee.id }}" {% if payroll and payroll.employee_id == employee.id %}selected{% endif %}>{{ employee.full_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Salary Month <span class="text-danger">*</span></label>
+                            <input type="month" name="salary_month" id="id_salary_month" class="form-control" required
+                                   value="{% if payroll and payroll.salary_month %}{{ payroll.salary_month|date:'Y-m' }}{% endif %}">
+                        </div>
 
-{% if payroll %}
-<div class="card shadow-sm mt-3">
-    <div class="card-header fw-semibold">Salary Summary (Status: {{ payroll.get_status_display }})</div>
-    <div class="card-body">
-        <div class="row">
-            <div class="col-md-6">
-                <h6>Earnings</h6>
-                <table class="table table-sm mb-3">
-                    <tr><td>Gross (Basic + OT)</td><td class="text-end">{{ payroll.gross_salary }}</td></tr>
-                    {% for a in payroll.allowances.all %}
-                    <tr><td>{{ a.allowance_name }}</td><td class="text-end">{{ a.amount }}</td></tr>
-                    {% endfor %}
-                    <tr class="fw-semibold"><td>Total Allowances</td><td class="text-end">{{ payroll.total_allowances }}</td></tr>
-                </table>
-            </div>
-            <div class="col-md-6">
-                <h6>Deductions</h6>
-                <table class="table table-sm mb-3">
-                    {% for d in payroll.deductions.all %}
-                    <tr><td>{{ d.deduction_type }}{% if d.description %} <small class="text-muted">{{ d.description }}</small>{% endif %}</td><td class="text-end">{{ d.amount }}</td></tr>
-                    {% empty %}
-                    <tr><td colspan="2" class="text-muted">No deductions. Use "Process" to auto-calculate.</td></tr>
-                    {% endfor %}
-                    <tr class="fw-semibold"><td>Total Deductions</td><td class="text-end">{{ payroll.total_deductions }}</td></tr>
-                </table>
+                        <div class="col-12">
+                            <div class="border rounded p-2 bg-light small">
+                                <div class="row g-2">
+                                    <div class="col-md-3"><span class="text-muted">Employee ID:</span> <strong id="disp_emp_no">{{ payroll.employee.emp_no|default:'-' }}</strong></div>
+                                    <div class="col-md-3"><span class="text-muted">Category:</span> <strong id="disp_category">{{ payroll.employee_category|default:'-' }}</strong></div>
+                                    <div class="col-md-3"><span class="text-muted">Designation:</span> <strong id="disp_designation">{{ payroll.designation|default:'-' }}</strong></div>
+                                    <div class="col-md-3"><span class="text-muted">Department:</span> <strong id="disp_department">{{ payroll.department|default:'-' }}</strong></div>
+                                </div>
+                                <div class="text-muted mt-1">Loaded automatically from the Employee Master — not editable here.</div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label">Project</label>
+                            <select name="project" id="id_project" class="form-select">
+                                <option value="">Select Project</option>
+                                {% for project in projects %}
+                                <option value="{{ project.id }}" {% if payroll and payroll.project_id == project.id %}selected{% endif %}>{{ project.project_id }} - {{ project.project_name }}</option>
+                                {% endfor %}
+                            </select>
+                            <small class="text-muted">Auto-loads from the employee's default project; change only if this employee works on multiple projects.</small>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Supervisor / Site Supervisor</label>
+                            <select name="supervisor" id="id_supervisor" class="form-select" {% if not can_override %}disabled{% endif %}>
+                                <option value="">Select Supervisor</option>
+                                {% for employee in employees %}
+                                <option value="{{ employee.id }}" {% if payroll and payroll.supervisor_id == employee.id %}selected{% endif %}>{{ employee.full_name }}</option>
+                                {% endfor %}
+                            </select>
+                            {% if not can_override %}<small class="text-muted">Auto-loaded from Project/Employee defaults — Finance Manager can override.</small>{% endif %}
+                        </div>
+
+                        <div class="col-md-4">
+                            <label class="form-label">Salary Period</label>
+                            <select name="salary_period" class="form-select">
+                                <option value="monthly" {% if payroll and payroll.salary_period == 'monthly' %}selected{% endif %}>Monthly</option>
+                                <option value="weekly" {% if payroll and payroll.salary_period == 'weekly' %}selected{% endif %}>Weekly</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Payment Method</label>
+                            <select name="payment_method" class="form-select">
+                                <option value="bank" {% if payroll and payroll.payment_method == 'bank' %}selected{% endif %}>Bank</option>
+                                <option value="cash" {% if payroll and payroll.payment_method == 'cash' %}selected{% endif %}>Cash</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Working Days</label>
+                            <input type="text" id="disp_working_days" class="form-control" value="{{ payroll.working_days|default:'0' }}" readonly>
+                            <small class="text-muted">Auto-calculated from Attendance.</small>
+                        </div>
+
+                        <div class="col-12">
+                            <div class="border rounded p-2 small">
+                                <div class="row g-2">
+                                    <div class="col-md-3"><span class="text-muted">Present Days:</span> <strong id="disp_present_days">{{ payroll.present_days|default:'0' }}</strong></div>
+                                    <div class="col-md-3"><span class="text-muted">Leave Days:</span> <strong id="disp_leave_days">{{ payroll.leave_days|default:'0' }}</strong></div>
+                                    <div class="col-md-3"><span class="text-muted">No Pay Days:</span> <strong id="disp_no_pay_days">{{ payroll.no_pay_days|default:'0' }}</strong></div>
+                                    <div class="col-md-3"><span class="text-muted">Holiday Days:</span> <strong id="disp_holiday_days">{{ payroll.holiday_days|default:'0' }}</strong></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label class="form-label">OT Hours</label>
+                            <input type="number" step="0.01" name="ot_hours" id="id_ot_hours" class="form-control"
+                                   value="{{ payroll.ot_hours|default:'0' }}" {% if not can_override %}readonly{% endif %}>
+                            {% if not can_override %}<small class="text-muted">Auto-totaled from Labour Allocation.</small>{% endif %}
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">OT Rate / hr</label>
+                            <input type="text" id="disp_ot_rate" class="form-control" value="{{ payroll.ot_rate|default:'0.00' }}" readonly>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Basic Salary</label>
+                            <input type="text" id="disp_basic_salary" class="form-control" value="{{ payroll.basic_salary|default:'0.00' }}" readonly>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Gross Earnings</label>
+                            <input type="text" id="disp_gross" class="form-control fw-bold" value="{{ payroll.gross_salary|default:'0.00' }}" readonly>
+                            <small class="text-muted">Basic + OT + Allowances. Never entered manually.</small>
+                        </div>
+
+                        <div class="col-12"><hr class="my-1"><small class="text-muted">GL Accounts — auto-loaded from the Project and company Payroll Settings.{% if not can_override %} Only Owner/Finance Manager can override.{% endif %}</small></div>
+                        <div class="col-md-4">
+                            <label class="form-label">Labour GL Account</label>
+                            <select name="labour_gl_account" id="id_labour_gl_account" class="form-select" {% if not can_override %}disabled{% endif %}>
+                                <option value="">Select GL</option>
+                                {% for gl in gl_accounts %}
+                                <option value="{{ gl.id }}" {% if payroll and payroll.labour_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Salary Payable GL</label>
+                            <select name="salary_payable_gl_account" id="id_salary_payable_gl_account" class="form-select" {% if not can_override %}disabled{% endif %}>
+                                <option value="">Select GL</option>
+                                {% for gl in gl_accounts %}
+                                <option value="{{ gl.id }}" {% if payroll and payroll.salary_payable_gl_account_id == gl.id or not payroll and payroll_settings.default_salary_payable_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Bank / Cash GL</label>
+                            <select name="bank_gl_account" id="id_bank_gl_account" class="form-select" {% if not can_override %}disabled{% endif %}>
+                                <option value="">Select GL</option>
+                                {% for gl in gl_accounts %}
+                                <option value="{{ gl.id }}" {% if payroll and payroll.bank_gl_account_id == gl.id or not payroll and payroll_settings.default_bank_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">EPF Expense GL</label>
+                            <select name="epf_expense_gl_account" id="id_epf_expense_gl_account" class="form-select" {% if not can_override %}disabled{% endif %}>
+                                <option value="">Select GL</option>
+                                {% for gl in gl_accounts %}
+                                <option value="{{ gl.id }}" {% if payroll and payroll.epf_expense_gl_account_id == gl.id or not payroll and payroll_settings.default_epf_expense_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">EPF Payable GL</label>
+                            <select name="epf_payable_gl_account" id="id_epf_payable_gl_account" class="form-select" {% if not can_override %}disabled{% endif %}>
+                                <option value="">Select GL</option>
+                                {% for gl in gl_accounts %}
+                                <option value="{{ gl.id }}" {% if payroll and payroll.epf_payable_gl_account_id == gl.id or not payroll and payroll_settings.default_epf_payable_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">ETF Expense GL</label>
+                            <select name="etf_expense_gl_account" id="id_etf_expense_gl_account" class="form-select" {% if not can_override %}disabled{% endif %}>
+                                <option value="">Select GL</option>
+                                {% for gl in gl_accounts %}
+                                <option value="{{ gl.id }}" {% if payroll and payroll.etf_expense_gl_account_id == gl.id or not payroll and payroll_settings.default_etf_expense_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">ETF Payable GL</label>
+                            <select name="etf_payable_gl_account" id="id_etf_payable_gl_account" class="form-select" {% if not can_override %}disabled{% endif %}>
+                                <option value="">Select GL</option>
+                                {% for gl in gl_accounts %}
+                                <option value="{{ gl.id }}" {% if payroll and payroll.etf_payable_gl_account_id == gl.id or not payroll and payroll_settings.default_etf_payable_gl_account_id == gl.id %}selected{% endif %}>{{ gl.gl_code }} - {{ gl.gl_name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="col-12">
+                            <label class="form-label">Notes</label>
+                            <textarea name="description" class="form-control" rows="2">{{ payroll.description|default:'' }}</textarea>
+                        </div>
+                    </div>
+                    <div class="mt-4 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">Save Payroll</button>
+                        {% if payroll and payroll.status == 'draft' %}
+                        <a href="{% url 'payroll_process' payroll.id %}" class="btn btn-success"
+                           onclick="return confirm('Re-sync working days, OT, EPF and deductions from current attendance/labour/advance data?');">
+                            ⚙️ Re-sync
+                        </a>
+                        {% endif %}
+                        <a href="{% url 'payroll_list' %}" class="btn btn-outline-secondary">Cancel</a>
+                    </div>
+                </form>
             </div>
         </div>
-        <div class="d-flex justify-content-between align-items-center border-top pt-2">
-            <span class="fw-bold fs-5">Net Salary Payable</span>
-            <span class="fw-bold fs-5">{{ payroll.net_salary }}</span>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card shadow-sm" style="position: sticky; top: 1rem;">
+            <div class="card-header fw-semibold">Payroll Summary</div>
+            <div class="card-body">
+                <table class="table table-sm mb-2">
+                    <tr><td>Basic Salary</td><td class="text-end" id="sum_basic">{{ payroll.basic_salary|default:'0.00' }}</td></tr>
+                    <tr><td>OT Payment</td><td class="text-end" id="sum_ot">{{ payroll.ot_amount|default:'0.00' }}</td></tr>
+                    <tr><td>Allowances</td><td class="text-end" id="sum_allowances">{{ payroll.total_allowances|default:'0.00' }}</td></tr>
+                    <tr class="fw-semibold border-top"><td>Gross Earnings</td><td class="text-end" id="sum_gross">{{ payroll.gross_salary|default:'0.00' }}</td></tr>
+                </table>
+                <table class="table table-sm mb-2">
+                    <tr><td>Employee EPF (8%)</td><td class="text-end" id="sum_epf">{{ payroll.epf_amount|default:'0.00' }}</td></tr>
+                    <tr><td>Salary Advances</td><td class="text-end" id="sum_advances">{{ payroll.salary_advance_deduction|default:'0.00' }}</td></tr>
+                    <tr><td>Other Deductions</td><td class="text-end" id="sum_other_ded">{{ payroll.other_deductions|default:'0.00' }}</td></tr>
+                    <tr class="fw-semibold border-top"><td>Total Deductions</td><td class="text-end" id="sum_total_ded">{{ payroll.total_deductions|default:'0.00' }}</td></tr>
+                </table>
+                <div class="d-flex justify-content-between align-items-center border-top pt-2 mb-3">
+                    <span class="fw-bold fs-5">Net Salary</span>
+                    <span class="fw-bold fs-5" id="sum_net">{{ payroll.net_salary|default:'0.00' }}</span>
+                </div>
+                <div class="border rounded p-2 small bg-light">
+                    <div class="text-muted mb-1">Employer Contributions (info only — not deducted)</div>
+                    <div class="d-flex justify-content-between"><span>Employer EPF (12%)</span><strong id="sum_employer_epf">{{ payroll.employer_epf_amount|default:'0.00' }}</strong></div>
+                    <div class="d-flex justify-content-between"><span>Employer ETF (3%)</span><strong id="sum_employer_etf">{{ payroll.employer_etf_amount|default:'0.00' }}</strong></div>
+                </div>
+                {% if payroll %}
+                <div class="mt-3 small">
+                    <span class="badge bg-secondary">Status: {{ payroll.get_status_display }}</span>
+                </div>
+                <div class="mt-2">
+                    <h6 class="small text-muted">Deduction Detail</h6>
+                    <table class="table table-sm">
+                        {% for d in payroll.deductions.all %}
+                        <tr><td>{{ d.deduction_type }}{% if d.description %} <small class="text-muted">{{ d.description }}</small>{% endif %}</td><td class="text-end">{{ d.amount }}</td></tr>
+                        {% empty %}
+                        <tr><td colspan="2" class="text-muted">No deductions yet. Use "Re-sync" to auto-calculate.</td></tr>
+                        {% endfor %}
+                    </table>
+                </div>
+                {% endif %}
+            </div>
         </div>
     </div>
 </div>
-{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const canOverride = {{ can_override|yesno:"true,false" }};
+    const payrollId = {{ payroll.id|default:"null" }};
+
+    const employeeSelect = document.getElementById("id_employee");
+    const projectSelect = document.getElementById("id_project");
+    const supervisorSelect = document.getElementById("id_supervisor");
+    const monthInput = document.getElementById("id_salary_month");
+    const otHoursInput = document.getElementById("id_ot_hours");
+
+    const glFields = {
+        labour_gl_account: document.getElementById("id_labour_gl_account"),
+        epf_expense_gl_account: null,
+    };
+
+    const disp = {
+        empNo: document.getElementById("disp_emp_no"),
+        category: document.getElementById("disp_category"),
+        designation: document.getElementById("disp_designation"),
+        department: document.getElementById("disp_department"),
+        workingDays: document.getElementById("disp_working_days"),
+        presentDays: document.getElementById("disp_present_days"),
+        leaveDays: document.getElementById("disp_leave_days"),
+        noPayDays: document.getElementById("disp_no_pay_days"),
+        holidayDays: document.getElementById("disp_holiday_days"),
+        basicSalary: document.getElementById("disp_basic_salary"),
+        otRate: document.getElementById("disp_ot_rate"),
+        gross: document.getElementById("disp_gross"),
+    };
+
+    const sum = {
+        basic: document.getElementById("sum_basic"),
+        ot: document.getElementById("sum_ot"),
+        allowances: document.getElementById("sum_allowances"),
+        gross: document.getElementById("sum_gross"),
+        epf: document.getElementById("sum_epf"),
+        advances: document.getElementById("sum_advances"),
+        otherDed: document.getElementById("sum_other_ded"),
+        totalDed: document.getElementById("sum_total_ded"),
+        net: document.getElementById("sum_net"),
+        employerEpf: document.getElementById("sum_employer_epf"),
+        employerEtf: document.getElementById("sum_employer_etf"),
+    };
+
+    function setSelectValueIfOptionExists(selectEl, value) {
+        if (!selectEl || !value) return;
+        const hasOption = Array.from(selectEl.options).some(function (o) { return o.value === String(value); });
+        if (hasOption) selectEl.value = String(value);
+    }
+
+    function markUserChanged(el) {
+        if (el) el.addEventListener("change", function () { el.dataset.userChanged = "1"; });
+    }
+    markUserChanged(projectSelect);
+    markUserChanged(supervisorSelect);
+    markUserChanged(otHoursInput);
+
+    function loadEmployeeDefaults() {
+        const empId = employeeSelect.value;
+        if (!empId) return;
+        fetch("/employees/" + empId + "/payroll-defaults/")
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (disp.empNo) disp.empNo.textContent = data.emp_no || "-";
+                if (disp.category) disp.category.textContent = data.employee_category || "-";
+                if (disp.designation) disp.designation.textContent = data.designation || "-";
+                if (disp.department) disp.department.textContent = data.department || "-";
+
+                if (projectSelect && !projectSelect.dataset.userChanged && data.default_project_id) {
+                    setSelectValueIfOptionExists(projectSelect, data.default_project_id);
+                    loadProjectDefaults();
+                } else {
+                    refreshPreview();
+                }
+                if (supervisorSelect && !supervisorSelect.dataset.userChanged && data.default_supervisor_id) {
+                    setSelectValueIfOptionExists(supervisorSelect, data.default_supervisor_id);
+                }
+            });
+    }
+
+    function loadProjectDefaults() {
+        const projId = projectSelect.value;
+        if (!projId) { refreshPreview(); return; }
+        fetch("/projects/" + projId + "/payroll-defaults/")
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (glFields.labour_gl_account && !glFields.labour_gl_account.dataset.userChanged && data.labour_gl_account && data.labour_gl_account.id) {
+                    setSelectValueIfOptionExists(glFields.labour_gl_account, data.labour_gl_account.id);
+                }
+                if (supervisorSelect && !supervisorSelect.dataset.userChanged && data.supervisor_id) {
+                    setSelectValueIfOptionExists(supervisorSelect, data.supervisor_id);
+                }
+                refreshPreview();
+            });
+    }
+    markUserChanged(glFields.labour_gl_account);
+
+    let previewTimer = null;
+    function refreshPreview() {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(function () {
+            const empId = employeeSelect.value;
+            const month = monthInput.value;
+            if (!empId || !month) return;
+
+            const params = new URLSearchParams({ employee: empId, month: month });
+            if (projectSelect && projectSelect.value) params.set("project", projectSelect.value);
+            if (payrollId) params.set("payroll_id", payrollId);
+            if (canOverride && otHoursInput && otHoursInput.dataset.userChanged) {
+                params.set("ot_hours", otHoursInput.value || "0");
+            }
+
+            fetch("/payroll/preview/?" + params.toString())
+                .then(function (r) { return r.json(); })
+                .then(function (data) {
+                    if (disp.workingDays) disp.workingDays.value = data.working_days;
+                    if (disp.presentDays) disp.presentDays.textContent = data.present_days;
+                    if (disp.leaveDays) disp.leaveDays.textContent = data.leave_days;
+                    if (disp.noPayDays) disp.noPayDays.textContent = data.no_pay_days;
+                    if (disp.holidayDays) disp.holidayDays.textContent = data.holiday_days;
+                    if (disp.basicSalary) disp.basicSalary.value = data.basic_salary;
+                    if (disp.otRate) disp.otRate.value = data.ot_rate;
+                    if (disp.gross) disp.gross.value = data.gross_salary;
+
+                    if (otHoursInput && !(canOverride && otHoursInput.dataset.userChanged)) {
+                        otHoursInput.value = data.ot_hours;
+                    }
+
+                    if (sum.basic) sum.basic.textContent = data.basic_salary;
+                    if (sum.ot) sum.ot.textContent = data.ot_amount;
+                    if (sum.allowances) sum.allowances.textContent = data.total_allowances;
+                    if (sum.gross) sum.gross.textContent = data.gross_salary;
+                    if (sum.epf) sum.epf.textContent = data.epf_employee;
+                    if (sum.advances) sum.advances.textContent = data.salary_advance_total;
+                    if (sum.otherDed) {
+                        const other = (parseFloat(data.total_auto_deductions || "0") - parseFloat(data.epf_employee || "0") - parseFloat(data.salary_advance_total || "0")).toFixed(2);
+                        sum.otherDed.textContent = other;
+                    }
+                    if (sum.totalDed) sum.totalDed.textContent = data.total_auto_deductions;
+                    if (sum.net) sum.net.textContent = data.net_salary_preview;
+                    if (sum.employerEpf) sum.employerEpf.textContent = data.employer_epf;
+                    if (sum.employerEtf) sum.employerEtf.textContent = data.employer_etf;
+                });
+        }, 300);
+    }
+
+    if (employeeSelect) employeeSelect.addEventListener("change", loadEmployeeDefaults);
+    if (projectSelect) projectSelect.addEventListener("change", loadProjectDefaults);
+    if (monthInput) monthInput.addEventListener("change", refreshPreview);
+    if (otHoursInput && canOverride) otHoursInput.addEventListener("change", refreshPreview);
+
+    // On initial load (e.g. editing an existing draft), refresh the live figures
+    // against current data without disturbing already-selected Project/Supervisor.
+    if (employeeSelect && employeeSelect.value && monthInput && monthInput.value) {
+        refreshPreview();
+    }
+});
+</script>
 {% endblock %}

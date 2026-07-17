@@ -20,6 +20,11 @@ ETF_EMPLOYER_RATE = Decimal("0.03")
 # no daily_rate set) so their OT hours can still be priced.
 STANDARD_MONTHLY_WORKING_DAYS = Decimal("30")
 
+# Auto-generated payroll deductions (EPF, No Pay, Salary Advance, Safety Supply)
+# carry this tag in their description so they can be rebuilt without disturbing
+# manually-added deductions (Loan, Other).
+AUTO_DEDUCTION_TAG = "[AUTO]"
+
 
 # =========================
 # MASTER TABLES
@@ -636,6 +641,10 @@ class Project(models.Model):
     estimated_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="ongoing")
 
+    default_labour_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="projects_using_as_labour_gl")
+    default_cost_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="projects_using_as_cost_gl")
+    default_supervisor = models.ForeignKey("Employee", on_delete=models.SET_NULL, null=True, blank=True, related_name="supervised_projects")
+
     is_active = models.BooleanField(default=True)
     created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_projects")
     updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="updated_projects")
@@ -677,6 +686,34 @@ class SalaryAdvance(models.Model):
         return f"Advance {self.id} - {self.employee}"
 
 
+class PayrollSettings(models.Model):
+    """Company-wide default GL accounts for payroll (Salary Payable, Bank/Cash,
+    EPF, ETF). Singleton — only one row is meant to exist; managed via admin
+    (Owner/staff-only) since these are administrator-level defaults."""
+
+    default_salary_payable_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    default_bank_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    default_epf_expense_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    default_epf_payable_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    default_etf_expense_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    default_etf_payable_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Payroll Settings"
+        verbose_name_plural = "Payroll Settings"
+
+    @classmethod
+    def get_solo(cls):
+        obj = cls.objects.first()
+        if obj is None:
+            obj = cls.objects.create()
+        return obj
+
+    def __str__(self):
+        return "Payroll Settings"
+
+
 class PayrollEntry(models.Model):
     STATUS_CHOICES = [
         ("draft", "Draft"),
@@ -697,9 +734,16 @@ class PayrollEntry(models.Model):
     designation = models.CharField(max_length=100, blank=True, null=True)
     salary_period = models.CharField(max_length=20, choices=SALARY_PERIOD_CHOICES, default="monthly")
     salary_month = models.DateField(blank=True, null=True)
+    basic_salary = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     working_days = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    present_days = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    leave_days = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    no_pay_days = models.DecimalField(max_digits=6, decimal_places=2, default=0)
+    holiday_days = models.DecimalField(max_digits=6, decimal_places=2, default=0)
     ot_hours = models.DecimalField(max_digits=8, decimal_places=2, default=0)
+    ot_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     gross_salary = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    payment_method = models.CharField(max_length=10, choices=[("cash", "Cash"), ("bank", "Bank")], default="bank")
     labour_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_labour_entries")
     salary_payable_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_payable_entries")
     bank_gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True, related_name="payroll_bank_entries")
@@ -754,14 +798,19 @@ class PayrollEntry(models.Model):
         if not self.project and not self.allocations.exists():
             raise ValidationError("A project must be selected before payroll can be approved.")
 
+        if self.status == "approved":
+            return self
+
+        # Self-healing: make sure gross/auto-deductions reflect the final state
+        # (e.g. allowances added after the last Process run) before locking in.
+        self.recompute_gross()
+        self.rebuild_auto_deductions()
+
         self.ensure_payslip_no()
 
         total_allocated = self.allocations.aggregate(total=models.Sum("amount"))["total"] or Decimal("0")
         if self.allocations.exists() and Decimal(str(total_allocated)) != Decimal(str(self.gross_salary)):
             raise ValidationError("Payroll allocations must total the gross salary amount.")
-
-        if self.status == "approved":
-            return self
 
         with transaction.atomic():
             self.status = "approved"
@@ -781,7 +830,7 @@ class PayrollEntry(models.Model):
                         payroll_entry=self,
                         project=allocation.project,
                         amount=allocation.amount,
-                        gl_account=self.labour_gl_account,
+                        gl_account=allocation.project.default_cost_gl_account or self.labour_gl_account,
                         description=f"Payroll labour cost for {self.employee.full_name}",
                     )
 
@@ -803,10 +852,37 @@ class PayrollEntry(models.Model):
                     description="Payroll salary payable created",
                 )
 
+            self._post_employee_epf_gl()
             self._post_employer_statutory_gl()
             self._apply_deduction_balances()
 
         return self
+
+    def _post_employee_epf_gl(self):
+        """Post the employee's own EPF 8% deduction: Debit Salary Payable / Credit EPF Payable."""
+        if not (self.epf_payable_gl_account and self.salary_payable_gl_account):
+            return
+
+        amount = self.epf_amount
+        if amount <= 0:
+            return
+
+        PayrollGLEntry.objects.create(
+            payroll_entry=self,
+            entry_type="approval",
+            gl_account=self.salary_payable_gl_account,
+            direction="debit",
+            amount=amount,
+            description="Employee EPF 8% deduction",
+        )
+        PayrollGLEntry.objects.create(
+            payroll_entry=self,
+            entry_type="approval",
+            gl_account=self.epf_payable_gl_account,
+            direction="credit",
+            amount=amount,
+            description="Employee EPF payable created",
+        )
 
     def _post_employer_statutory_gl(self):
         """Post employer EPF (12%) and ETF (3%) as debit expense / credit payable."""
@@ -883,7 +959,7 @@ class PayrollEntry(models.Model):
                 entry_type="payment",
                 gl_account=self.salary_payable_gl_account,
                 direction="debit",
-                amount=self.gross_salary,
+                amount=self.net_salary,
                 description="Salary payable settled",
             )
             PayrollGLEntry.objects.create(
@@ -891,7 +967,7 @@ class PayrollEntry(models.Model):
                 entry_type="payment",
                 gl_account=self.bank_gl_account,
                 direction="credit",
-                amount=self.gross_salary,
+                amount=self.net_salary,
                 description="Salary paid to employee",
             )
 
@@ -911,25 +987,45 @@ class PayrollEntry(models.Model):
 
     @property
     def ot_amount(self):
-        if not self.employee:
-            return Decimal("0")
-        return (Decimal(str(self.ot_hours or 0)) * self.employee.hourly_ot_rate).quantize(Decimal("0.01"))
+        return (Decimal(str(self.ot_hours or 0)) * Decimal(str(self.ot_rate or 0))).quantize(Decimal("0.01"))
 
     @property
     def salary_advance_deduction(self):
         return self._deduction_total("salary", "advance")
 
     @property
+    def loan_deduction(self):
+        return self._deduction_total("loan")
+
+    @property
+    def no_pay_deduction(self):
+        return self._deduction_total("no pay")
+
+    @property
     def epf_amount(self):
         return self._deduction_total("epf")
 
     @property
-    def etf_amount(self):
-        return self._deduction_total("etf")
+    def employer_epf_amount(self):
+        if not (self.employee and self.employee.epf_etf_applicable):
+            return Decimal("0")
+        return (Decimal(str(self.gross_salary or 0)) * EPF_EMPLOYER_RATE).quantize(Decimal("0.01"))
+
+    @property
+    def employer_etf_amount(self):
+        if not (self.employee and self.employee.epf_etf_applicable):
+            return Decimal("0")
+        return (Decimal(str(self.gross_salary or 0)) * ETF_EMPLOYER_RATE).quantize(Decimal("0.01"))
 
     @property
     def other_deductions(self):
-        return self.total_deductions - self.salary_advance_deduction - self.epf_amount - self.etf_amount
+        return (
+            self.total_deductions
+            - self.salary_advance_deduction
+            - self.loan_deduction
+            - self.no_pay_deduction
+            - self.epf_amount
+        )
 
     def _deduction_total(self, *keywords):
         query = Q()
@@ -939,7 +1035,60 @@ class PayrollEntry(models.Model):
 
     @property
     def net_salary(self):
-        return Decimal(str(self.gross_salary or 0)) + Decimal(str(self.total_allowances or 0)) - Decimal(str(self.total_deductions or 0))
+        return Decimal(str(self.gross_salary or 0)) - Decimal(str(self.total_deductions or 0))
+
+    def recompute_gross(self):
+        """gross_salary = Basic + OT + Allowances (Total/Gross Earnings). Saves the field."""
+        self.gross_salary = (
+            Decimal(str(self.basic_salary or 0))
+            + self.ot_amount
+            + Decimal(str(self.total_allowances or 0))
+        ).quantize(Decimal("0.01"))
+        self.save()
+        return self.gross_salary
+
+    def rebuild_auto_deductions(self):
+        """Rebuild [AUTO]-tagged deductions (EPF, No Pay, Salary Advance, Safety Supply)
+        from compute_payroll_preview() — the single formula authority — leaving any
+        manually-added deductions (Loan, Other) untouched."""
+        if not (self.employee and self.salary_month):
+            return
+
+        preview = compute_payroll_preview(self.employee, self.project, self.salary_month, payroll_entry=self)
+
+        self.deductions.filter(description__startswith=AUTO_DEDUCTION_TAG).delete()
+
+        if preview["epf_employee"] > 0:
+            PayrollDeduction.objects.create(
+                payroll_entry=self,
+                deduction_type="EPF",
+                amount=preview["epf_employee"],
+                description=f"{AUTO_DEDUCTION_TAG} Employee EPF 8%",
+            )
+
+        if preview["no_pay_deduction"] > 0:
+            PayrollDeduction.objects.create(
+                payroll_entry=self,
+                deduction_type="No Pay Deduction",
+                amount=preview["no_pay_deduction"],
+                description=f"{AUTO_DEDUCTION_TAG} {preview['no_pay_days']} no-pay day(s)",
+            )
+
+        for item in preview["salary_advance_items"]:
+            PayrollDeduction.objects.create(
+                payroll_entry=self,
+                deduction_type="Salary Advance",
+                amount=item["amount"],
+                description=f"{AUTO_DEDUCTION_TAG} Salary advance #{item['id']}",
+            )
+
+        for item in preview["safety_supply_items"]:
+            PayrollDeduction.objects.create(
+                payroll_entry=self,
+                deduction_type="Safety Supply",
+                amount=item["amount"],
+                description=f"{AUTO_DEDUCTION_TAG} {item['name']}",
+            )
 
 
 class PayrollAllowance(models.Model):
@@ -1016,6 +1165,135 @@ class PayrollGLEntry(models.Model):
 
     def __str__(self):
         return f"{self.direction.upper()} {self.amount}"
+
+
+def compute_payroll_preview(employee, project=None, salary_month=None, payroll_entry=None, ot_hours_override=None):
+    """Pure calculation, no persistence. The single formula authority for both the
+    live JSON preview endpoint (used before a PayrollEntry exists) and for what
+    PayrollEntry.rebuild_auto_deductions()/recompute_gross() actually save — so the
+    live summary panel and the saved record can never drift apart.
+
+    `payroll_entry`, if given (editing an existing draft), supplies already-saved
+    allowances so the gross/EPF figures reflect them; for a brand-new entry there
+    are no allowances yet, which is accurate.
+
+    `ot_hours_override`, if given, replaces the auto-totaled OT hours in the
+    returned figures — used only for the live "what-if" preview when a privileged
+    user is manually adjusting OT Hours; the caller is responsible for checking
+    override permission before passing this.
+    """
+    result = {
+        "working_days": Decimal("0"),
+        "present_days": Decimal("0"),
+        "leave_days": Decimal("0"),
+        "no_pay_days": Decimal("0"),
+        "holiday_days": Decimal("0"),
+        "ot_hours": Decimal("0"),
+        "ot_rate": Decimal("0"),
+        "ot_amount": Decimal("0"),
+        "basic_salary": Decimal("0"),
+        "no_pay_deduction": Decimal("0"),
+        "salary_advance_total": Decimal("0"),
+        "salary_advance_items": [],
+        "safety_supply_total": Decimal("0"),
+        "safety_supply_items": [],
+        "total_allowances": Decimal("0"),
+        "gross_salary": Decimal("0"),
+        "epf_employee": Decimal("0"),
+        "employer_epf": Decimal("0"),
+        "employer_etf": Decimal("0"),
+        "total_auto_deductions": Decimal("0"),
+        "net_salary_preview": Decimal("0"),
+    }
+    if not employee or not salary_month:
+        return result
+
+    year, month = salary_month.year, salary_month.month
+
+    attendance = Attendance.objects.filter(employee=employee, date__year=year, date__month=month)
+    working_days = sum((Attendance.day_value(a.status) for a in attendance), Decimal("0"))
+    present_days = attendance.filter(status__in=["present", "late"]).count()
+    leave_days = attendance.filter(status="leave").count()
+    no_pay_days = attendance.filter(status="absent").count()
+    holiday_days = attendance.filter(status="holiday").count()
+
+    ot_hours = LabourAllocation.objects.filter(
+        employee=employee, date__year=year, date__month=month
+    ).aggregate(total=Sum("ot_hours"))["total"] or Decimal("0")
+    ot_hours = Decimal(str(ot_hours))
+    if ot_hours_override is not None:
+        ot_hours = Decimal(str(ot_hours_override))
+    ot_rate = employee.hourly_ot_rate
+    ot_amount = (ot_hours * ot_rate).quantize(Decimal("0.01"))
+
+    is_daily = employee.salary_type == "daily" or employee.employment_type == "daily_labour"
+    if is_daily:
+        basic_salary = (employee.effective_daily_rate * working_days).quantize(Decimal("0.01"))
+        no_pay_deduction = Decimal("0")
+    else:
+        basic_salary = Decimal(str(employee.basic_salary or 0))
+        no_pay_deduction = (Decimal(str(no_pay_days)) * employee.effective_daily_rate).quantize(Decimal("0.01"))
+
+    total_allowances = payroll_entry.total_allowances if payroll_entry else Decimal("0")
+    gross_salary = (basic_salary + ot_amount + total_allowances).quantize(Decimal("0.01"))
+
+    epf_employee = Decimal("0")
+    employer_epf = Decimal("0")
+    employer_etf = Decimal("0")
+    if employee.epf_etf_applicable:
+        epf_employee = (gross_salary * EPF_EMPLOYEE_RATE).quantize(Decimal("0.01"))
+        employer_epf = (gross_salary * EPF_EMPLOYER_RATE).quantize(Decimal("0.01"))
+        employer_etf = (gross_salary * ETF_EMPLOYER_RATE).quantize(Decimal("0.01"))
+
+    advances = SalaryAdvance.objects.filter(
+        employee=employee, status="approved",
+        deduction_month__year=year, deduction_month__month=month,
+    )
+    salary_advance_items = []
+    salary_advance_total = Decimal("0")
+    for advance in advances:
+        balance = advance.remaining_balance
+        if balance > 0:
+            salary_advance_items.append({"id": advance.id, "amount": balance})
+            salary_advance_total += balance
+
+    safety_issues = SafetyItemIssue.objects.filter(
+        employee=employee, deduct_from_salary=True, status="pending",
+        deduction_month__year=year, deduction_month__month=month,
+    )
+    safety_supply_items = []
+    safety_supply_total = Decimal("0")
+    for issue in safety_issues:
+        if issue.total_value and issue.total_value > 0:
+            safety_supply_items.append({"id": issue.id, "name": issue.safety_item, "amount": issue.total_value})
+            safety_supply_total += issue.total_value
+
+    total_auto_deductions = epf_employee + no_pay_deduction + salary_advance_total + safety_supply_total
+
+    result.update({
+        "working_days": working_days,
+        "present_days": Decimal(str(present_days)),
+        "leave_days": Decimal(str(leave_days)),
+        "no_pay_days": Decimal(str(no_pay_days)),
+        "holiday_days": Decimal(str(holiday_days)),
+        "ot_hours": ot_hours,
+        "ot_rate": ot_rate,
+        "ot_amount": ot_amount,
+        "basic_salary": basic_salary,
+        "no_pay_deduction": no_pay_deduction,
+        "salary_advance_total": salary_advance_total,
+        "salary_advance_items": salary_advance_items,
+        "safety_supply_total": safety_supply_total,
+        "safety_supply_items": safety_supply_items,
+        "total_allowances": total_allowances,
+        "gross_salary": gross_salary,
+        "epf_employee": epf_employee,
+        "employer_epf": employer_epf,
+        "employer_etf": employer_etf,
+        "total_auto_deductions": total_auto_deductions,
+        "net_salary_preview": gross_salary - total_auto_deductions,
+    })
+    return result
 
 
 class ProjectExpense(models.Model):
@@ -1209,10 +1487,13 @@ class Employee(models.Model):
     joining_date = models.DateField(blank=True, null=True)
     basic_salary = models.DecimalField(max_digits=14, decimal_places=2, default=0)
     daily_rate = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    ot_rate = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="OT rate per hour. If blank/0, derived from daily/basic rate.")
     salary_type = models.CharField(max_length=20, choices=SALARY_TYPE_CHOICES, default="monthly")
     contract_based = models.BooleanField(default=False)
     employment_type = models.CharField(max_length=30, choices=EMPLOYMENT_TYPE_CHOICES, default="permanent")
     epf_etf_applicable = models.BooleanField(default=True)
+    default_project = models.ForeignKey(Project, on_delete=models.SET_NULL, null=True, blank=True, related_name="default_employees")
+    default_supervisor = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True, related_name="default_supervised_employees")
     bank_name = models.CharField(max_length=255, blank=True, null=True)
     bank_account_no = models.CharField(max_length=50, blank=True, null=True)
     address = models.TextField(blank=True, null=True)
@@ -1261,8 +1542,17 @@ class Employee(models.Model):
 
     @property
     def hourly_ot_rate(self):
+        if self.ot_rate:
+            return Decimal(str(self.ot_rate))
         rate = self.effective_daily_rate
         return (rate / Decimal("8")) if rate else Decimal("0")
+
+    @property
+    def masked_bank_account_no(self):
+        account = (self.bank_account_no or "").strip()
+        if not account:
+            return "-"
+        return f"****{account[-4:]}" if len(account) > 4 else account
 
     def __str__(self):
         return f"{self.emp_no} - {self.full_name}"

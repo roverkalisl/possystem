@@ -151,6 +151,9 @@ urlpatterns = [
     # =========================
     path('payroll/', views.payroll_list, name='payroll_list'),
     path('payroll/paysheet/', views.payroll_paysheet, name='payroll_paysheet'),
+    path('payroll/preview/', views.payroll_preview_json, name='payroll_preview_json'),
+    path('employees/<int:employee_id>/payroll-defaults/', views.employee_payroll_defaults, name='employee_payroll_defaults'),
+    path('projects/<int:project_id>/payroll-defaults/', views.project_payroll_defaults, name='project_payroll_defaults'),
     path('payroll/add/', views.payroll_form, name='payroll_add'),
     path('payroll/<int:payroll_id>/edit/', views.payroll_form, name='payroll_edit'),
     path('payroll/<int:payroll_id>/process/', views.payroll_process, name='payroll_process'),
