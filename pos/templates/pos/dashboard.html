@@ -62,6 +62,101 @@
     </div>
 </div>
 
+<!-- Payroll / Labour Summary -->
+<div class="row mb-4">
+    <div class="col-md-2">
+        <div class="card card-soft bg-light-primary">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Total Employees</p>
+                <h4 class="mb-0 text-primary">{{ total_employees }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card card-soft bg-light-secondary">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Permanent Employees</p>
+                <h4 class="mb-0 text-secondary">{{ permanent_employees }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card card-soft bg-light-info">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Daily Workers</p>
+                <h4 class="mb-0 text-info">{{ daily_workers }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card card-soft bg-light-warning">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Payroll Pending</p>
+                <h4 class="mb-0 text-warning">{{ payroll_pending_count }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card card-soft bg-light-success">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Payroll Completed</p>
+                <h4 class="mb-0 text-success">{{ payroll_completed_count }}</h4>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
+        <div class="card card-soft bg-light-danger">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Salary Advance Balance</p>
+                <h4 class="mb-0 text-danger">{{ salary_advance_balance|money }}</h4>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card card-soft bg-light-primary h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Monthly Labour Cost (This Month)</p>
+                <h4 class="mb-0 text-primary">{{ monthly_labour_cost|money }}</h4>
+                <a href="{% url 'payroll_list' %}" class="small">View Payroll &raquo;</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-8">
+        <div class="card card-soft h-100">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Project-Wise Labour Cost (This Month)</h5>
+            </div>
+            <div class="card-body">
+                {% if project_labour_costs %}
+                <div class="table-responsive">
+                    <table class="table table-sm table-borderless mb-0">
+                        <thead>
+                            <tr>
+                                <th>Project</th>
+                                <th class="text-end">Labour Cost</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in project_labour_costs %}
+                            <tr>
+                                <td>{{ row.project__project_id }} - {{ row.project__project_name }}</td>
+                                <td class="text-end">{{ row.total|money }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0 small">No project labour cost recorded this month.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- License & Renewal Summary -->
 <div class="row mb-4">
     <div class="col-md-3">

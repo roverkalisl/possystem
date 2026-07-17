@@ -26,7 +26,7 @@ from .models import (
     SupplierAdvance, SupplierSettlement, PurchaseOrder, PurchaseOrderItem,
     GRN, GRNItem, CompanyAsset, PayrollEntry, PayrollAllowance,
     PayrollDeduction, PayrollAllocation, LabourAllocation,
-    SalaryAdvance, SafetyItemIssue, Attendance,
+    SalaryAdvance, SafetyItemIssue, Attendance, PayrollProjectCostEntry,
     EPF_EMPLOYEE_RATE,
 )
 
@@ -445,6 +445,41 @@ def dashboard(request):
         Q(expire_date__lte=license_today + timedelta(days=30))
     ).order_by("next_renewal_date", "expire_date")[:6]
 
+    # =========================
+    # PAYROLL / LABOUR DASHBOARD WIDGETS
+    # =========================
+    active_employees = Employee.objects.filter(is_active=True)
+    total_employees = active_employees.count()
+    permanent_employees = active_employees.filter(employment_type="permanent").count()
+    daily_workers = active_employees.filter(employment_type="daily_labour").count()
+
+    payroll_pending_count = PayrollEntry.objects.filter(status__in=["draft", "rejected"]).count()
+    payroll_completed_count = PayrollEntry.objects.filter(status="paid").count()
+
+    monthly_labour_cost = PayrollEntry.objects.filter(
+        salary_month__year=today.year,
+        salary_month__month=today.month,
+        status__in=["approved", "paid"],
+    ).aggregate(total=Sum("gross_salary"))["total"] or Decimal("0")
+
+    project_labour_costs = (
+        PayrollProjectCostEntry.objects.filter(
+            payroll_entry__salary_month__year=today.year,
+            payroll_entry__salary_month__month=today.month,
+        )
+        .values("project__project_id", "project__project_name")
+        .annotate(total=Sum("amount"))
+        .order_by("-total")[:5]
+    )
+
+    salary_advance_totals = SalaryAdvance.objects.filter(status="approved").aggregate(
+        issued=Sum("amount"), deducted=Sum("deducted_amount")
+    )
+    salary_advance_balance = (
+        Decimal(str(salary_advance_totals["issued"] or 0))
+        - Decimal(str(salary_advance_totals["deducted"] or 0))
+    )
+
     return render(request, "pos/dashboard.html", {
         "show_pos": can_use_pos(request.user),
         "show_project": can_use_project(request.user),
@@ -471,6 +506,15 @@ def dashboard(request):
         "expiring_within_7_days": expiring_within_7_days,
         "expired_licenses": expired_licenses,
         "license_alerts": license_alerts,
+        # Payroll / labour widgets
+        "total_employees": total_employees,
+        "permanent_employees": permanent_employees,
+        "daily_workers": daily_workers,
+        "payroll_pending_count": payroll_pending_count,
+        "payroll_completed_count": payroll_completed_count,
+        "monthly_labour_cost": monthly_labour_cost,
+        "project_labour_costs": project_labour_costs,
+        "salary_advance_balance": salary_advance_balance,
     })
 
 
