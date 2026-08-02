@@ -1,0 +1,110 @@
+{% extends 'base.html' %}
+{% block title %}Database Backup{% endblock %}
+{% block page_title %}Database Backup{% endblock %}
+
+{% block content %}
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Last Backup</p>
+                {% if last_backup %}
+                <h6 class="mb-0">{{ last_backup.started_at|date:'Y-m-d H:i' }}</h6>
+                <span class="badge {% if last_backup.status == 'success' %}bg-success{% elif last_backup.status == 'failed' %}bg-danger{% else %}bg-secondary{% endif %} mt-1">
+                    {{ last_backup.get_status_display }}
+                </span>
+                {% else %}
+                <h6 class="mb-0 text-muted">No backups yet</h6>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Next Scheduled Backup</p>
+                <h6 class="mb-0">{% if next_scheduled %}{{ next_scheduled|date:'Y-m-d H:i' }}{% else %}Automatic backup disabled{% endif %}</h6>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Database Engine</p>
+                <h6 class="mb-0">{{ db_engine|upper }}</h6>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Retention Policy</p>
+                <h6 class="mb-0">Keep last {{ settings_row.retention_count }}</h6>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if last_backup and last_backup.status == 'failed' %}
+<div class="alert alert-danger">
+    ⚠ The last backup failed: {{ last_backup.error_message|truncatechars:200 }}
+</div>
+{% endif %}
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+            <h5 class="mb-1">Manual Backup</h5>
+            <p class="text-muted mb-0">Create an on-demand backup of the live database right now.</p>
+        </div>
+        <form method="post" action="{% url 'create_backup_now' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">Create Backup Now</button>
+        </form>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-4">
+        <a href="{% url 'backup_history' %}" class="btn btn-outline-secondary w-100">📜 Backup History</a>
+    </div>
+    <div class="col-md-4">
+        <a href="{% url 'restore_database' %}" class="btn btn-outline-warning w-100">♻️ Restore Database</a>
+    </div>
+    <div class="col-md-4">
+        <a href="{% url 'backup_settings' %}" class="btn btn-outline-secondary w-100">⚙️ Backup Settings</a>
+    </div>
+</div>
+
+<div class="card shadow-sm mt-3">
+    <div class="card-header fw-semibold">Recent Backups</div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0">
+                <thead>
+                    <tr>
+                        <th>Date/Time</th>
+                        <th>Type</th>
+                        <th>File</th>
+                        <th>Size</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in recent_backups %}
+                    <tr>
+                        <td>{{ r.started_at|date:'Y-m-d H:i' }}</td>
+                        <td>{{ r.get_backup_type_display }}</td>
+                        <td>{{ r.file_name|default:'-' }}</td>
+                        <td>{{ r.file_size_display }}</td>
+                        <td><span class="badge {% if r.status == 'success' %}bg-success{% elif r.status == 'failed' %}bg-danger{% else %}bg-secondary{% endif %}">{{ r.get_status_display }}</span></td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center text-muted">No backups yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

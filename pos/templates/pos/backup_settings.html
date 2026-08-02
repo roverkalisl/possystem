@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% block title %}Backup Settings{% endblock %}
+{% block page_title %}Backup Settings{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label">Backup Frequency</label>
+                    <select name="frequency" id="id_frequency" class="form-select">
+                        <option value="daily" {% if settings_row.frequency == 'daily' %}selected{% endif %}>Daily</option>
+                        <option value="weekly" {% if settings_row.frequency == 'weekly' %}selected{% endif %}>Weekly</option>
+                        <option value="monthly" {% if settings_row.frequency == 'monthly' %}selected{% endif %}>Monthly</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Backup Time</label>
+                    <input type="time" name="backup_time" class="form-control" value="{{ settings_row.backup_time|time:'H:i' }}">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Retention</label>
+                    <select name="retention_count" class="form-select">
+                        <option value="7" {% if settings_row.retention_count == 7 %}selected{% endif %}>Keep Last 7 Backups</option>
+                        <option value="30" {% if settings_row.retention_count == 30 %}selected{% endif %}>Keep Last 30 Backups</option>
+                        <option value="90" {% if settings_row.retention_count == 90 %}selected{% endif %}>Keep Last 90 Backups</option>
+                    </select>
+                </div>
+
+                <div class="col-md-4" id="weekly_day_field" style="{% if settings_row.frequency != 'weekly' %}display:none;{% endif %}">
+                    <label class="form-label">Day of Week</label>
+                    <select name="weekly_day" class="form-select">
+                        <option value="0" {% if settings_row.weekly_day == 0 %}selected{% endif %}>Monday</option>
+                        <option value="1" {% if settings_row.weekly_day == 1 %}selected{% endif %}>Tuesday</option>
+                        <option value="2" {% if settings_row.weekly_day == 2 %}selected{% endif %}>Wednesday</option>
+                        <option value="3" {% if settings_row.weekly_day == 3 %}selected{% endif %}>Thursday</option>
+                        <option value="4" {% if settings_row.weekly_day == 4 %}selected{% endif %}>Friday</option>
+                        <option value="5" {% if settings_row.weekly_day == 5 %}selected{% endif %}>Saturday</option>
+                        <option value="6" {% if settings_row.weekly_day == 6 %}selected{% endif %}>Sunday</option>
+                    </select>
+                </div>
+                <div class="col-md-4" id="monthly_day_field" style="{% if settings_row.frequency != 'monthly' %}display:none;{% endif %}">
+                    <label class="form-label">Day of Month</label>
+                    <input type="number" min="1" max="31" name="monthly_day" class="form-control" value="{{ settings_row.monthly_day }}">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Backup Location</label>
+                    <select name="storage_location" class="form-select">
+                        <option value="local" {% if settings_row.storage_location == 'local' %}selected{% endif %}>Local Server</option>
+                        <option value="google_drive" disabled {% if settings_row.storage_location == 'google_drive' %}selected{% endif %}>Google Drive (Coming soon)</option>
+                        <option value="other" disabled {% if settings_row.storage_location == 'other' %}selected{% endif %}>Other Cloud Storage (Coming soon)</option>
+                    </select>
+                </div>
+
+                <div class="col-12">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="auto_backup_enabled" id="auto_backup_enabled" {% if settings_row.auto_backup_enabled %}checked{% endif %}>
+                        <label class="form-check-label" for="auto_backup_enabled">Enable Automatic Backup</label>
+                    </div>
+                </div>
+
+                {% if next_scheduled %}
+                <div class="col-12">
+                    <div class="alert alert-info mb-0">Next scheduled backup: <strong>{{ next_scheduled|date:'Y-m-d H:i' }}</strong></div>
+                </div>
+                {% endif %}
+
+                <div class="col-12">
+                    <div class="alert alert-warning mb-0">
+                        Automatic backups require an OS-level scheduled task to invoke
+                        <code>python manage.py run_scheduled_backup</code> periodically (e.g. every 15
+                        minutes) — this command checks these settings and only actually backs up when due.
+                        Enabling this toggle alone does not schedule anything by itself.
+                    </div>
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Save Settings</button>
+                <a href="{% url 'backup_dashboard' %}" class="btn btn-outline-secondary">Back</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const freqSelect = document.getElementById("id_frequency");
+    const weeklyField = document.getElementById("weekly_day_field");
+    const monthlyField = document.getElementById("monthly_day_field");
+    function toggle() {
+        weeklyField.style.display = freqSelect.value === "weekly" ? "" : "none";
+        monthlyField.style.display = freqSelect.value === "monthly" ? "" : "none";
+    }
+    freqSelect.addEventListener("change", toggle);
+});
+</script>
+{% endblock %}

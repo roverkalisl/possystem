@@ -1,0 +1,91 @@
+{% extends 'base.html' %}
+{% block title %}Restore Database{% endblock %}
+{% block page_title %}Restore Database{% endblock %}
+
+{% block content %}
+<div class="alert alert-danger">
+    <strong>⚠ Warning:</strong> Restoring will <strong>overwrite the entire live database</strong> with
+    the contents of the selected backup. Any data created or changed after that backup's timestamp
+    will be lost. A safety backup of the current database is taken automatically before the restore
+    proceeds, but this action is otherwise irreversible.
+</div>
+
+<div class="card shadow-sm mb-3">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="mb-0">Select a Backup to Restore</h5>
+            <span class="badge bg-secondary">Server is running: {{ db_engine|upper }}</span>
+        </div>
+
+        {% if not available_backups %}
+        <p class="text-muted">No successful backups are available to restore from yet.</p>
+        {% else %}
+        <form method="post" onsubmit="return confirmRestore();">
+            {% csrf_token %}
+            <div class="mb-3">
+                <label class="form-label">Backup</label>
+                <select name="backup_id" id="backup_id" class="form-select" required>
+                    <option value="">Select a backup...</option>
+                    {% for b in available_backups %}
+                    <option value="{{ b.id }}" data-engine="{{ b.db_engine }}">
+                        {{ b.started_at|date:'Y-m-d H:i' }} — {{ b.file_name }} ({{ b.file_size_display }}, {{ b.db_engine|upper }}, {{ b.get_backup_type_display }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <small class="text-muted">Backups from a different database engine than the one currently running ({{ db_engine|upper }}) will be refused automatically.</small>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Type <code>RESTORE</code> to confirm</label>
+                <input type="text" name="confirmation" id="confirmation" class="form-control" autocomplete="off" required>
+            </div>
+            <button type="submit" class="btn btn-danger">Restore Database</button>
+            <a href="{% url 'backup_dashboard' %}" class="btn btn-outline-secondary">Cancel</a>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-header fw-semibold">Recent Restore Attempts</div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0">
+                <thead>
+                    <tr>
+                        <th>Date/Time</th>
+                        <th>Restored From</th>
+                        <th>Initiated By</th>
+                        <th>Status</th>
+                        <th>Pre-Restore Safety Backup</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for log in recent_restores %}
+                    <tr>
+                        <td>{{ log.started_at|date:'Y-m-d H:i' }}</td>
+                        <td>{{ log.backup_record.file_name|default:'-' }}</td>
+                        <td>{{ log.initiated_by.username|default:'-' }}</td>
+                        <td><span class="badge {% if log.status == 'success' %}bg-success{% elif log.status == 'failed' %}bg-danger{% else %}bg-secondary{% endif %}">{{ log.get_status_display }}</span>
+                            {% if log.status == 'failed' and log.error_message %}<br><small class="text-danger">{{ log.error_message|truncatechars:100 }}</small>{% endif %}
+                        </td>
+                        <td>{{ log.pre_restore_backup.file_name|default:'-' }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center text-muted">No restore attempts yet.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function confirmRestore() {
+    const select = document.getElementById("backup_id");
+    const label = select.options[select.selectedIndex] ? select.options[select.selectedIndex].text : "";
+    return confirm("This will permanently overwrite the live database with:\n\n" + label + "\n\nA safety backup will be taken first, but this action cannot be undone otherwise. Continue?");
+}
+</script>
+{% endblock %}

@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import path
 from pos import views
 from pos import cost_analysis_views
+from pos import backup_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -12,6 +13,17 @@ urlpatterns = [
     path('login/', views.login_view, name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('dashboard/', views.dashboard, name='dashboard'),
+
+    # =========================
+    # DATABASE BACKUP & RESTORE
+    # =========================
+    path('backup/', backup_views.backup_dashboard, name='backup_dashboard'),
+    path('backup/create/', backup_views.create_backup_now, name='create_backup_now'),
+    path('backup/history/', backup_views.backup_history, name='backup_history'),
+    path('backup/<int:backup_id>/download/', backup_views.download_backup, name='download_backup'),
+    path('backup/<int:backup_id>/delete/', backup_views.delete_backup, name='delete_backup'),
+    path('backup/restore/', backup_views.restore_database, name='restore_database'),
+    path('backup/settings/', backup_views.backup_settings_view, name='backup_settings'),
 
     # =========================
     # USER MANAGEMENT

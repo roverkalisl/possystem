@@ -29,7 +29,9 @@ from .models import (
     SalaryAdvance, SafetyItemIssue, Attendance, PayrollProjectCostEntry,
     PayrollSettings, compute_payroll_preview,
     EPF_EMPLOYEE_RATE,
+    BackupRecord, BackupSettings,
 )
+from .backup_engine import compute_next_scheduled
 
 from .forms import QuotationForm, QuotationItemFormSet
 # =========================
@@ -488,6 +490,13 @@ def dashboard(request):
         - Decimal(str(salary_advance_totals["deducted"] or 0))
     )
 
+    # =========================
+    # DATABASE BACKUP WIDGET
+    # =========================
+    last_backup = BackupRecord.objects.filter(backup_type__in=["manual", "scheduled"]).order_by("-started_at").first()
+    backup_settings_row = BackupSettings.get_solo()
+    next_scheduled_backup = compute_next_scheduled(backup_settings_row)
+
     return render(request, "pos/dashboard.html", {
         "show_pos": can_use_pos(request.user),
         "show_project": can_use_project(request.user),
@@ -523,6 +532,9 @@ def dashboard(request):
         "monthly_labour_cost": monthly_labour_cost,
         "project_labour_costs": project_labour_costs,
         "salary_advance_balance": salary_advance_balance,
+        # Database backup widget
+        "last_backup": last_backup,
+        "next_scheduled_backup": next_scheduled_backup,
     })
 
 

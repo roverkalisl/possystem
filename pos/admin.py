@@ -25,6 +25,9 @@ from .models import (
     SafetyItemIssue,
     Attendance,
     PayrollSettings,
+    BackupSettings,
+    BackupRecord,
+    RestoreLog,
 )
 
 
@@ -233,3 +236,27 @@ class PayrollSettingsAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         # Singleton: only one PayrollSettings row should ever exist.
         return not PayrollSettings.objects.exists()
+
+
+@admin.register(BackupSettings)
+class BackupSettingsAdmin(admin.ModelAdmin):
+    list_display = ['frequency', 'backup_time', 'retention_count', 'auto_backup_enabled', 'storage_location', 'updated_at']
+
+    def has_add_permission(self, request):
+        # Singleton: only one BackupSettings row should ever exist.
+        return not BackupSettings.objects.exists()
+
+
+@admin.register(BackupRecord)
+class BackupRecordAdmin(admin.ModelAdmin):
+    list_display = ['file_name', 'backup_type', 'status', 'db_engine', 'file_size', 'started_at', 'completed_at', 'initiated_by']
+    list_filter = ['status', 'backup_type', 'db_engine', 'started_at']
+    search_fields = ['file_name', 'initiated_by__username']
+    readonly_fields = ['file_name', 'file_path', 'file_size', 'db_engine', 'started_at', 'completed_at']
+
+
+@admin.register(RestoreLog)
+class RestoreLogAdmin(admin.ModelAdmin):
+    list_display = ['backup_record', 'status', 'initiated_by', 'started_at', 'completed_at']
+    list_filter = ['status', 'started_at']
+    readonly_fields = ['backup_record', 'pre_restore_backup', 'started_at', 'completed_at']

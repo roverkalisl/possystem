@@ -157,6 +157,51 @@
     </div>
 </div>
 
+{% if is_owner_flag %}
+<!-- Database Backup Widget -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card card-soft">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    💾 Database Backup
+                    <a href="{% url 'backup_dashboard' %}" class="btn btn-sm btn-outline-primary float-end">Manage Backups</a>
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if last_backup and last_backup.status == 'failed' %}
+                <div class="alert alert-danger mb-3">⚠ The last backup attempt failed: {{ last_backup.error_message|truncatechars:150 }}</div>
+                {% elif not last_backup %}
+                <div class="alert alert-warning mb-3">⚠ No backup has been created yet.</div>
+                {% endif %}
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <p class="text-muted mb-1 small">Last Backup Date</p>
+                        <h6 class="mb-0">{% if last_backup %}{{ last_backup.started_at|date:'Y-m-d' }}{% else %}—{% endif %}</h6>
+                    </div>
+                    <div class="col-md-3">
+                        <p class="text-muted mb-1 small">Last Backup Time</p>
+                        <h6 class="mb-0">{% if last_backup %}{{ last_backup.started_at|date:'H:i' }}{% else %}—{% endif %}</h6>
+                    </div>
+                    <div class="col-md-3">
+                        <p class="text-muted mb-1 small">Backup Status</p>
+                        <h6 class="mb-0">
+                            {% if last_backup %}
+                            <span class="badge {% if last_backup.status == 'success' %}bg-success{% elif last_backup.status == 'failed' %}bg-danger{% else %}bg-secondary{% endif %}">{{ last_backup.get_status_display }}</span>
+                            {% else %}—{% endif %}
+                        </h6>
+                    </div>
+                    <div class="col-md-3">
+                        <p class="text-muted mb-1 small">Next Scheduled Backup</p>
+                        <h6 class="mb-0">{% if next_scheduled_backup %}{{ next_scheduled_backup|date:'Y-m-d H:i' }}{% else %}Not scheduled{% endif %}</h6>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- License & Renewal Summary -->
 <div class="row mb-4">
     <div class="col-md-3">

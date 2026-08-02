@@ -2729,3 +2729,123 @@ class ProjectCostActual(models.Model):
     
     def __str__(self):
         return f"{self.project.project_id} - {self.gl_account.gl_code} - {self.amount}"
+
+
+# =========================
+# DATABASE BACKUP & RESTORE
+# =========================
+class BackupSettings(models.Model):
+    FREQUENCY_CHOICES = [
+        ("daily", "Daily"),
+        ("weekly", "Weekly"),
+        ("monthly", "Monthly"),
+    ]
+    RETENTION_CHOICES = [
+        (7, "Keep Last 7 Backups"),
+        (30, "Keep Last 30 Backups"),
+        (90, "Keep Last 90 Backups"),
+    ]
+    STORAGE_CHOICES = [
+        ("local", "Local Server"),
+        ("google_drive", "Google Drive (Coming soon)"),
+        ("other", "Other Cloud Storage (Coming soon)"),
+    ]
+    WEEKDAY_CHOICES = [
+        (0, "Monday"), (1, "Tuesday"), (2, "Wednesday"), (3, "Thursday"),
+        (4, "Friday"), (5, "Saturday"), (6, "Sunday"),
+    ]
+
+    frequency = models.CharField(max_length=10, choices=FREQUENCY_CHOICES, default="daily")
+    backup_time = models.TimeField(default="23:00")
+    weekly_day = models.IntegerField(choices=WEEKDAY_CHOICES, default=6)
+    monthly_day = models.IntegerField(default=1)
+    retention_count = models.IntegerField(choices=RETENTION_CHOICES, default=30)
+    auto_backup_enabled = models.BooleanField(default=False)
+    storage_location = models.CharField(max_length=20, choices=STORAGE_CHOICES, default="local")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Backup Settings"
+        verbose_name_plural = "Backup Settings"
+
+    @classmethod
+    def get_solo(cls):
+        obj = cls.objects.first()
+        if obj is None:
+            obj = cls.objects.create()
+        return obj
+
+    def __str__(self):
+        return "Backup Settings"
+
+
+class BackupRecord(models.Model):
+    BACKUP_TYPE_CHOICES = [
+        ("manual", "Manual"),
+        ("scheduled", "Scheduled"),
+        ("pre_restore", "Pre-Restore Safety Backup"),
+    ]
+    STATUS_CHOICES = [
+        ("in_progress", "In Progress"),
+        ("success", "Success"),
+        ("failed", "Failed"),
+    ]
+    DB_ENGINE_CHOICES = [
+        ("sqlite", "SQLite"),
+        ("postgresql", "PostgreSQL"),
+    ]
+
+    backup_type = models.CharField(max_length=20, choices=BACKUP_TYPE_CHOICES, default="manual")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="in_progress")
+    file_name = models.CharField(max_length=255, blank=True, null=True)
+    file_path = models.CharField(max_length=500, blank=True, null=True)
+    file_size = models.BigIntegerField(default=0)
+    db_engine = models.CharField(max_length=20, choices=DB_ENGINE_CHOICES, blank=True, null=True)
+    storage_location = models.CharField(max_length=20, default="local")
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    initiated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="initiated_backups")
+    error_message = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["-started_at", "-id"]
+
+    @property
+    def duration_seconds(self):
+        if self.completed_at and self.started_at:
+            return (self.completed_at - self.started_at).total_seconds()
+        return None
+
+    @property
+    def file_size_display(self):
+        size = self.file_size or 0
+        for unit in ("B", "KB", "MB", "GB"):
+            if size < 1024:
+                return f"{size:.1f} {unit}" if unit != "B" else f"{size} {unit}"
+            size /= 1024
+        return f"{size:.1f} TB"
+
+    def __str__(self):
+        return self.file_name or f"Backup {self.id}"
+
+
+class RestoreLog(models.Model):
+    STATUS_CHOICES = [
+        ("in_progress", "In Progress"),
+        ("success", "Success"),
+        ("failed", "Failed"),
+    ]
+
+    backup_record = models.ForeignKey(BackupRecord, on_delete=models.SET_NULL, null=True, blank=True, related_name="restore_attempts")
+    pre_restore_backup = models.ForeignKey(BackupRecord, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    initiated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="initiated_restores")
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="in_progress")
+    error_message = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["-started_at", "-id"]
+
+    def __str__(self):
+        return f"Restore {self.id} - {self.status}"
