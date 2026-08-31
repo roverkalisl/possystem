@@ -2747,7 +2747,7 @@ class BackupSettings(models.Model):
     ]
     STORAGE_CHOICES = [
         ("local", "Local Server"),
-        ("google_drive", "Google Drive (Coming soon)"),
+        ("google_drive", "Google Drive"),
         ("other", "Other Cloud Storage (Coming soon)"),
     ]
     WEEKDAY_CHOICES = [
@@ -2802,6 +2802,8 @@ class BackupRecord(models.Model):
     file_size = models.BigIntegerField(default=0)
     db_engine = models.CharField(max_length=20, choices=DB_ENGINE_CHOICES, blank=True, null=True)
     storage_location = models.CharField(max_length=20, default="local")
+    google_drive_file_id = models.CharField(max_length=255, blank=True, null=True)
+    google_drive_folder_id = models.CharField(max_length=255, blank=True, null=True)
     started_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(blank=True, null=True)
     initiated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="initiated_backups")

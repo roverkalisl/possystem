@@ -1,3 +1,4 @@
+import io
 import os
 
 from django.contrib import messages
@@ -5,6 +6,7 @@ from django.contrib.auth.decorators import user_passes_test
 from django.http import FileResponse
 from django.shortcuts import render, redirect, get_object_or_404
 
+from .backup_storage import get_storage_backend, StorageUnavailableError
 from .models import BackupRecord, BackupSettings, RestoreLog
 from .backup_engine import create_backup, restore_backup, get_db_engine, compute_next_scheduled
 from .views import is_owner
@@ -15,12 +17,17 @@ def backup_dashboard(request):
     last_backup = BackupRecord.objects.filter(backup_type__in=["manual", "scheduled"]).order_by("-started_at").first()
     settings_row = BackupSettings.get_solo()
     recent_backups = BackupRecord.objects.order_by("-started_at")[:5]
+    try:
+        drive_status = get_storage_backend("google_drive").status()
+    except Exception:
+        drive_status = "not_configured"
     return render(request, "pos/backup_dashboard.html", {
         "last_backup": last_backup,
         "settings_row": settings_row,
         "recent_backups": recent_backups,
         "next_scheduled": compute_next_scheduled(settings_row),
         "db_engine": get_db_engine(),
+        "google_drive_status": drive_status,
     })
 
 
@@ -61,12 +68,19 @@ def backup_history(request):
 @user_passes_test(is_owner)
 def download_backup(request, backup_id):
     record = get_object_or_404(BackupRecord, id=backup_id)
-    if record.status != "success" or not record.file_path or not os.path.exists(record.file_path):
+    if record.status != "success" or not record.file_path:
         messages.error(request, "This backup file is not available for download.")
         return redirect("backup_history")
 
-    response = FileResponse(open(record.file_path, "rb"), as_attachment=True, filename=record.file_name)
-    return response
+    try:
+        storage = get_storage_backend(record.storage_location or "local")
+        with storage.open_for_download(record.file_path, record) as backup_file:
+            payload = backup_file.read()
+        response = FileResponse(io.BytesIO(payload), as_attachment=True, filename=record.file_name)
+        return response
+    except (StorageUnavailableError, FileNotFoundError, OSError, ValueError) as exc:
+        messages.error(request, f"This backup file could not be downloaded: {exc}")
+        return redirect("backup_history")
 
 
 @user_passes_test(is_owner)
@@ -76,8 +90,12 @@ def delete_backup(request, backup_id):
         if record.status == "in_progress":
             messages.error(request, "Cannot delete a backup that is still in progress.")
         else:
-            if record.file_path and os.path.exists(record.file_path):
-                os.remove(record.file_path)
+            try:
+                storage = get_storage_backend(record.storage_location or "local")
+                storage.delete(record.file_path, record)
+            except Exception:
+                messages.error(request, "Backup deletion failed on the configured storage backend.")
+                return redirect("backup_history")
             record.delete()
             messages.success(request, "Backup deleted.")
     return redirect("backup_history")

@@ -43,6 +43,16 @@
             </div>
         </div>
     </div>
+    <div class="col-md-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <p class="text-muted mb-1 small">Google Drive</p>
+                <h6 class="mb-0">
+                    {% if google_drive_status == 'connected' %}Connected{% elif google_drive_status == 'not_configured' %}Not Configured{% else %}Connection Failed{% endif %}
+                </h6>
+            </div>
+        </div>
+    </div>
 </div>
 
 {% if last_backup and last_backup.status == 'failed' %}

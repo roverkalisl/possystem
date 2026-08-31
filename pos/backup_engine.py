@@ -192,21 +192,20 @@ def create_backup(initiated_by=None, backup_type="manual"):
             raise BackupError(f"Unsupported database engine: {settings.DATABASES['default']['ENGINE']}")
 
         compressed = gzip.compress(raw_bytes)
-
-        # Microsecond precision avoids filename collisions between backups
-        # created within the same second (e.g. rapid consecutive manual runs).
         timestamp = timezone.localtime().strftime("%Y%m%d_%H%M%S_%f")
         file_name = f"backup_{engine}_{timestamp}.sql.gz"
 
-        # Only local storage is implemented; cloud choices in Backup Settings
-        # are accepted but fall back to local until a cloud backend is added.
-        storage = get_storage_backend("local")
-        file_path = storage.save(file_name, compressed)
+        settings_row = BackupSettings.get_solo()
+        storage_location = settings_row.storage_location or "local"
+        storage = get_storage_backend(storage_location)
+        file_ref = storage.save(file_name, compressed)
 
         record.file_name = file_name
-        record.file_path = file_path
+        record.file_path = file_ref
         record.file_size = len(compressed)
-        record.storage_location = "local"
+        record.storage_location = storage_location
+        record.google_drive_folder_id = os.environ.get("GOOGLE_DRIVE_BACKUP_FOLDER_ID", "").strip() or None
+        record.google_drive_file_id = getattr(storage, "extract_file_id", lambda path, rec=None: None)(file_ref, record)
         record.status = "success"
         record.completed_at = timezone.now()
         record.save()
@@ -224,10 +223,13 @@ def _apply_retention_policy():
     from .models import BackupRecord, BackupSettings
 
     keep = BackupSettings.get_solo().retention_count
-    storage = get_storage_backend("local")
     stale_records = BackupRecord.objects.filter(status="success").order_by("-started_at")[keep:]
     for record in stale_records:
-        storage.delete(record.file_path)
+        try:
+            storage = get_storage_backend(record.storage_location or "local")
+            storage.delete(record.file_path, record)
+        except Exception as exc:
+            raise BackupError(f"Retention cleanup failed for backup {record.id}: {exc}") from exc
         record.delete()
 
 
@@ -256,8 +258,8 @@ def restore_backup(backup_record, initiated_by=None):
         restore_log.pre_restore_backup = pre_restore_record
         restore_log.save(update_fields=["pre_restore_backup"])
 
-        storage = get_storage_backend("local")
-        with storage.open_for_download(backup_record.file_path) as f:
+        storage = get_storage_backend(backup_record.storage_location or "local")
+        with storage.open_for_download(backup_record.file_path, backup_record) as f:
             compressed = f.read()
         raw_bytes = gzip.decompress(compressed)
 

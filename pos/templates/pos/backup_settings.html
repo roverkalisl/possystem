@@ -50,7 +50,7 @@
                     <label class="form-label">Backup Location</label>
                     <select name="storage_location" class="form-select">
                         <option value="local" {% if settings_row.storage_location == 'local' %}selected{% endif %}>Local Server</option>
-                        <option value="google_drive" disabled {% if settings_row.storage_location == 'google_drive' %}selected{% endif %}>Google Drive (Coming soon)</option>
+                        <option value="google_drive" {% if settings_row.storage_location == 'google_drive' %}selected{% endif %}>Google Drive</option>
                         <option value="other" disabled {% if settings_row.storage_location == 'other' %}selected{% endif %}>Other Cloud Storage (Coming soon)</option>
                     </select>
                 </div>
