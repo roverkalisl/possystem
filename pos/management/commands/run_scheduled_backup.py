@@ -16,40 +16,62 @@ Example Windows Task Scheduler action (this dev machine, if desired):
     Trigger: repeat every 15 minutes
 """
 import calendar
+import logging
 
 from django.core.management.base import BaseCommand
+from django.db import transaction
 from django.utils import timezone
 
 from pos.backup_engine import create_backup
-from pos.models import BackupRecord, BackupSettings
+from pos.models import BackupExecutionLock, BackupRecord, BackupSettings
+
+
+logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
     help = "Runs a scheduled backup if one is due per Backup Settings. Safe to invoke frequently."
 
     def handle(self, *args, **options):
-        settings_row = BackupSettings.get_solo()
+        started_at = timezone.localtime()
+        self._log("Scheduled backup check started", started_at)
 
-        if not settings_row.auto_backup_enabled:
-            self.stdout.write("Automatic backup is disabled in Backup Settings. Nothing to do.")
-            return
+        with transaction.atomic():
+            lock, _ = BackupExecutionLock.objects.get_or_create(id=1)
+            locked = BackupExecutionLock.objects.select_for_update().get(pk=lock.pk)
+            settings_row = BackupSettings.get_solo()
 
-        now = timezone.localtime()
+            if not settings_row.auto_backup_enabled:
+                message = "Automatic backup is disabled in Backup Settings. Nothing to do."
+                self._log(f"Backup skipped: {message}", started_at)
+                return
 
-        if not self._is_due(settings_row, now):
-            self.stdout.write("Not due yet.")
-            return
+            now = timezone.localtime()
 
-        if self._already_ran_this_period(settings_row, now):
-            self.stdout.write("A scheduled backup already ran for this period.")
-            return
+            if not self._is_due(settings_row, now):
+                self._log("Backup not due, skipped", now)
+                return
 
-        self.stdout.write("Running scheduled backup...")
-        record = create_backup(initiated_by=None, backup_type="scheduled")
-        if record.status == "success":
-            self.stdout.write(self.style.SUCCESS(f"Scheduled backup succeeded: {record.file_name} ({record.file_size_display})"))
+            if self._already_ran_this_period(settings_row, now):
+                self._log("Backup already completed for this period, skipped", now)
+                return
+
+            self._log("Backup due; scheduled backup started", now)
+            record = create_backup(initiated_by=None, backup_type="scheduled")
+            if record.status == "success":
+                self._log(f"Scheduled backup completed successfully: {record.file_name} ({record.file_size_display})", timezone.localtime(), success=True)
+            else:
+                self._log(f"Scheduled backup failed: {record.error_message}", timezone.localtime(), error=True)
+
+    def _log(self, message, at, success=False, error=False):
+        line = f"{at.strftime('%Y-%m-%d %H:%M')} - {message}"
+        logger.log(logging.ERROR if error else logging.INFO, line)
+        if success:
+            self.stdout.write(self.style.SUCCESS(line))
+        elif error:
+            self.stdout.write(self.style.ERROR(line))
         else:
-            self.stdout.write(self.style.ERROR(f"Scheduled backup failed: {record.error_message}"))
+            self.stdout.write(line)
 
     def _is_due(self, settings_row, now):
         if now.time() < settings_row.backup_time:

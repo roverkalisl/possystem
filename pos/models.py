@@ -2779,6 +2779,18 @@ class BackupSettings(models.Model):
         return "Backup Settings"
 
 
+class BackupExecutionLock(models.Model):
+    id = models.PositiveSmallIntegerField(primary_key=True, default=1, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Backup Execution Lock"
+        verbose_name_plural = "Backup Execution Lock"
+
+    def __str__(self):
+        return "Scheduled backup execution lock"
+
+
 class BackupRecord(models.Model):
     BACKUP_TYPE_CHOICES = [
         ("manual", "Manual"),

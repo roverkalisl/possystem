@@ -1,0 +1,18 @@
+services:
+  - type: cron
+    name: pi-erp-scheduled-backup
+    runtime: python
+    schedule: "*/15 * * * *"
+    buildCommand: pip install -r requirements.txt
+    startCommand: python manage.py run_scheduled_backup
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON
+        sync: false
+      - key: GOOGLE_DRIVE_SERVICE_ACCOUNT_BASE64
+        sync: false
+      - key: GOOGLE_DRIVE_BACKUP_FOLDER_ID
+        sync: false
