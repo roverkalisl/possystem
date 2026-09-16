@@ -62,6 +62,46 @@
     </div>
 </div>
 
+{% if is_owner_flag %}
+<div class="card card-soft mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">Daily Financial Summary</h5>
+        <form method="get" class="d-flex gap-2">
+            <input type="date" name="date" value="{{ selected_business_date|date:'Y-m-d' }}" class="form-control form-control-sm">
+            <button type="submit" class="btn btn-sm btn-outline-primary">View</button>
+        </form>
+    </div>
+    <div class="card-body">
+        <h6 class="border-bottom pb-2 mb-3">POS Payment Summary</h6>
+        <div class="row g-3 mb-3">
+            <div class="col-md-2"><small class="text-muted">Cash Sales</small><h5>{{ pos_sales_by_method.cash|money }}</h5></div>
+            <div class="col-md-2"><small class="text-muted">Card Sales</small><h5>{{ pos_sales_by_method.card|money }}</h5></div>
+            <div class="col-md-2"><small class="text-muted">Credit Sales</small><h5>{{ pos_sales_by_method.credit|money }}</h5></div>
+            <div class="col-md-3"><small class="text-muted">Bank Transfer Sales</small><h5>{{ pos_sales_by_method.bank_transfer|money }}</h5></div>
+            <div class="col-md-3"><small class="text-muted">Total POS Sales</small><h5 class="text-primary">{{ pos_total_sales|money }}</h5></div>
+        </div>
+        <h6 class="border-bottom pb-2 mb-3">Bank Summary</h6>
+        <div class="row g-3 mb-3">
+            <div class="col-md-3"><small class="text-muted">Total Bank Balance</small><h5 class="text-success">{{ total_bank_balance|money }}</h5></div>
+            <div class="col-md-3"><small class="text-muted">Bank Deposits</small><h5>{{ today_bank_deposits|money }}</h5></div>
+            <div class="col-md-2"><small class="text-muted">Withdrawals</small><h5>{{ today_bank_withdrawals|money }}</h5></div>
+            <div class="col-md-2"><small class="text-muted">Cheque Payments</small><h5>{{ today_bank_cheques|money }}</h5></div>
+            <div class="col-md-2"><small class="text-muted">Internal Transfers</small><h5>{{ today_bank_internal_transfers|money }}</h5></div>
+        </div>
+        <div class="table-responsive">
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Bank</th><th>Account</th><th class="text-end">Current Balance</th></tr></thead>
+                <tbody>
+                {% for row in bank_accounts_summary %}
+                <tr><td>{{ row.account.bank_name }}</td><td>{{ row.account.account_name }}</td><td class="text-end">{{ row.balance|money }}</td></tr>
+                {% empty %}<tr><td colspan="3" class="text-muted">No active bank accounts.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <!-- Payroll / Labour Summary -->
 <div class="row mb-4">
     <div class="col-md-2">
@@ -453,6 +493,17 @@
         <a href="{% url 'supplier_advance_list' %}" class="simple-dashboard-btn">Supplier Advances</a>
         <a href="{% url 'supplier_advance_summary' %}" class="simple-dashboard-btn">Supplier-wise Summary</a>
         <a href="{% url 'supplier_settlement_list' %}" class="simple-dashboard-btn">Settlement Ledger</a>
+    </div>
+</div>
+{% endif %}
+
+{% if is_owner_flag %}
+<div class="simple-dashboard-card">
+    <h5 class="simple-dashboard-title">BANK MANAGEMENT</h5>
+    <div class="simple-dashboard-links">
+        <a href="{% url 'admin:pos_bankaccount_changelist' %}" class="simple-dashboard-btn primary">Bank Accounts</a>
+        <a href="{% url 'bank_transactions' %}" class="simple-dashboard-btn">Bank Transactions</a>
+        <a href="{% url 'bank_transactions' %}#posted-ledger" class="simple-dashboard-btn">Bank Ledger</a>
     </div>
 </div>
 {% endif %}

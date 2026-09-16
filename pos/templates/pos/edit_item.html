@@ -31,6 +31,13 @@
 
         <div class="row g-2 mt-1">
             <div class="col-md-4">
+                <label class="form-label">Barcode</label>
+                <input type="text" name="barcode" class="form-control form-control-sm" value="{{ item.barcode|default:'' }}">
+            </div>
+        </div>
+
+        <div class="row g-2 mt-1">
+            <div class="col-md-4">
                 <label class="form-label">Category</label>
                 <select name="category" class="form-select form-select-sm">
                     <option value="">Select Category</option>

@@ -7,6 +7,8 @@ from django.test import TestCase
 from django.urls import reverse
 
 from .models import (
+    BankAccount,
+    BankTransaction,
     Employee,
     GLMaster,
     LabourAllocation,
@@ -51,6 +53,47 @@ class EmployeeConstructionPayrollTests(TestCase):
         self.assertEqual(employee.salary_type, "daily")
         self.assertTrue(employee.contract_based)
         self.assertEqual(employee.employment_type, "daily_labour")
+
+
+class BankAccountBalanceTests(TestCase):
+    def test_current_balance_tracks_deposits_and_withdrawals(self):
+        user = User.objects.create_user(username="banktester", password="12345")
+        gl = GLMaster.objects.create(
+            gl_code="1009",
+            gl_name="Cash at Bank",
+            gl_type="asset",
+            parent_group="Current Assets",
+        )
+
+        account = BankAccount.objects.create(
+            bank_name="Sampath Bank",
+            branch_name="Colombo",
+            account_name="P&I Constructions",
+            account_number="1234567890",
+            account_type="current",
+            opening_balance=Decimal("5000.00"),
+            gl_account=gl,
+            is_active=True,
+        )
+
+        BankTransaction.objects.create(
+            account=account,
+            transaction_type="deposit",
+            amount=Decimal("1500.00"),
+            description="Cash deposit",
+            created_by=user,
+            approval_status="posted",
+        )
+        BankTransaction.objects.create(
+            account=account,
+            transaction_type="withdrawal",
+            amount=Decimal("700.00"),
+            description="Cheque payment",
+            created_by=user,
+            approval_status="posted",
+        )
+
+        self.assertEqual(account.current_balance, Decimal("6800.00"))
 
 
 class PayrollPaysheetViewTests(TestCase):

@@ -37,6 +37,11 @@ urlpatterns = [
     # =========================
     path('', views.pos_page, name='pos'),
     path('save-sale/', views.save_sale, name='save_sale'),
+    path('bank-transactions/', views.bank_transactions, name='bank_transactions'),
+    path('bank-transactions/<int:transaction_id>/submit/', views.submit_bank_transaction, name='submit_bank_transaction'),
+    path('bank-transactions/<int:transaction_id>/approve/', views.approve_bank_transaction, name='approve_bank_transaction'),
+    path('bank-transactions/<int:transaction_id>/post/', views.post_bank_transaction, name='post_bank_transaction'),
+    path('bank-transactions/<int:transaction_id>/reverse/', views.reverse_bank_transaction, name='reverse_bank_transaction'),
     path('invoice/<int:sale_id>/', views.invoice_page, name='invoice_page'),
 
     # =========================

@@ -272,6 +272,7 @@
                         <option value="cash">Cash</option>
                         <option value="card">Card</option>
                         <option value="credit">Credit</option>
+                        <option value="bank_transfer">Bank Transfer</option>
                     </select>
                 </div>
 
@@ -295,6 +296,20 @@
                     <label class="form-label">Cheque / Reference No</label>
                     <input type="text" id="cheque_number" class="form-control form-control-sm">
                 </div>
+
+                <div class="mt-2" id="bank_transfer_field" style="display:none;">
+                    <label class="form-label">Bank Account</label>
+                    <select id="bank_account_id" class="form-select form-select-sm">
+                        <option value="">Select Bank Account</option>
+                        {% for account in bank_accounts %}
+                        <option value="{{ account.id }}">{{ account.bank_name }} - {{ account.account_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <label class="form-label mt-2">Transfer Reference</label>
+                    <input type="text" id="bank_transfer_reference" class="form-control form-control-sm">
+                    <label class="form-label mt-2">Remarks</label>
+                    <input type="text" id="bank_transfer_remarks" class="form-control form-control-sm">
+                </div>
             </div>
         </div>
     </div>
@@ -309,6 +324,7 @@
                     <button type="button" class="btn btn-dark w-100" onclick="resetItemFilters()">Reset</button>
                 </div>
             </div>
+            <input type="text" id="barcodeInput" class="form-control form-control-sm mb-3" placeholder="Scan barcode" autocomplete="off" autofocus>
 
             <div class="pos-cart-box">
                 <div class="pos-cart-title">Cart Items</div>
@@ -351,6 +367,7 @@
                 <div class="pos-item-card"
                      data-name="{{ item.name|lower }}"
                      data-code="{{ item.item_code|lower }}"
+                     data-barcode="{{ item.barcode|default:''|lower }}"
                      data-category="{% if item.category %}{{ item.category.name|lower }}{% else %}uncategorized{% endif %}">
                     <div class="pos-item-name">{{ item.name }}</div>
                     <div class="pos-item-meta">Code: {{ item.item_code }}</div>
@@ -372,6 +389,7 @@
                             class="btn btn-outline-primary btn-sm mt-2 w-100 add-item-btn"
                             data-id="{{ item.id }}"
                             data-code="{{ item.item_code|escapejs }}"
+                            data-barcode="{{ item.barcode|default:''|escapejs }}"
                             data-name="{{ item.name|escapejs }}"
                             data-price="{{ item.selling_price }}"
                             data-maxdiscount="{{ item.max_discount_value|default:0 }}"
@@ -424,6 +442,7 @@ function togglePaymentFields() {
     document.getElementById("cash_fields").style.display = method === "cash" ? "flex" : "none";
     document.getElementById("card_field").style.display = method === "card" ? "block" : "none";
     document.getElementById("credit_field").style.display = method === "credit" ? "block" : "none";
+    document.getElementById("bank_transfer_field").style.display = method === "bank_transfer" ? "block" : "none";
     refreshCustomerOptions();
     setCustomerFieldsReadOnly(method === "credit");
     updateBalance();
@@ -700,6 +719,9 @@ function clearCartAndForm() {
     document.getElementById("balance").value = "0.00";
     document.getElementById("card_last4").value = "";
     document.getElementById("cheque_number").value = "";
+    document.getElementById("bank_account_id").value = "";
+    document.getElementById("bank_transfer_reference").value = "";
+    document.getElementById("bank_transfer_remarks").value = "";
 
     toggleProjectField();
     togglePaymentFields();
@@ -751,6 +773,33 @@ function applyFilters() {
     });
 }
 
+document.getElementById("barcodeInput").addEventListener("keydown", function(event) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const barcode = this.value.trim().toLowerCase();
+    if (!barcode) return;
+    const card = Array.from(document.querySelectorAll(".pos-item-card")).find(function(itemCard) {
+        return (itemCard.dataset.barcode || "") === barcode || (itemCard.dataset.code || "") === barcode;
+    });
+    if (!card) {
+        alert("No active item found for barcode: " + barcode);
+        this.value = "";
+        return;
+    }
+    const addButton = card.querySelector(".add-item-btn");
+    if (!addButton) {
+        const stockText = card.querySelector(".pos-item-stock");
+        const isOutOfStock = stockText && stockText.textContent.toLowerCase().includes("out of stock");
+        alert(isOutOfStock ? "This item is out of stock." : "This item is inactive or unavailable for sale.");
+        this.value = "";
+        this.focus();
+        return;
+    }
+    addButton.click();
+    this.value = "";
+    this.focus();
+});
+
 function saveSale() {
     if (cart.length === 0) {
         alert("Cart is empty.");
@@ -770,6 +819,9 @@ function saveSale() {
     const balance = document.getElementById("balance").value;
     const cardLast4 = document.getElementById("card_last4").value.trim();
     const chequeNumber = document.getElementById("cheque_number").value.trim();
+    const bankAccountId = document.getElementById("bank_account_id").value;
+    const bankTransferReference = document.getElementById("bank_transfer_reference").value.trim();
+    const bankTransferRemarks = document.getElementById("bank_transfer_remarks").value.trim();
 
     if (saleType === "project_issue" && !projectId) {
         alert("Please select a project.");
@@ -795,6 +847,11 @@ function saveSale() {
 
     if (paymentMethod === "card" && !cardLast4) {
         alert("Please enter the last 4 digits of the card.");
+        return;
+    }
+
+    if (paymentMethod === "bank_transfer" && (!bankAccountId || !bankTransferReference)) {
+        alert("Bank account and transfer reference are required for bank transfer.");
         return;
     }
 
@@ -826,6 +883,9 @@ function saveSale() {
         balance: balance,
         card_last4: cardLast4,
         cheque_number: chequeNumber,
+        bank_account_id: bankAccountId,
+        bank_transfer_reference: bankTransferReference,
+        bank_transfer_remarks: bankTransferRemarks,
         customer_id: customerId || "",
         customer_name: customerName,
         customer_phone: customerPhone,

@@ -28,6 +28,10 @@ from .models import (
     BackupSettings,
     BackupRecord,
     RestoreLog,
+    BankAccount,
+    BankTransaction,
+    BankLedgerEntry,
+    BankGLEntry,
 )
 
 
@@ -76,6 +80,10 @@ class ProjectTransferAdmin(admin.ModelAdmin):
 admin.site.register(Category)
 admin.site.register(Item)
 admin.site.register(Supplier)
+admin.site.register(BankAccount)
+admin.site.register(BankTransaction)
+admin.site.register(BankLedgerEntry)
+admin.site.register(BankGLEntry)
 
 
 @admin.register(LicenseRenewal)

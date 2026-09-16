@@ -22,6 +22,10 @@
         <li><a class="nav-link" href="{% url 'safety_item_list' %}">🦺 Safety Supply</a></li>
         <li><a class="nav-link" href="{% url 'payroll_list' %}">💼 Payroll</a></li>
         <li><a class="nav-link" href="{% url 'gl_list' %}">📊 GL Master</a></li>
+        {% if user.is_superuser %}
+        <li><a class="nav-link" href="{% url 'admin:pos_bankaccount_changelist' %}">🏦 Bank Accounts</a></li>
+        <li><a class="nav-link" href="{% url 'bank_transactions' %}">💳 Bank Transactions</a></li>
+        {% endif %}
         <li class="nav-item mt-2"><span class="nav-link disabled text-muted">Administration</span></li>
         <li><a class="nav-link" href="{% url 'license_renewal_list' %}">🛡️ License & Renewal Tracker</a></li>
         <li><a class="nav-link" href="{% url 'employee_list' %}">👥 Employees</a></li>

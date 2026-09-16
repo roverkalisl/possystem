@@ -92,6 +92,311 @@ class GLMaster(models.Model):
         return f"{self.gl_code} - {self.gl_name}"
 
 
+class BankAccount(models.Model):
+    ACCOUNT_TYPE_CHOICES = [
+        ("current", "Current"),
+        ("savings", "Savings"),
+        ("business", "Business"),
+        ("fixed", "Fixed Deposit"),
+        ("other", "Other"),
+    ]
+
+    bank_name = models.CharField(max_length=150)
+    branch_name = models.CharField(max_length=150, blank=True, null=True)
+    account_name = models.CharField(max_length=150)
+    account_number = models.CharField(max_length=80, unique=True)
+    account_type = models.CharField(max_length=20, choices=ACCOUNT_TYPE_CHOICES, default="current")
+    opening_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    gl_account = models.ForeignKey(
+        "GLMaster",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bank_accounts"
+    )
+    is_active = models.BooleanField(default=True)
+    is_deleted = models.BooleanField(default=False)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_bank_accounts")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["bank_name", "account_name"]
+
+    def __str__(self):
+        return f"{self.bank_name} - {self.account_name} ({self.account_number})"
+
+    @property
+    def approved_transaction_total(self):
+        total = Decimal("0")
+        for tx in self.transactions.filter(approval_status="posted"):
+            amount = Decimal(str(tx.amount or 0))
+            if tx.transaction_type in ["withdrawal", "cheque", "bank_transfer"]:
+                total -= amount
+            else:
+                total += amount
+        return total
+
+    @property
+    def current_balance(self):
+        return Decimal(str(self.opening_balance or 0)) + self.approved_transaction_total
+
+
+class BankTransaction(models.Model):
+    TRANSACTION_TYPE_CHOICES = [
+        ("deposit", "Deposit"),
+        ("withdrawal", "Withdrawal"),
+        ("cheque", "Cheque"),
+        ("bank_transfer", "Bank Transfer"),
+        ("other", "Other"),
+    ]
+
+    APPROVAL_STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending", "Pending Approval"),
+        ("approved", "Approved"),
+        ("posted", "Posted"),
+        ("rejected", "Rejected"),
+        ("reversed", "Reversed"),
+    ]
+
+    account = models.ForeignKey(BankAccount, on_delete=models.CASCADE, related_name="transactions")
+    source_sale = models.OneToOneField(
+        "Sale",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bank_transaction"
+    )
+    transaction_type = models.CharField(max_length=20, choices=TRANSACTION_TYPE_CHOICES, default="deposit")
+    transaction_no = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    reference_no = models.CharField(max_length=100, blank=True, null=True)
+    related_party = models.CharField(max_length=150, blank=True, null=True)
+    contra_gl_account = models.ForeignKey(
+        "GLMaster",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="bank_transaction_contra_entries"
+    )
+    transfer_to_account = models.ForeignKey(
+        BankAccount,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="incoming_bank_transfers"
+    )
+    transfer_pair = models.OneToOneField(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="paired_transaction"
+    )
+    reversal_of = models.OneToOneField(
+        "self",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="reversal_transaction"
+    )
+    approval_status = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, default="draft")
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_bank_transactions")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    posted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="posted_bank_transactions")
+    posted_at = models.DateTimeField(null=True, blank=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_bank_transactions")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            original = BankTransaction.objects.get(pk=self.pk)
+            if original.approval_status == "posted":
+                changed = [
+                    "account_id", "transaction_type", "amount", "description",
+                    "reference_no", "related_party", "contra_gl_account_id",
+                    "transfer_to_account_id", "transfer_pair_id", "reversal_of_id",
+                ]
+                if any(getattr(original, field) != getattr(self, field) for field in changed):
+                    raise ValidationError("Posted bank transactions cannot be edited. Create a reversal instead.")
+        if not self.transaction_no:
+            last = BankTransaction.objects.exclude(transaction_no__isnull=True).order_by("-id").first()
+            if last and last.transaction_no and str(last.transaction_no).replace("BTR", "").isdigit():
+                next_no = int(str(last.transaction_no).replace("BTR", "")) + 1
+                self.transaction_no = f"BTR{next_no:06d}"
+            else:
+                self.transaction_no = "BTR000001"
+        super().save(*args, **kwargs)
+
+    def submit_for_approval(self):
+        if self.approval_status != "draft":
+            raise ValidationError("Only draft bank transactions can be submitted.")
+        self.approval_status = "pending"
+        self.save(update_fields=["approval_status", "updated_at"])
+
+    def approve(self, approved_by):
+        if self.approval_status != "pending":
+            raise ValidationError("Only pending bank transactions can be approved.")
+        self.approval_status = "approved"
+        self.approved_by = approved_by
+        self.approved_at = timezone.now()
+        self.save(update_fields=["approval_status", "approved_by", "approved_at", "updated_at"])
+
+    def post(self, posted_by):
+        if self.approval_status != "approved":
+            raise ValidationError("Only approved bank transactions can be posted.")
+        if not self.account.is_active or self.account.is_deleted:
+            raise ValidationError("Transactions cannot be posted to an inactive bank account.")
+        if self.amount <= 0:
+            raise ValidationError("Bank transaction amount must be greater than zero.")
+        if self.transaction_type == "bank_transfer" and not self.transfer_to_account:
+            raise ValidationError("An internal transfer requires a destination bank account.")
+
+        with transaction.atomic():
+            locked = BankTransaction.objects.select_for_update().get(pk=self.pk)
+            if locked.approval_status != "approved":
+                raise ValidationError("This bank transaction has already been posted or is no longer approved.")
+            self.approval_status = "posted"
+            self.posted_by = posted_by
+            self.posted_at = timezone.now()
+            self.save(update_fields=["approval_status", "posted_by", "posted_at", "updated_at"])
+            self._create_ledger_and_gl_entries(posted_by)
+            if self.transaction_type == "bank_transfer":
+                self._post_transfer_destination(posted_by)
+        return self
+
+    def _create_ledger_and_gl_entries(self, posted_by):
+        amount = Decimal(str(self.amount))
+        signed_amount = self.net_amount
+        previous = self.account.current_balance - signed_amount
+        BankLedgerEntry.objects.create(
+            account=self.account,
+            transaction=self,
+            entry_type="credit" if signed_amount >= 0 else "debit",
+            amount=amount,
+            running_balance=previous + signed_amount,
+            description=self.description or self.get_transaction_type_display(),
+            created_by=posted_by,
+        )
+        if not self.account.gl_account or not self.contra_gl_account:
+            return
+        BankGLEntry.objects.create(
+            transaction=self,
+            gl_account=self.account.gl_account,
+            direction="debit" if signed_amount >= 0 else "credit",
+            amount=amount,
+            description=self.description or self.get_transaction_type_display(),
+            created_by=posted_by,
+        )
+        BankGLEntry.objects.create(
+            transaction=self,
+            gl_account=self.contra_gl_account,
+            direction="credit" if signed_amount >= 0 else "debit",
+            amount=amount,
+            description=self.description or self.get_transaction_type_display(),
+            created_by=posted_by,
+        )
+
+    def _post_transfer_destination(self, posted_by):
+        destination = self.transfer_to_account
+        destination_tx = BankTransaction.objects.create(
+            account=destination,
+            transaction_type="deposit",
+            amount=self.amount,
+            description=self.description or f"Transfer from {self.account.account_name}",
+            reference_no=self.reference_no,
+            related_party=self.account.account_name,
+            contra_gl_account=self.account.gl_account,
+            transfer_pair=self,
+            approval_status="posted",
+            approved_by=self.approved_by,
+            approved_at=self.approved_at,
+            posted_by=posted_by,
+            posted_at=self.posted_at,
+            created_by=self.created_by,
+        )
+        BankTransaction.objects.filter(pk=self.pk).update(
+            transfer_pair_id=destination_tx.id,
+            updated_at=timezone.now(),
+        )
+        self.transfer_pair_id = destination_tx.id
+        destination_tx._create_ledger_and_gl_entries(posted_by)
+
+    def reverse(self, created_by, reason=""):
+        if self.approval_status != "posted":
+            raise ValidationError("Only posted bank transactions can be reversed.")
+        if hasattr(self, "reversal_transaction"):
+            raise ValidationError("This bank transaction has already been reversed.")
+        reversal = BankTransaction.objects.create(
+            account=self.account,
+            transaction_type="deposit" if self.net_amount < 0 else "withdrawal",
+            amount=self.amount,
+            description=reason or f"Reversal of {self.transaction_no}",
+            reference_no=self.transaction_no,
+            contra_gl_account=self.contra_gl_account,
+            reversal_of=self,
+            approval_status="draft",
+            created_by=created_by,
+        )
+        return reversal
+
+    @property
+    def net_amount(self):
+        amount = Decimal(str(self.amount or 0))
+        if self.transaction_type in ["withdrawal", "cheque", "bank_transfer"]:
+            return -amount
+        return amount
+
+    def __str__(self):
+        return self.transaction_no or f"Bank Transaction {self.id}"
+
+
+class BankLedgerEntry(models.Model):
+    ENTRY_TYPE_CHOICES = [
+        ("debit", "Debit"),
+        ("credit", "Credit"),
+    ]
+
+    account = models.ForeignKey(BankAccount, on_delete=models.CASCADE, related_name="ledger_entries")
+    transaction = models.ForeignKey(BankTransaction, on_delete=models.CASCADE, related_name="ledger_entries", null=True, blank=True)
+    entry_type = models.CharField(max_length=10, choices=ENTRY_TYPE_CHOICES, default="credit")
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    running_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_bank_ledger_entries")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+
+    def __str__(self):
+        return f"{self.account.account_name} - {self.entry_type} - {self.amount}"
+
+
+class BankGLEntry(models.Model):
+    DIRECTION_CHOICES = [("debit", "Debit"), ("credit", "Credit")]
+
+    transaction = models.ForeignKey(BankTransaction, on_delete=models.CASCADE, related_name="gl_entries")
+    gl_account = models.ForeignKey(GLMaster, on_delete=models.PROTECT, related_name="bank_gl_entries")
+    direction = models.CharField(max_length=10, choices=DIRECTION_CHOICES)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_bank_gl_entries")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.gl_account} - {self.direction} - {self.amount}"
+
+
 class GLCreationLog(models.Model):
     """Log for automatically created GL accounts via imports."""
     gl = models.ForeignKey(GLMaster, on_delete=models.CASCADE, related_name='creation_logs')
@@ -190,6 +495,7 @@ class Item(models.Model):
     ]
 
     item_code = models.CharField(max_length=50, unique=True)
+    barcode = models.CharField(max_length=80, unique=True, null=True, blank=True)
     name = models.CharField(max_length=255)
 
     category = models.ForeignKey(
@@ -305,6 +611,7 @@ class Sale(models.Model):
         ("cash", "Cash"),
         ("card", "Card"),
         ("credit", "Credit"),
+        ("bank_transfer", "Bank Transfer"),
     ]
 
     SALE_TYPE_CHOICES = [
@@ -350,6 +657,15 @@ class Sale(models.Model):
     balance = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
     card_last4 = models.CharField(max_length=4, blank=True, null=True)
     cheque_number = models.CharField(max_length=50, blank=True, null=True)
+    bank_account = models.ForeignKey(
+        "BankAccount",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pos_sales"
+    )
+    bank_transfer_reference = models.CharField(max_length=100, blank=True, null=True)
+    bank_transfer_remarks = models.TextField(blank=True, null=True)
 
     customer_name = models.CharField(max_length=150, blank=True, null=True)
     customer_phone = models.CharField(max_length=20, blank=True, null=True)

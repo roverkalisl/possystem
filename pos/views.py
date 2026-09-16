@@ -30,6 +30,7 @@ from .models import (
     PayrollSettings, compute_payroll_preview,
     EPF_EMPLOYEE_RATE,
     BackupRecord, BackupSettings,
+    BankAccount, BankTransaction, BankLedgerEntry,
 )
 from .backup_engine import compute_next_scheduled
 
@@ -349,10 +350,52 @@ def logout_view(request):
 def dashboard(request):
     # Calculate key financial metrics
     today = timezone.localdate()
+    selected_date = today
+    requested_date = request.GET.get("date", "").strip()
+    if requested_date:
+        try:
+            selected_date = datetime.strptime(requested_date, "%Y-%m-%d").date()
+        except ValueError:
+            selected_date = today
     
     # Today's Sales
     today_sales = Sale.objects.filter(created_at__date=today)
     total_today_sales = today_sales.aggregate(total=Sum("grand_total"))["total"] or Decimal("0")
+
+    finalized_sales = Sale.objects.filter(
+        created_at__date=selected_date,
+        approval_status__in=["na", "approved"],
+    )
+    pos_sales_by_method = {}
+    for method in ["cash", "card", "credit", "bank_transfer"]:
+        pos_sales_by_method[method] = finalized_sales.filter(
+            payment_method=method
+        ).aggregate(total=Sum("grand_total"))["total"] or Decimal("0")
+    pos_total_sales = sum(pos_sales_by_method.values(), Decimal("0"))
+
+    posted_bank_transactions = BankTransaction.objects.filter(
+        approval_status="posted",
+        created_at__date=selected_date,
+    )
+    bank_deposits = posted_bank_transactions.filter(
+        transaction_type="deposit", transfer_pair__isnull=True
+    ).aggregate(
+        total=Sum("amount")
+    )["total"] or Decimal("0")
+    bank_withdrawals = posted_bank_transactions.filter(transaction_type="withdrawal").aggregate(
+        total=Sum("amount")
+    )["total"] or Decimal("0")
+    bank_cheques = posted_bank_transactions.filter(transaction_type="cheque").aggregate(
+        total=Sum("amount")
+    )["total"] or Decimal("0")
+    bank_internal_transfers = posted_bank_transactions.filter(transaction_type="bank_transfer").aggregate(
+        total=Sum("amount")
+    )["total"] or Decimal("0")
+    bank_accounts_summary = [
+        {"account": account, "balance": account.current_balance}
+        for account in BankAccount.objects.filter(is_active=True, is_deleted=False).order_by("bank_name", "account_name")
+    ]
+    total_bank_balance = sum((row["balance"] for row in bank_accounts_summary), Decimal("0"))
     
     # Debtors (Customers with outstanding credit and Projects with unpaid invoices)
     all_customers = Customer.objects.filter(is_active=True)
@@ -507,6 +550,15 @@ def dashboard(request):
         "is_owner_flag": is_owner(request.user),
         # Financial metrics
         "total_today_sales": total_today_sales,
+        "selected_business_date": selected_date,
+        "pos_sales_by_method": pos_sales_by_method,
+        "pos_total_sales": pos_total_sales,
+        "total_bank_balance": total_bank_balance,
+        "bank_accounts_summary": bank_accounts_summary,
+        "today_bank_deposits": bank_deposits,
+        "today_bank_withdrawals": bank_withdrawals,
+        "today_bank_cheques": bank_cheques,
+        "today_bank_internal_transfers": bank_internal_transfers,
         "total_outstanding_debtors": total_outstanding_debtors,
         "debtors_count": debtors_count,
         "top_debtors": top_debtors,
@@ -843,6 +895,104 @@ def edit_user(request, user_id):
 # POS
 # =========================
 @user_passes_test(can_use_pos)
+@login_required
+@require_POST
+def submit_bank_transaction(request, transaction_id):
+    bank_transaction = get_object_or_404(BankTransaction, id=transaction_id)
+    if bank_transaction.created_by_id and bank_transaction.created_by_id != request.user.id and not is_owner(request.user):
+        return JsonResponse({"status": "error", "message": "Only the creator or an owner can submit this transaction."}, status=403)
+    try:
+        bank_transaction.submit_for_approval()
+    except ValidationError as exc:
+        return JsonResponse({"status": "error", "message": str(exc)}, status=400)
+    return JsonResponse({"status": "success", "approval_status": bank_transaction.approval_status})
+
+
+@user_passes_test(is_owner)
+@require_POST
+def approve_bank_transaction(request, transaction_id):
+    bank_transaction = get_object_or_404(BankTransaction, id=transaction_id)
+    try:
+        bank_transaction.approve(request.user)
+    except ValidationError as exc:
+        return JsonResponse({"status": "error", "message": str(exc)}, status=400)
+    return JsonResponse({"status": "success", "approval_status": bank_transaction.approval_status})
+
+
+@user_passes_test(is_owner)
+@require_POST
+def post_bank_transaction(request, transaction_id):
+    bank_transaction = get_object_or_404(BankTransaction, id=transaction_id)
+    try:
+        bank_transaction.post(request.user)
+    except ValidationError as exc:
+        return JsonResponse({"status": "error", "message": str(exc)}, status=400)
+    return JsonResponse({"status": "success", "approval_status": bank_transaction.approval_status})
+
+
+@user_passes_test(is_owner)
+@require_POST
+def reverse_bank_transaction(request, transaction_id):
+    bank_transaction = get_object_or_404(BankTransaction, id=transaction_id)
+    try:
+        reversal = bank_transaction.reverse(request.user, request.POST.get("reason", "").strip())
+    except ValidationError as exc:
+        return JsonResponse({"status": "error", "message": str(exc)}, status=400)
+    return JsonResponse({"status": "success", "reversal_id": reversal.id, "approval_status": reversal.approval_status})
+
+
+@user_passes_test(is_owner)
+def bank_transactions(request):
+    if request.method == "POST":
+        try:
+            amount = Decimal(request.POST.get("amount", "0"))
+        except (InvalidOperation, TypeError):
+            amount = Decimal("0")
+
+        account = get_object_or_404(BankAccount, id=request.POST.get("account_id"), is_active=True, is_deleted=False)
+        transaction_type = request.POST.get("transaction_type", "deposit")
+        destination_id = request.POST.get("transfer_to_account_id") or None
+        destination = None
+        if destination_id:
+            destination = get_object_or_404(BankAccount, id=destination_id, is_active=True, is_deleted=False)
+
+        if transaction_type not in dict(BankTransaction.TRANSACTION_TYPE_CHOICES):
+            messages.error(request, "Invalid bank transaction type.")
+        elif amount <= 0:
+            messages.error(request, "Amount must be greater than zero.")
+        elif transaction_type == "bank_transfer" and (not destination or destination.id == account.id):
+            messages.error(request, "Select a different destination account for an internal transfer.")
+        else:
+            BankTransaction.objects.create(
+                account=account,
+                transaction_type=transaction_type,
+                amount=amount,
+                description=(request.POST.get("description") or "").strip(),
+                reference_no=(request.POST.get("reference_no") or "").strip(),
+                related_party=(request.POST.get("related_party") or "").strip(),
+                contra_gl_account_id=request.POST.get("contra_gl_account_id") or None,
+                transfer_to_account=destination if transaction_type == "bank_transfer" else None,
+                created_by=request.user,
+                approval_status="draft",
+            )
+            messages.success(request, "Bank transaction saved as a draft.")
+        return redirect("bank_transactions")
+
+    accounts = BankAccount.objects.filter(is_active=True, is_deleted=False).select_related("gl_account")
+    transactions = BankTransaction.objects.select_related(
+        "account", "transfer_to_account", "created_by", "approved_by", "posted_by"
+    ).order_by("-created_at")[:100]
+    ledger_entries = BankLedgerEntry.objects.select_related(
+        "account", "transaction", "created_by"
+    ).order_by("-created_at")[:100]
+    return render(request, "pos/bank_transactions.html", {
+        "accounts": accounts,
+        "transactions": transactions,
+        "ledger_entries": ledger_entries,
+        "gl_accounts": GLMaster.objects.filter(is_active=True).order_by("gl_code"),
+    })
+
+
 def pos_page(request):
     query = request.GET.get("q", "").strip()
 
@@ -850,11 +1000,13 @@ def pos_page(request):
     projects = Project.objects.filter(is_active=True).order_by("-id")
     categories = Category.objects.all().order_by("name")
     customers = Customer.objects.filter(is_active=True).order_by("name")
+    bank_accounts = BankAccount.objects.filter(is_active=True, is_deleted=False).order_by("bank_name", "account_name")
 
     if query:
         items = items.filter(
             Q(name__icontains=query) |
             Q(item_code__icontains=query) |
+            Q(barcode__icontains=query) |
             Q(category__name__icontains=query)
         )
 
@@ -863,6 +1015,7 @@ def pos_page(request):
         "projects": projects,
         "categories": categories,
         "customers": customers,
+        "bank_accounts": bank_accounts,
         "query": query,
         "show_items": can_manage_items(request.user),
     })
@@ -916,7 +1069,16 @@ def save_sale(request):
                 if not customer_phone:
                     customer_phone = customer.phone
 
-            if payment_method not in ["cash", "card", "credit"]:
+            bank_account_id = data.get("bank_account_id") or None
+            bank_transfer_reference = (data.get("bank_transfer_reference") or "").strip() or None
+            bank_transfer_remarks = (data.get("bank_transfer_remarks") or "").strip() or None
+            bank_account = None
+            if bank_account_id:
+                bank_account = BankAccount.objects.filter(
+                    id=bank_account_id, is_active=True, is_deleted=False
+                ).first()
+
+            if payment_method not in ["cash", "card", "credit", "bank_transfer"]:
                 return JsonResponse({"status": "error", "message": "Invalid payment method."}, status=400)
 
             if payment_method == "card" and not card_last4:
@@ -924,6 +1086,12 @@ def save_sale(request):
 
             if payment_method == "credit" and not cheque_number:
                 return JsonResponse({"status": "error", "message": "Cheque / Ref No required for credit sale."}, status=400)
+
+            if payment_method == "bank_transfer":
+                if not bank_account:
+                    return JsonResponse({"status": "error", "message": "Bank account is required for bank transfer."}, status=400)
+                if not bank_transfer_reference:
+                    return JsonResponse({"status": "error", "message": "Transfer reference is required for bank transfer."}, status=400)
 
             if payment_method == "credit":
                 if not customer:
@@ -954,6 +1122,9 @@ def save_sale(request):
                 balance=Decimal("0"),
                 card_last4=card_last4 if payment_method == "card" else None,
                 cheque_number=cheque_number if payment_method == "credit" else None,
+                bank_account=bank_account if payment_method == "bank_transfer" else None,
+                bank_transfer_reference=bank_transfer_reference if payment_method == "bank_transfer" else None,
+                bank_transfer_remarks=bank_transfer_remarks if payment_method == "bank_transfer" else None,
                 customer=customer,
                 customer_name=customer_name,
                 customer_phone=customer_phone,
@@ -1066,6 +1237,24 @@ def save_sale(request):
                 sale.balance = Decimal("0")
 
             sale.save()
+
+            if payment_method == "bank_transfer":
+                bank_transaction = BankTransaction.objects.create(
+                    account=bank_account,
+                    source_sale=sale,
+                    transaction_type="deposit",
+                    amount=final_grand_total,
+                    description=bank_transfer_remarks or f"POS sale {sale.invoice_no}",
+                    reference_no=bank_transfer_reference,
+                    related_party=customer_name,
+                    contra_gl_account=sale.sale_items.first().item.retail_gl_account,
+                    created_by=request.user,
+                    approval_status="approved" if sale.approval_status == "na" else "pending",
+                    approved_by=request.user if sale.approval_status == "na" else None,
+                    approved_at=timezone.now() if sale.approval_status == "na" else None,
+                )
+                if sale.approval_status == "na":
+                    bank_transaction.post(request.user)
 
             return JsonResponse({
                 "status": "success",
@@ -1363,6 +1552,7 @@ def add_item(request):
 
         item = Item.objects.create(
             item_code=request.POST.get("item_code"),
+            barcode=(request.POST.get("barcode") or "").strip() or None,
             name=request.POST.get("name"),
             category_id=request.POST.get("category") or None,
             supplier_id=request.POST.get("supplier") or None,
@@ -1451,6 +1641,7 @@ def edit_item(request, item_id):
         new_stock = Decimal(request.POST.get("stock") or 0)
         
         item.item_code = request.POST.get("item_code")
+        item.barcode = (request.POST.get("barcode") or "").strip() or None
         item.name = request.POST.get("name")
         item.category_id = request.POST.get("category") or None
         item.supplier_id = request.POST.get("supplier") or None
@@ -4324,6 +4515,11 @@ def approve_project_issue(request, sale_id):
     sale.approved_at = timezone.now()
     sale.is_posted_to_project_expense = True
     sale.save()
+
+    bank_transaction = getattr(sale, "bank_transaction", None)
+    if bank_transaction and bank_transaction.approval_status == "pending":
+        bank_transaction.approve(request.user)
+        bank_transaction.post(request.user)
 
     messages.success(request, f"Project issue {sale.invoice_no} approved successfully.")
     return redirect("project_issue_approval_list")
