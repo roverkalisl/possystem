@@ -18,7 +18,53 @@ from .models import (
     PayrollEntry,
     Project,
     SalaryAdvance,
+    Item,
 )
+from .barcode_services import generate_barcode_for_item
+
+
+class BarcodeWorkflowTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            username="barcode_admin",
+            email="barcode@example.com",
+            password="12345",
+        )
+        self.item = Item.objects.create(
+            item_code="1000000065",
+            name="Surface Mounted Pool Light",
+            selling_price=Decimal("28000.00"),
+            stock=Decimal("3"),
+        )
+
+    def test_generation_uses_item_code_without_changing_item_code(self):
+        item, created = generate_barcode_for_item(self.item.id)
+
+        self.assertTrue(created)
+        self.assertEqual(item.barcode, "1000000065")
+        self.assertEqual(item.item_code, "1000000065")
+
+    def test_generation_does_not_overwrite_existing_barcode(self):
+        self.item.barcode = "CUSTOM-65"
+        self.item.save(update_fields=["barcode"])
+
+        item, created = generate_barcode_for_item(self.item.id)
+
+        self.assertFalse(created)
+        self.assertEqual(item.barcode, "CUSTOM-65")
+
+    def test_pos_barcode_lookup_returns_active_item_and_rejects_unknown(self):
+        self.item.barcode = self.item.item_code
+        self.item.save(update_fields=["barcode"])
+        self.client.force_login(self.user)
+
+        response = self.client.get(reverse("barcode_lookup"), {"barcode": self.item.item_code})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["item"]["id"], self.item.id)
+
+        response = self.client.get(reverse("barcode_lookup"), {"barcode": "UNKNOWN"})
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["message"], "Barcode not found.")
 
 
 class EmployeeConstructionPayrollTests(TestCase):

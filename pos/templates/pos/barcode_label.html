@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Barcode Label - {{ item.item_code }}</title>
+    <style>
+        @page { margin: 0; }
+        body { margin: 0; font-family: Arial, sans-serif; }
+        .label { width: 58mm; min-height: 35mm; box-sizing: border-box; padding: 4mm; text-align: center; }
+        .company { font-size: 11px; font-weight: bold; }
+        .name { margin-top: 3mm; font-size: 10px; }
+        .barcode { margin: 2mm auto 1mm; width: 100%; }
+        .barcode svg { width: 100%; height: auto; }
+        .code { font-size: 11px; letter-spacing: 1px; }
+        .price { margin-top: 2mm; font-size: 11px; }
+        @media print { .label { break-inside: avoid; } }
+    </style>
+</head>
+<body>
+    <main class="label">
+        <div class="company">P&amp;I CONSTRUCTIONS</div>
+        <div class="name">{{ item.name }}</div>
+        <div class="barcode">{{ barcode_svg|safe }}</div>
+        <div class="code">{{ item.barcode }}</div>
+        <div class="price">Rs. {{ item.selling_price }}</div>
+    </main>
+    <script>window.addEventListener("load", function () { window.print(); });</script>
+</body>
+</html>

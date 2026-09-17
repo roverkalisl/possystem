@@ -9,6 +9,10 @@
         <h4 class="app-page-title">Item List</h4>
         <div>
             <a href="{% url 'add_item' %}" class="btn btn-primary btn-sm">+ Add Item</a>
+            <form method="post" action="{% url 'bulk_generate_barcodes' %}" class="d-inline" onsubmit="return confirm('Generate barcodes only for items that do not have one?');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-outline-dark btn-sm">Generate Missing Barcodes</button>
+            </form>
 
         </div>
     </div>
@@ -80,6 +84,7 @@
                     <td>
                         <a href="{% url 'stock_history' %}?item_id={{ item.id }}" class="btn btn-sm btn-outline-info">Bin Card</a>
                         <a href="{% url 'receive_stock' item.id %}" class="btn btn-sm btn-outline-success">Receive Stock</a>
+                        <a href="{% url 'barcode_management' item.id %}" class="btn btn-sm btn-outline-secondary">Barcode</a>
                         <a href="{% url 'edit_item' item.id %}" class="btn btn-sm btn-outline-primary">Edit</a>
                     </td>
                 </tr>

@@ -35,6 +35,7 @@ from .models import (
 from .backup_engine import compute_next_scheduled
 
 from .forms import QuotationForm, QuotationItemFormSet
+from .barcode_services import code128_svg, generate_barcode_for_item, generate_missing_barcodes
 # =========================
 # HELPERS
 # =========================
@@ -1616,6 +1617,87 @@ def item_list(request):
         "query": query,
         "low_stock_items": low_stock_items,
         "selected_item": selected_item,
+    })
+
+
+@user_passes_test(can_manage_items)
+def barcode_management(request, item_id):
+    item = get_object_or_404(Item, id=item_id, is_active=True)
+    barcode_svg = None
+    if item.barcode:
+        try:
+            barcode_svg = code128_svg(item.barcode)
+        except ValueError:
+            messages.error(request, "This barcode cannot be previewed as Code 128.")
+    return render(request, "pos/barcode_management.html", {
+        "item": item,
+        "barcode_svg": barcode_svg,
+    })
+
+
+@user_passes_test(can_manage_items)
+@require_POST
+def generate_item_barcode(request, item_id):
+    try:
+        _, created = generate_barcode_for_item(item_id)
+    except (Item.DoesNotExist, ValueError):
+        messages.error(request, "Unable to generate barcode. Please check the item code and try again.")
+    else:
+        messages.success(request, "Barcode generated successfully." if created else "Barcode already exists for this item.")
+    return redirect("barcode_management", item_id=item_id)
+
+
+@user_passes_test(can_manage_items)
+@require_POST
+def bulk_generate_barcodes(request):
+    result = generate_missing_barcodes()
+    message = (
+        f"Processed {result['processed']} item(s): {result['generated']} barcode(s) generated, "
+        f"{result['skipped']} skipped, {len(result['errors'])} error(s)."
+    )
+    if result["errors"]:
+        messages.warning(request, message)
+    else:
+        messages.success(request, message)
+    return redirect("item_list")
+
+
+@user_passes_test(can_manage_items)
+def print_item_barcode(request, item_id):
+    item = get_object_or_404(Item, id=item_id, is_active=True)
+    if not item.barcode:
+        messages.error(request, "Generate a barcode before printing the label.")
+        return redirect("barcode_management", item_id=item.id)
+    try:
+        barcode_svg = code128_svg(item.barcode)
+    except ValueError:
+        messages.error(request, "This barcode cannot be printed as Code 128.")
+        return redirect("barcode_management", item_id=item.id)
+    return render(request, "pos/barcode_label.html", {
+        "item": item,
+        "barcode_svg": barcode_svg,
+    })
+
+
+@user_passes_test(can_use_pos)
+def barcode_lookup(request):
+    barcode = (request.GET.get("barcode") or "").strip()
+    item = Item.objects.filter(barcode=barcode, is_active=True).select_related("category").first()
+    if not item:
+        return JsonResponse({"status": "error", "message": "Barcode not found."}, status=404)
+    return JsonResponse({
+        "status": "success",
+        "item": {
+            "id": item.id,
+            "item_code": item.item_code,
+            "barcode": item.barcode,
+            "name": item.name,
+            "selling_price": str(item.selling_price or 0),
+            "stock": str(item.stock or 0),
+            "is_service": item.is_service,
+            "allow_discount": item.allow_discount,
+            "max_discount_value": str(item.max_discount_value or 0),
+        },
     })
 
 @user_passes_test(can_manage_items)

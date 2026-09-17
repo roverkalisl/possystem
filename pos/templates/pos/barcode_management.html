@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Barcode{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4 compact-card">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Barcode</h4>
+        <a href="{% url 'item_list' %}" class="btn btn-outline-primary btn-sm">Item List</a>
+    </div>
+
+    <div class="row g-3 align-items-start">
+        <div class="col-md-6">
+            <p class="mb-1"><strong>Item Name:</strong> {{ item.name }}</p>
+            <p class="mb-1"><strong>Item Code:</strong> {{ item.item_code }}</p>
+            <p class="mb-1"><strong>Barcode:</strong> {{ item.barcode|default:"Not generated" }}</p>
+            <p class="mb-1"><strong>Selling Price:</strong> {{ item.selling_price|money }}</p>
+            <p class="mb-3"><strong>Unit:</strong> {{ item.unit }}</p>
+
+            {% if not item.barcode %}
+            <form method="post" action="{% url 'generate_item_barcode' item.id %}">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-primary">Generate Barcode</button>
+            </form>
+            {% else %}
+            <a href="{% url 'print_item_barcode' item.id %}" target="_blank" class="btn btn-dark">Print Barcode</a>
+            {% endif %}
+        </div>
+        <div class="col-md-6 text-center">
+            {% if barcode_svg %}
+                {{ barcode_svg|safe }}
+            {% else %}
+                <div class="text-muted border rounded p-4">Barcode has not been generated.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

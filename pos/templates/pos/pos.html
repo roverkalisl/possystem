@@ -766,38 +766,43 @@ function applyFilters() {
         const code = card.dataset.code || "";
         const category = card.dataset.category || "";
 
-        const matchSearch = name.includes(term) || code.includes(term);
+        const barcode = card.dataset.barcode || "";
+        const matchSearch = name.includes(term) || code.includes(term) || barcode.includes(term);
         const matchCategory = currentCategory === "all" || category === currentCategory;
 
         card.style.display = (matchSearch && matchCategory) ? "block" : "none";
     });
 }
 
-document.getElementById("barcodeInput").addEventListener("keydown", function(event) {
+document.getElementById("barcodeInput").addEventListener("keydown", async function(event) {
     if (event.key !== "Enter") return;
     event.preventDefault();
-    const barcode = this.value.trim().toLowerCase();
+    const barcode = this.value.trim();
     if (!barcode) return;
-    const card = Array.from(document.querySelectorAll(".pos-item-card")).find(function(itemCard) {
-        return (itemCard.dataset.barcode || "") === barcode || (itemCard.dataset.code || "") === barcode;
-    });
-    if (!card) {
-        alert("No active item found for barcode: " + barcode);
-        this.value = "";
-        return;
-    }
-    const addButton = card.querySelector(".add-item-btn");
-    if (!addButton) {
-        const stockText = card.querySelector(".pos-item-stock");
-        const isOutOfStock = stockText && stockText.textContent.toLowerCase().includes("out of stock");
-        alert(isOutOfStock ? "This item is out of stock." : "This item is inactive or unavailable for sale.");
+    try {
+        const response = await fetch("{% url 'barcode_lookup' %}?barcode=" + encodeURIComponent(barcode), {
+            headers: { "X-Requested-With": "XMLHttpRequest" }
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || "Barcode not found.");
+
+        const item = data.item;
+        addToCart(
+            String(item.id),
+            item.item_code,
+            item.name,
+            item.selling_price,
+            item.max_discount_value,
+            item.allow_discount,
+            item.stock,
+            item.is_service
+        );
+    } catch (error) {
+        alert(error.message || "Barcode not found.");
+    } finally {
         this.value = "";
         this.focus();
-        return;
     }
-    addButton.click();
-    this.value = "";
-    this.focus();
 });
 
 function saveSale() {
