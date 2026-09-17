@@ -1673,9 +1673,32 @@ def print_item_barcode(request, item_id):
     except ValueError:
         messages.error(request, "This barcode cannot be printed as Code 128.")
         return redirect("barcode_management", item_id=item.id)
+
+    try:
+        label_count = int(request.GET.get("labels", "1"))
+        columns = int(request.GET.get("columns", "3"))
+    except (TypeError, ValueError):
+        messages.error(request, "Number of labels and columns must be whole numbers.")
+        return redirect("barcode_management", item_id=item.id)
+
+    if not 1 <= label_count <= 500 or not 1 <= columns <= 6:
+        messages.error(request, "Enter between 1 and 500 labels, and between 1 and 6 columns.")
+        return redirect("barcode_management", item_id=item.id)
+
+    rows_per_page = 7
+    labels_per_page = columns * rows_per_page
+    pages = [
+        range(start, min(start + labels_per_page, label_count))
+        for start in range(0, label_count, labels_per_page)
+    ]
+
     return render(request, "pos/barcode_label.html", {
         "item": item,
         "barcode_svg": barcode_svg,
+        "pages": pages,
+        "label_count": label_count,
+        "columns": columns,
+        "page_count": len(pages),
     })
 
 

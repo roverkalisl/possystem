@@ -2,28 +2,48 @@
 <html lang="en">
 <head>
     <meta charset="utf-8">
-    <title>Barcode Label - {{ item.item_code }}</title>
+    <title>A4 Barcode Labels - {{ item.item_code }}</title>
     <style>
-        @page { margin: 0; }
-        body { margin: 0; font-family: Arial, sans-serif; }
-        .label { width: 58mm; min-height: 35mm; box-sizing: border-box; padding: 4mm; text-align: center; }
+        @page { size: A4; margin: 10mm; }
+        * { box-sizing: border-box; }
+        body { margin: 0; background: #f3f4f6; color: #111; font-family: Arial, sans-serif; }
+        .toolbar { padding: 16px; text-align: center; }
+        .toolbar button, .toolbar a { padding: 8px 16px; margin: 0 4px; cursor: pointer; }
+        .sheet { width: 190mm; min-height: 277mm; margin: 16px auto; padding: 0; background: #fff; display: grid; grid-template-columns: repeat({{ columns }}, 1fr); grid-template-rows: repeat(7, 35mm); align-content: start; page-break-after: always; }
+        .label { height: 35mm; padding: 4mm; text-align: center; border: 1px dashed #bbb; break-inside: avoid; overflow: hidden; }
         .company { font-size: 11px; font-weight: bold; }
         .name { margin-top: 3mm; font-size: 10px; }
         .barcode { margin: 2mm auto 1mm; width: 100%; }
         .barcode svg { width: 100%; height: auto; }
         .code { font-size: 11px; letter-spacing: 1px; }
         .price { margin-top: 2mm; font-size: 11px; }
-        @media print { .label { break-inside: avoid; } }
+        @media print {
+            body { background: #fff; }
+            .toolbar { display: none; }
+            .sheet { width: 190mm; min-height: 277mm; margin: 0; }
+            .label { border-color: transparent; }
+        }
     </style>
 </head>
 <body>
-    <main class="label">
-        <div class="company">P&amp;I CONSTRUCTIONS</div>
-        <div class="name">{{ item.name }}</div>
-        <div class="barcode">{{ barcode_svg|safe }}</div>
-        <div class="code">{{ item.barcode }}</div>
-        <div class="price">Rs. {{ item.selling_price }}</div>
+    <nav class="toolbar">
+        <strong>A4 Barcode Label Preview</strong>
+        <span>{{ label_count }} label{{ label_count|pluralize }} / {{ columns }} columns / {{ page_count }} page{{ page_count|pluralize }}</span>
+        <button type="button" onclick="window.print()">Print</button>
+        <button type="button" onclick="window.close()">Cancel</button>
+    </nav>
+    {% for page in pages %}
+    <main class="sheet">
+        {% for label in page %}
+        <section class="label">
+            <div class="company">P&amp;I CONSTRUCTIONS</div>
+            <div class="name">{{ item.name }}</div>
+            <div class="barcode">{{ barcode_svg|safe }}</div>
+            <div class="code">{{ item.barcode }}</div>
+            <div class="price">Rs. {{ item.selling_price }}</div>
+        </section>
+        {% endfor %}
     </main>
-    <script>window.addEventListener("load", function () { window.print(); });</script>
+    {% endfor %}
 </body>
 </html>

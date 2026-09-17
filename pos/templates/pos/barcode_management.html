@@ -24,7 +24,21 @@
                 <button type="submit" class="btn btn-primary">Generate Barcode</button>
             </form>
             {% else %}
-            <a href="{% url 'print_item_barcode' item.id %}" target="_blank" class="btn btn-dark">Print Barcode</a>
+            <form method="get" action="{% url 'print_item_barcode' item.id %}" target="_blank" class="border rounded p-3 mt-3">
+                <div class="row g-2 align-items-end">
+                    <div class="col-sm-4">
+                        <label for="label-count" class="form-label">Number of Labels</label>
+                        <input id="label-count" type="number" name="labels" class="form-control" min="1" max="500" value="20" required>
+                    </div>
+                    <div class="col-sm-4">
+                        <label for="label-columns" class="form-label">Columns</label>
+                        <input id="label-columns" type="number" name="columns" class="form-control" min="1" max="6" value="3" required>
+                    </div>
+                    <div class="col-sm-4">
+                        <button type="submit" class="btn btn-dark w-100">Preview Labels</button>
+                    </div>
+                </div>
+            </form>
             {% endif %}
         </div>
         <div class="col-md-6 text-center">
