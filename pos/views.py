@@ -35,7 +35,8 @@ from .models import (
 from .backup_engine import compute_next_scheduled
 
 from .forms import QuotationForm, QuotationItemFormSet
-from .barcode_services import code128_svg, generate_barcode_for_item, generate_missing_barcodes
+from .barcode_services import code128_metrics, code128_svg, generate_barcode_for_item, generate_missing_barcodes
+from .barcode_services_standard import generate_code128_html_page, validate_encoding, generate_code128_svg as generate_code128_svg_standard
 # =========================
 # HELPERS
 # =========================
@@ -1323,11 +1324,17 @@ def add_sale_recovery(request, sale_id):
 
     if request.method == "POST":
         recovery_date = request.POST.get("recovery_date") or timezone.localdate()
-        payment_method = request.POST.get("payment_method") or "cash"
+        payment_method = (request.POST.get("payment_method") or "cash").strip()
+        if payment_method == "bank_transfer":
+            payment_method = "bank"
         amount = to_decimal(request.POST.get("amount"))
         card_no = (request.POST.get("card_no") or "").strip()
         cheque_no = (request.POST.get("cheque_no") or "").strip()
         note = (request.POST.get("note") or "").strip()
+        bank_account_id = request.POST.get("bank_account") or request.POST.get("bank_account_id")
+        bank_transfer_reference = (request.POST.get("bank_transfer_reference") or "").strip()
+        bank_transfer_remarks = (request.POST.get("bank_transfer_remarks") or "").strip()
+        bank_account = None
 
         if amount <= 0:
             messages.error(request, "Amount must be greater than 0.")
@@ -1345,22 +1352,55 @@ def add_sale_recovery(request, sale_id):
             messages.error(request, "Cheque No is required for cheque payments.")
             return render(request, "pos/add_sale_recovery.html", {"sale": sale})
 
+        if payment_method == "bank":
+            bank_account = BankAccount.objects.filter(id=bank_account_id, is_active=True, is_deleted=False).first()
+            if not bank_account:
+                messages.error(request, "Bank account is required for bank transfer recovery.")
+                return render(request, "pos/add_sale_recovery.html", {"sale": sale})
+            if not bank_transfer_reference:
+                messages.error(request, "Transfer reference is required for bank transfer recovery.")
+                return render(request, "pos/add_sale_recovery.html", {"sale": sale, "selected_bank_account": bank_account_id})
+
         recovery = SaleRecovery.objects.create(
             sale=sale,
             recovery_date=recovery_date,
             payment_method=payment_method,
             amount=amount,
+            bank_account=bank_account,
+            bank_transfer_reference=bank_transfer_reference if payment_method == "bank" else None,
+            bank_transfer_remarks=bank_transfer_remarks if payment_method == "bank" else None,
             card_no=card_no if payment_method == "card" else None,
             cheque_no=cheque_no if payment_method == "cheque" else None,
             note=note,
             created_by=request.user,
         )
 
+        if payment_method == "bank" and bank_account:
+            description = bank_transfer_remarks or note or f"Credit recovery for {sale.invoice_no}"
+            contra_gl_account = sale.customer.receivable_gl_account if sale.customer else None
+            bank_transaction = BankTransaction.objects.create(
+                account=bank_account,
+                source_sale=sale,
+                transaction_type="deposit",
+                amount=amount,
+                description=description,
+                reference_no=bank_transfer_reference,
+                related_party=sale.customer_name or (sale.customer.name if sale.customer else "Customer"),
+                contra_gl_account=contra_gl_account,
+                created_by=request.user,
+                approval_status="approved",
+                approved_by=request.user,
+                approved_at=timezone.now(),
+            )
+            bank_transaction.post(request.user)
+
         messages.success(request, "Recovery added successfully.")
         return redirect("print_sale_recovery_receipt", recovery_id=recovery.id)
 
+    bank_accounts = BankAccount.objects.filter(is_active=True, is_deleted=False).order_by("bank_name", "account_name")
     return render(request, "pos/add_sale_recovery.html", {
         "sale": sale,
+        "bank_accounts": bank_accounts,
     })
 
 
@@ -1669,9 +1709,10 @@ def print_item_barcode(request, item_id):
         messages.error(request, "Generate a barcode before printing the label.")
         return redirect("barcode_management", item_id=item.id)
     try:
-        barcode_svg = code128_svg(item.barcode)
-    except ValueError:
-        messages.error(request, "This barcode cannot be printed as Code 128.")
+        # Use verified python-barcode standard library (confirmed working)
+        barcode_svg = generate_code128_svg_standard(item.barcode)
+    except ValueError as e:
+        messages.error(request, f"This barcode cannot be printed: {e}")
         return redirect("barcode_management", item_id=item.id)
 
     try:
@@ -1685,7 +1726,7 @@ def print_item_barcode(request, item_id):
         messages.error(request, "Enter between 1 and 500 labels, and between 1 and 6 columns.")
         return redirect("barcode_management", item_id=item.id)
 
-    rows_per_page = 7
+    rows_per_page = 6
     labels_per_page = columns * rows_per_page
     pages = [
         range(start, min(start + labels_per_page, label_count))
@@ -1699,6 +1740,37 @@ def print_item_barcode(request, item_id):
         "label_count": label_count,
         "columns": columns,
         "page_count": len(pages),
+    })
+
+
+@login_required
+def barcode_test_page(request, value):
+    """Diagnostic page: renders a bare Code 128 barcode for `value` so it can be
+    scanned/printed in isolation, independent of any Item record or label sheet layout.
+    """
+    try:
+        module_width_mm = float(request.GET.get("module_width_mm", 0.33))
+        height_mm = float(request.GET.get("height_mm", 18))
+        quiet_zone_modules = int(request.GET.get("quiet_zone_modules", 10))
+        barcode_svg = code128_svg(
+            value,
+            module_width_mm=module_width_mm,
+            height_mm=height_mm,
+            quiet_zone_modules=quiet_zone_modules,
+        )
+        metrics = code128_metrics(
+            value,
+            module_width_mm=module_width_mm,
+            height_mm=height_mm,
+            quiet_zone_modules=quiet_zone_modules,
+        )
+    except (TypeError, ValueError) as exc:
+        return render(request, "pos/barcode_test.html", {"value": value, "error": str(exc)})
+
+    return render(request, "pos/barcode_test.html", {
+        "value": value,
+        "barcode_svg": barcode_svg,
+        "metrics": metrics,
     })
 
 
@@ -3126,38 +3198,53 @@ def add_project_transfer(request):
 # =========================
 @user_passes_test(can_use_project)
 def project_profit_dashboard(request):
+    from_date = request.GET.get("from_date")
+    to_date = request.GET.get("to_date")
+    project_id = request.GET.get("project_id")
+    project_type = request.GET.get("project_type")
+    status = request.GET.get("status")
+
     projects = Project.objects.filter(is_active=True).order_by("-created_at")
+    if project_id:
+        projects = projects.filter(id=project_id)
+    if project_type:
+        projects = projects.filter(project_type=project_type)
+    if status:
+        projects = projects.filter(status=status)
+
     project_rows = []
 
     for project in projects:
-        # Calculate direct expenses (positive amounts only - debits)
-        direct_expense = project.expenses.filter(
-            is_active=True, 
-            amount__gt=0
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-
-        # Calculate returns (negative amounts - credits that reduce expenses)
-        returns_credit = project.expenses.filter(
-            is_active=True,
-            amount__lt=0,
-            expense_type="inventory"
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-        returns_credit = abs(returns_credit)  # Convert to positive for display
-
-        petty_cash_expense = ProjectPettyCashExpense.objects.filter(
-            project=project,
-            is_active=True,
-            approval_status="approved"
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-
-        total_income = ProjectInvoicePayment.objects.filter(
+        direct_expense_qs = project.expenses.filter(is_active=True, amount__gt=0)
+        returns_credit_qs = project.expenses.filter(is_active=True, amount__lt=0, expense_type="inventory")
+        petty_cash_qs = ProjectPettyCashExpense.objects.filter(project=project, is_active=True, approval_status="approved")
+        total_income_qs = ProjectInvoicePayment.objects.filter(
             invoice__project=project,
             invoice__is_active=True,
-            is_active=True
-        ).aggregate(total=Sum("amount"))["total"] or Decimal("0")
+            is_active=True,
+        )
+        transfer_qs = ProjectTransfer.objects.filter(from_project=project, transfer_type="expense")
 
-        # Net expenses = direct expenses - returns (returns reduce expenses)
-        net_expense = Decimal(str(direct_expense)) + Decimal(str(petty_cash_expense)) - Decimal(str(returns_credit))
+        if from_date:
+            direct_expense_qs = direct_expense_qs.filter(expense_date__gte=from_date)
+            returns_credit_qs = returns_credit_qs.filter(expense_date__gte=from_date)
+            petty_cash_qs = petty_cash_qs.filter(expense_date__gte=from_date)
+            total_income_qs = total_income_qs.filter(payment_date__gte=from_date)
+            transfer_qs = transfer_qs.filter(transfer_date__gte=from_date)
+        if to_date:
+            direct_expense_qs = direct_expense_qs.filter(expense_date__lte=to_date)
+            returns_credit_qs = returns_credit_qs.filter(expense_date__lte=to_date)
+            petty_cash_qs = petty_cash_qs.filter(expense_date__lte=to_date)
+            total_income_qs = total_income_qs.filter(payment_date__lte=to_date)
+            transfer_qs = transfer_qs.filter(transfer_date__lte=to_date)
+
+        direct_expense = direct_expense_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        returns_credit = abs(returns_credit_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0"))
+        petty_cash_expense = petty_cash_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        special_cost_transfer = transfer_qs.aggregate(total=Sum("transfer_amount"))["total"] or Decimal("0")
+        total_income = total_income_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+        net_expense = Decimal(str(direct_expense)) + Decimal(str(petty_cash_expense)) + Decimal(str(special_cost_transfer)) - Decimal(str(returns_credit))
         profit = Decimal(str(total_income)) - net_expense
 
         project_rows.append({
@@ -3166,6 +3253,7 @@ def project_profit_dashboard(request):
             "direct_expense": Decimal(str(direct_expense)),
             "returns_credit": Decimal(str(returns_credit)),
             "petty_cash_expense": Decimal(str(petty_cash_expense)),
+            "special_cost_transfer": Decimal(str(special_cost_transfer)),
             "net_expense": net_expense,
             "profit": profit,
         })
@@ -3174,6 +3262,7 @@ def project_profit_dashboard(request):
     grand_direct_expense = sum((row["direct_expense"] for row in project_rows), Decimal("0"))
     grand_returns_credit = sum((row["returns_credit"] for row in project_rows), Decimal("0"))
     grand_petty_cash = sum((row["petty_cash_expense"] for row in project_rows), Decimal("0"))
+    grand_special_cost_transfer = sum((row["special_cost_transfer"] for row in project_rows), Decimal("0"))
     grand_net_expense = sum((row["net_expense"] for row in project_rows), Decimal("0"))
     grand_profit = sum((row["profit"] for row in project_rows), Decimal("0"))
 
@@ -3183,8 +3272,17 @@ def project_profit_dashboard(request):
         "grand_direct_expense": grand_direct_expense,
         "grand_returns_credit": grand_returns_credit,
         "grand_petty_cash": grand_petty_cash,
+        "grand_special_cost_transfer": grand_special_cost_transfer,
         "grand_net_expense": grand_net_expense,
         "grand_profit": grand_profit,
+        "from_date": from_date,
+        "to_date": to_date,
+        "project_id": project_id,
+        "project_type": project_type,
+        "status": status,
+        "projects": projects,
+        "project_type_choices": Project.PROJECT_TYPE_CHOICES,
+        "status_choices": Project.STATUS_CHOICES,
     })
 
 
@@ -7072,3 +7170,53 @@ def quotation_dashboard(request):
         'recent': recent,
         'total_value': total_value,
     })
+
+
+@login_required
+def barcode_standard_test(request, value):
+    """
+    Test endpoint for standalone Code 128 barcode generation using standard library.
+
+    URL: /barcode/test/<value>/
+    Example: /barcode/test/1000000073/
+
+    Uses python-barcode library for guaranteed correct Code 128 encoding.
+    The barcode encodes EXACTLY the provided value with no modifications.
+    """
+    # Validate and sanitize input
+    value = str(value or "").strip()
+    if not value:
+        return render(request, 'pos/barcode_error.html', {
+            'error': 'Barcode value cannot be empty',
+        })
+
+    # Check if it's a valid item code for item lookup
+    item = None
+    item_name = None
+    try:
+        item = Item.objects.filter(item_code=value).first()
+        if item:
+            item_name = f"{item.name} (Code: {item.item_code})"
+    except Exception:
+        pass
+
+    # Validate encoding
+    validation = validate_encoding(value)
+    if not validation.get('valid'):
+        return render(request, 'pos/barcode_error.html', {
+            'error': f'Invalid barcode value: {validation.get("error", "Unknown error")}',
+        })
+
+    # Generate HTML page with barcode
+    try:
+        html_content = generate_code128_html_page(value, item_name)
+        return render(request, 'pos/barcode_standalone_test.html', {
+            'value': value,
+            'item_name': item_name,
+            'html_content': html_content,
+            'validation': validation,
+        }, content_type='text/html')
+    except Exception as e:
+        return render(request, 'pos/barcode_error.html', {
+            'error': f'Failed to generate barcode: {str(e)}',
+        })
