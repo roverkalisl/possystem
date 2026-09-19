@@ -45,11 +45,10 @@ def payment_summary_dashboard(request):
     if from_date > to_date:
         from_date, to_date = to_date, from_date
 
-    # Filter sales by date range (exclude returns, only posted sales)
+    # Filter sales by date range
     sales = Sale.objects.filter(
         created_at__date__gte=from_date,
-        created_at__date__lte=to_date,
-        is_deleted=False
+        created_at__date__lte=to_date
     )
 
     # Payment method breakdown using aggregation

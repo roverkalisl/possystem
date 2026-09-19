@@ -54,8 +54,7 @@ def payment_report(request):
     # Build query filters
     transactions = Sale.objects.filter(
         created_at__date__gte=from_date,
-        created_at__date__lte=to_date,
-        is_deleted=False
+        created_at__date__lte=to_date
     ).select_related('customer', 'bank_account').order_by('-created_at')
 
     # Apply additional filters
