@@ -234,3 +234,45 @@ def validate_encoding(value):
         }
     except Exception as e:
         return {"valid": False, "error": str(e)}
+
+
+def generate_code128_metrics(value, module_width_mm=0.5, height_mm=20):
+    """
+    Return barcode metrics for the standard library SVG output.
+
+    Args:
+        value (str): Barcode value
+        module_width_mm (float): Width of each module in mm
+        height_mm (float): Height of barcode in mm
+
+    Returns:
+        dict: Metrics including dimensions
+    """
+    value = str(value or "").strip()
+    if not value:
+        raise ValueError("Barcode value cannot be empty")
+
+    # Validate characters
+    for char in value:
+        if ord(char) < 32 or ord(char) > 126:
+            raise ValueError(f"Character '{char}' is not printable ASCII")
+
+    # Approximate total width based on Code 128 spec
+    # Each data char is ~11 modules, plus start (6) and stop (13) and quiet zones
+    quiet_zone_modules = 10  # Code 128 requires at least 10 modules
+    quiet_zone_mm = quiet_zone_modules * module_width_mm
+
+    # Approximate: 6 (start) + len(value)*11 (data) + 11 (checksum) + 13 (stop)
+    approx_modules = 6 + (len(value) * 11) + 11 + 13
+    content_width_mm = approx_modules * module_width_mm
+    total_width_mm = content_width_mm + (2 * quiet_zone_mm)
+
+    return {
+        "value": value,
+        "module_width_mm": module_width_mm,
+        "height_mm": height_mm,
+        "quiet_zone_modules": quiet_zone_modules,
+        "quiet_zone_mm": quiet_zone_mm,
+        "content_width_mm": content_width_mm,
+        "total_width_mm": total_width_mm,
+    }

@@ -35,8 +35,13 @@ from .models import (
 from .backup_engine import compute_next_scheduled
 
 from .forms import QuotationForm, QuotationItemFormSet
-from .barcode_services import code128_metrics, code128_svg, generate_barcode_for_item, generate_missing_barcodes
-from .barcode_services_standard import generate_code128_html_page, validate_encoding, generate_code128_svg as generate_code128_svg_standard
+from .barcode_services import generate_barcode_for_item, generate_missing_barcodes
+from .barcode_services_standard import (
+    generate_code128_html_page,
+    validate_encoding,
+    generate_code128_svg,
+    generate_code128_metrics,
+)
 # =========================
 # HELPERS
 # =========================
@@ -1666,7 +1671,7 @@ def barcode_management(request, item_id):
     barcode_svg = None
     if item.barcode:
         try:
-            barcode_svg = code128_svg(item.barcode)
+            barcode_svg = generate_code128_svg(item.barcode)
         except ValueError:
             messages.error(request, "This barcode cannot be previewed as Code 128.")
     return render(request, "pos/barcode_management.html", {
@@ -1710,7 +1715,7 @@ def print_item_barcode(request, item_id):
         return redirect("barcode_management", item_id=item.id)
     try:
         # Use verified python-barcode standard library (confirmed working)
-        barcode_svg = generate_code128_svg_standard(item.barcode)
+        barcode_svg = generate_code128_svg(item.barcode)
     except ValueError as e:
         messages.error(request, f"This barcode cannot be printed: {e}")
         return redirect("barcode_management", item_id=item.id)
@@ -1747,23 +1752,13 @@ def print_item_barcode(request, item_id):
 def barcode_test_page(request, value):
     """Diagnostic page: renders a bare Code 128 barcode for `value` so it can be
     scanned/printed in isolation, independent of any Item record or label sheet layout.
+    Uses standard python-barcode library.
     """
     try:
-        module_width_mm = float(request.GET.get("module_width_mm", 0.33))
-        height_mm = float(request.GET.get("height_mm", 18))
-        quiet_zone_modules = int(request.GET.get("quiet_zone_modules", 10))
-        barcode_svg = code128_svg(
-            value,
-            module_width_mm=module_width_mm,
-            height_mm=height_mm,
-            quiet_zone_modules=quiet_zone_modules,
-        )
-        metrics = code128_metrics(
-            value,
-            module_width_mm=module_width_mm,
-            height_mm=height_mm,
-            quiet_zone_modules=quiet_zone_modules,
-        )
+        module_width_mm = float(request.GET.get("module_width_mm", 0.5))
+        height_mm = float(request.GET.get("height_mm", 20))
+        barcode_svg = generate_code128_svg(value)
+        metrics = generate_code128_metrics(value, module_width_mm=module_width_mm, height_mm=height_mm)
     except (TypeError, ValueError) as exc:
         return render(request, "pos/barcode_test.html", {"value": value, "error": str(exc)})
 
