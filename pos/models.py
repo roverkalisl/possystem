@@ -852,6 +852,7 @@ class SaleRecovery(models.Model):
         ("card", "Card"),
         ("cheque", "Cheque"),
         ("bank", "Bank Transfer"),
+        ("bank_transfer", "Bank Transfer"),
         ("other", "Other"),
     ]
 
@@ -862,6 +863,15 @@ class SaleRecovery(models.Model):
     payment_method = models.CharField(max_length=20, choices=PAYMENT_METHODS, default="cash")
     amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
+    bank_account = models.ForeignKey(
+        BankAccount,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sale_recoveries"
+    )
+    bank_transfer_reference = models.CharField(max_length=100, blank=True, null=True)
+    bank_transfer_remarks = models.TextField(blank=True, null=True)
     card_no = models.CharField(max_length=50, blank=True, null=True)
     cheque_no = models.CharField(max_length=50, blank=True, null=True)
     note = models.TextField(blank=True, null=True)
@@ -1775,6 +1785,163 @@ class ProjectTransfer(models.Model):
 
     def __str__(self):
         return self.transfer_no or f"Transfer {self.id}"
+
+
+def get_p_and_i_gl_account():
+    return GLMaster.objects.filter(is_active=True).filter(
+        Q(gl_name__icontains="P&I") |
+        Q(gl_name__icontains="P & I") |
+        Q(gl_name__icontains="P and I") |
+        Q(gl_name__icontains="P&I") |
+        Q(gl_name__icontains="P AND I")
+    ).order_by("gl_code").first() or GLMaster.objects.filter(is_active=True).order_by("gl_code").first()
+
+
+class PICommonCostEntry(models.Model):
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending_approval", "Pending Approval"),
+        ("approved", "Approved"),
+        ("posted", "Posted"),
+    ]
+
+    entry_no = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    entry_date = models.DateField(default=timezone.now)
+    month = models.DateField(default=timezone.now)
+    gl_account = models.ForeignKey(GLMaster, on_delete=models.PROTECT, related_name="pi_common_cost_entries")
+    description = models.CharField(max_length=255, blank=True, null=True)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    source_reference = models.CharField(max_length=120, blank=True, null=True)
+    status = models.CharField(max_length=25, choices=STATUS_CHOICES, default="draft")
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_pi_common_cost_entries")
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_pi_common_cost_entries")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-month", "-entry_date", "-id"]
+
+    def save(self, *args, **kwargs):
+        if not self.entry_no:
+            last = PICommonCostEntry.objects.exclude(entry_no__isnull=True).order_by("-id").first()
+            if last and last.entry_no and str(last.entry_no).replace("PIC", "").isdigit():
+                next_no = int(str(last.entry_no).replace("PIC", "")) + 1
+                self.entry_no = f"PIC{next_no:06d}"
+            else:
+                self.entry_no = "PIC000001"
+        super().save(*args, **kwargs)
+
+    @property
+    def allocated_amount(self):
+        return self.allocations.filter(status__in=["approved", "posted"]).aggregate(total=Sum("total_allocated"))["total"] or Decimal("0")
+
+    @property
+    def available_amount(self):
+        return Decimal(str(self.amount or 0)) - Decimal(str(self.allocated_amount or 0))
+
+    def __str__(self):
+        return self.entry_no or f"P&I cost {self.id}"
+
+
+class PIAllocationBatch(models.Model):
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending_approval", "Pending Approval"),
+        ("approved", "Approved"),
+        ("posted", "Posted"),
+    ]
+
+    batch_no = models.CharField(max_length=50, unique=True, blank=True, null=True)
+    allocation_month = models.DateField(default=timezone.now)
+    source_cost = models.ForeignKey(PICommonCostEntry, on_delete=models.PROTECT, related_name="allocations", null=True, blank=True)
+    gl_account = models.ForeignKey(GLMaster, on_delete=models.PROTECT, related_name="pi_allocation_batches")
+    total_available = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    total_allocated = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    remaining_balance = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    status = models.CharField(max_length=25, choices=STATUS_CHOICES, default="draft")
+    description = models.CharField(max_length=255, blank=True, null=True)
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_pi_allocation_batches")
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_pi_allocation_batches")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-allocation_month", "-id"]
+
+    def save(self, *args, **kwargs):
+        if not self.batch_no:
+            month_prefix = self.allocation_month.strftime("%Y%m") if self.allocation_month else timezone.now().strftime("%Y%m")
+            last = PIAllocationBatch.objects.exclude(batch_no__isnull=True).order_by("-id").first()
+            if last and last.batch_no and last.batch_no.startswith("PCA-"):
+                suffix = str(last.batch_no).split("-")[-1]
+                if suffix.isdigit():
+                    next_no = int(suffix) + 1
+                    self.batch_no = f"PCA-{month_prefix}-{next_no:04d}"
+                    super().save(*args, **kwargs)
+                    return
+            self.batch_no = f"PCA-{month_prefix}-0001"
+        self.total_allocated = self.lines.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+        self.remaining_balance = Decimal(str(self.total_available or 0)) - Decimal(str(self.total_allocated or 0))
+        super().save(*args, **kwargs)
+
+    @property
+    def total_remaining(self):
+        return Decimal(str(self.total_available or 0)) - Decimal(str(self.total_allocated or 0))
+
+    def validate_balance(self):
+        if Decimal(str(self.total_available or 0)) < Decimal(str(self.total_allocated or 0)):
+            raise ValidationError("Total allocated cannot exceed total available cost.")
+        if Decimal(str(self.total_available or 0)) - Decimal(str(self.total_allocated or 0)) != Decimal("0"):
+            raise ValidationError("Allocation balance must be zero before finalizing.")
+
+    def finalize(self, approved_by=None):
+        self.validate_balance()
+        self.status = "approved"
+        if approved_by:
+            self.approved_by = approved_by
+            self.approved_at = timezone.now()
+        self.save(update_fields=["status", "approved_by", "approved_at", "updated_at"] if hasattr(self, "updated_at") else ["status", "approved_by", "approved_at"])
+        for line in self.lines.filter(status__in=["draft", "pending_approval"]):
+            line.status = "approved"
+            line.approved_by = approved_by or self.created_by
+            line.approved_at = timezone.now()
+            line.save(update_fields=["status", "approved_by", "approved_at"])
+        return self
+
+    def __str__(self):
+        return self.batch_no or f"PI Allocation {self.id}"
+
+
+class PIAllocationLine(models.Model):
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending_approval", "Pending Approval"),
+        ("approved", "Approved"),
+        ("posted", "Posted"),
+    ]
+
+    batch = models.ForeignKey(PIAllocationBatch, on_delete=models.CASCADE, related_name="lines")
+    project = models.ForeignKey(Project, on_delete=models.PROTECT, related_name="pi_allocation_lines")
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    description = models.CharField(max_length=255, blank=True, null=True)
+    status = models.CharField(max_length=25, choices=STATUS_CHOICES, default="draft")
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_pi_allocation_lines")
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_pi_allocation_lines")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["project__project_id", "-created_at", "-id"]
+
+    def save(self, *args, **kwargs):
+        if self.amount <= 0:
+            raise ValidationError("Allocation amount must be greater than zero.")
+        super().save(*args, **kwargs)
+        if self.batch_id:
+            self.batch.save()
+
+    def __str__(self):
+        return f"{self.project.project_id} - {self.amount}"
 
 
 # =========================

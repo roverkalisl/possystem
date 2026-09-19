@@ -62,6 +62,26 @@
                 <label class="form-label">Cheque No</label>
                 <input type="text" name="cheque_no" class="form-control form-control-sm">
             </div>
+            <div class="col-md-6" id="bank_box" style="display:none;">
+                <label class="form-label">Bank Account</label>
+                <select name="bank_account" class="form-select form-select-sm">
+                    <option value="">Select bank account</option>
+                    {% for account in bank_accounts %}
+                    <option value="{{ account.id }}">{{ account.bank_name }} - {{ account.account_name }} ({{ account.account_number }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-6" id="transfer_reference_box" style="display:none;">
+                <label class="form-label">Transfer Reference</label>
+                <input type="text" name="bank_transfer_reference" class="form-control form-control-sm">
+            </div>
+        </div>
+
+        <div class="row g-2 mt-1">
+            <div class="col-md-12" id="transfer_remarks_box" style="display:none;">
+                <label class="form-label">Transfer Remarks</label>
+                <textarea name="bank_transfer_remarks" class="form-control form-control-sm" rows="2"></textarea>
+            </div>
         </div>
 
         <div class="mt-2">
@@ -82,6 +102,9 @@ function toggleRecoveryFields() {
     const method = document.getElementById("payment_method").value;
     document.getElementById("card_box").style.display = method === "card" ? "block" : "none";
     document.getElementById("cheque_box").style.display = method === "cheque" ? "block" : "none";
+    document.getElementById("bank_box").style.display = method === "bank" ? "block" : "none";
+    document.getElementById("transfer_reference_box").style.display = method === "bank" ? "block" : "none";
+    document.getElementById("transfer_remarks_box").style.display = method === "bank" ? "block" : "none";
 }
 toggleRecoveryFields();
 </script>

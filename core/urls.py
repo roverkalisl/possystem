@@ -4,6 +4,7 @@ from pos import views
 from pos import cost_analysis_views
 from pos import backup_views
 from pos import payment_summary_views
+from pos import payment_report_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -40,6 +41,7 @@ urlpatterns = [
     path('save-sale/', views.save_sale, name='save_sale'),
     path('pos/barcode-lookup/', views.barcode_lookup, name='barcode_lookup'),
     path('pos/payment-summary/', payment_summary_views.payment_summary_dashboard, name='payment_summary_dashboard'),
+    path('pos/payment-report/', payment_report_views.payment_report, name='payment_report'),
     path('bank-transactions/', views.bank_transactions, name='bank_transactions'),
     path('bank-transactions/<int:transaction_id>/submit/', views.submit_bank_transaction, name='submit_bank_transaction'),
     path('bank-transactions/<int:transaction_id>/approve/', views.approve_bank_transaction, name='approve_bank_transaction'),

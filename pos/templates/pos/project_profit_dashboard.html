@@ -37,6 +37,49 @@
         </div>
     </div>
 
+    <form method="get" class="card shadow-sm p-3 mb-3">
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label">From Date</label>
+                <input type="date" name="from_date" class="form-control form-control-sm" value="{{ from_date }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">To Date</label>
+                <input type="date" name="to_date" class="form-control form-control-sm" value="{{ to_date }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Project</label>
+                <select name="project_id" class="form-select form-select-sm">
+                    <option value="">All Projects</option>
+                    {% for project_option in projects %}
+                    <option value="{{ project_option.id }}" {% if project_id == project_option.id|stringformat:'s' %}selected{% endif %}>{{ project_option.project_id }} - {{ project_option.project_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Project Type</label>
+                <select name="project_type" class="form-select form-select-sm">
+                    <option value="">All Types</option>
+                    {% for value,label in project_type_choices %}
+                    <option value="{{ value }}" {% if project_type == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Status</label>
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">All Status</option>
+                    {% for value,label in status_choices %}
+                    <option value="{{ value }}" {% if status == value %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-primary btn-sm w-100">Apply</button>
+            </div>
+        </div>
+    </form>
+
     <div class="row mb-3">
         <div class="col-md-2 mb-2">
             <div class="card shadow-sm p-3">
@@ -60,6 +103,12 @@
             <div class="card shadow-sm p-3">
                 <h6>Petty Cash</h6>
                 <h4>{{ grand_petty_cash|money }}</h4>
+            </div>
+        </div>
+        <div class="col-md-2 mb-2">
+            <div class="card shadow-sm p-3">
+                <h6>Special Cost Transfer</h6>
+                <h4>{{ grand_special_cost_transfer|money }}</h4>
             </div>
         </div>
         <div class="col-md-2 mb-2">
@@ -90,6 +139,7 @@
                         <th>Direct Expense</th>
                         <th>Returns Credit</th>
                         <th>Petty Cash</th>
+                        <th>Special Cost Transfer</th>
                         <th>Net Expense</th>
                         <th>Profit / Loss</th>
                     </tr>
@@ -104,6 +154,7 @@
                         <td>{{ row.direct_expense|money }}</td>
                         <td class="text-success">{{ row.returns_credit|money }}</td>
                         <td>{{ row.petty_cash_expense|money }}</td>
+                        <td>{{ row.special_cost_transfer|money }}</td>
                         <td>{{ row.net_expense|money }}</td>
                         <td class="{% if row.profit >= 0 %}profit-positive{% else %}profit-negative{% endif %}">
                             {{ row.profit|money }}

@@ -52,29 +52,70 @@ def generate_missing_barcodes():
     return result
 
 
-def code128_svg(value, width=360, height=90):
+def _code128_plan(value, module_width_mm, height_mm, quiet_zone_modules):
+    """Compute the Code 128 (subset B) bar layout shared by rendering and diagnostics."""
     value = str(value or "")
     if not value or any(ord(char) < 32 or ord(char) > 126 for char in value):
         raise ValueError("Barcode value must contain printable ASCII characters.")
 
-    codes = [104] + [ord(char) - 32 for char in value]
-    codes.append((104 + sum(index * code for index, code in enumerate(codes, start=1))) % 103)
+    data_codes = [ord(char) - 32 for char in value]
+    # Checksum = start code value + sum(position * code value), position 1-indexed over data chars only.
+    checksum = (104 + sum((position + 1) * code for position, code in enumerate(data_codes))) % 103
+    codes = [104] + data_codes + [checksum]
     patterns = [CODE128_PATTERNS[code] for code in codes] + [CODE128_PATTERNS[106]]
-    total_modules = sum(sum(int(width) for width in pattern) for pattern in patterns)
-    scale = width / total_modules
-    x = 0
+
+    total_modules = sum(sum(int(module) for module in pattern) for pattern in patterns)
+    quiet_zone_mm = quiet_zone_modules * module_width_mm
+    content_width_mm = total_modules * module_width_mm
+    total_width_mm = content_width_mm + (2 * quiet_zone_mm)
+
+    return {
+        "value": value,
+        "patterns": patterns,
+        "total_modules": total_modules,
+        "module_width_mm": module_width_mm,
+        "height_mm": height_mm,
+        "quiet_zone_modules": quiet_zone_modules,
+        "quiet_zone_mm": quiet_zone_mm,
+        "content_width_mm": content_width_mm,
+        "total_width_mm": total_width_mm,
+    }
+
+
+def code128_metrics(value, module_width_mm=0.33, height_mm=18, quiet_zone_modules=10):
+    """Return the physical dimensions (mm) of the Code 128 barcode for `value` without rendering it."""
+    plan = _code128_plan(value, module_width_mm, height_mm, quiet_zone_modules)
+    plan.pop("patterns")
+    return plan
+
+
+def code128_svg(value, module_width_mm=0.33, height_mm=18, quiet_zone_modules=10):
+    """Render a scanner-readable Code 128 (subset B) barcode as an SVG string.
+
+    Dimensions are expressed in millimetres so the barcode keeps its true
+    proportions no matter how the browser renders or prints the page, and a
+    quiet zone (min. 10 modules) is reserved on both sides as required by the
+    Code 128 spec for reliable decoding.
+    """
+    plan = _code128_plan(value, module_width_mm, height_mm, quiet_zone_modules)
+    value = plan["value"]
+    total_width_mm = plan["total_width_mm"]
+
+    x = plan["quiet_zone_mm"]
     bars = []
-    for pattern in patterns:
-        for index in range(0, len(pattern), 2):
-            bar_width = int(pattern[index]) * scale
-            if bar_width > 0:
-                bars.append(f'<rect x="{x:.2f}" y="0" width="{bar_width:.2f}" height="{height}"/>')
-            x += int(pattern[index]) * scale
-            if index + 1 < len(pattern):
-                x += int(pattern[index + 1]) * scale
+    for pattern in plan["patterns"]:
+        is_bar = True
+        for module in pattern:
+            bar_width = int(module) * module_width_mm
+            if is_bar and bar_width > 0:
+                bars.append(f'<rect x="{x:.3f}" y="0" width="{bar_width:.3f}" height="{height_mm}"/>')
+            x += bar_width
+            is_bar = not is_bar
 
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
-        f'viewBox="0 0 {width} {height}" role="img" aria-label="Barcode {value}">'
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{total_width_mm:.3f}mm" height="{height_mm}mm" '
+        f'viewBox="0 0 {total_width_mm:.3f} {height_mm}" preserveAspectRatio="xMidYMid meet" '
+        f'shape-rendering="crispEdges" role="img" aria-label="Barcode {value}">'
+        f'<rect x="0" y="0" width="{total_width_mm:.3f}" height="{height_mm}" fill="#fff"/>'
         f'<g fill="#000">{"".join(bars)}</g></svg>'
     )

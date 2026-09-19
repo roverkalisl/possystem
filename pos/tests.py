@@ -9,6 +9,7 @@ from django.urls import reverse
 from .models import (
     BankAccount,
     BankTransaction,
+    Customer,
     Employee,
     GLMaster,
     LabourAllocation,
@@ -17,6 +18,11 @@ from .models import (
     PayrollDeduction,
     PayrollEntry,
     Project,
+    ProjectExpense,
+    ProjectInvoice,
+    ProjectInvoicePayment,
+    Sale,
+    SaleRecovery,
     SalaryAdvance,
     Item,
 )
@@ -140,6 +146,132 @@ class BankAccountBalanceTests(TestCase):
         )
 
         self.assertEqual(account.current_balance, Decimal("6800.00"))
+
+
+class CreditRecoveryBankTransferTests(TestCase):
+    def test_bank_transfer_recovery_reduces_credit_balance_and_updates_bank_account(self):
+        user = User.objects.create_superuser(username="recovery_admin", email="recovery@example.com", password="12345")
+        self.client.force_login(user)
+
+        receivable_gl = GLMaster.objects.create(
+            gl_code="1200",
+            gl_name="Trade Receivables",
+            gl_type="asset",
+            parent_group="Current Assets",
+        )
+        customer = Customer.objects.create(
+            customer_code="CUST-001",
+            name="A. Silva",
+            credit_limit=Decimal("1500.00"),
+            receivable_gl_account=receivable_gl,
+        )
+        bank_gl = GLMaster.objects.create(
+            gl_code="1001",
+            gl_name="Bank Current Account",
+            gl_type="asset",
+            parent_group="Current Assets",
+        )
+        bank_account = BankAccount.objects.create(
+            bank_name="Bank of Ceylon",
+            account_name="P&I Collections",
+            account_number="9876543210",
+            opening_balance=Decimal("2000.00"),
+            gl_account=bank_gl,
+            is_active=True,
+        )
+        sale = Sale.objects.create(
+            invoice_no="INV00099",
+            total=Decimal("1000.00"),
+            grand_total=Decimal("1000.00"),
+            payment_method="credit",
+            customer=customer,
+            customer_name=customer.name,
+            cheque_number="CH-1001",
+            created_by=user,
+        )
+
+        response = self.client.post(
+            reverse("add_sale_recovery", args=[sale.id]),
+            {
+                "recovery_date": "2026-09-10",
+                "payment_method": "bank",
+                "amount": "250.00",
+                "bank_account": str(bank_account.id),
+                "bank_transfer_reference": "TRF-20260910",
+                "bank_transfer_remarks": "Customer settlement",
+                "note": "Bank transfer",
+            },
+        )
+
+        self.assertRedirects(response, reverse("credit_sales_list"))
+        recovery = SaleRecovery.objects.get(sale=sale)
+        self.assertEqual(recovery.payment_method, "bank")
+        self.assertEqual(recovery.bank_account, bank_account)
+        self.assertEqual(recovery.amount, Decimal("250.00"))
+        self.assertEqual(sale.credit_balance, Decimal("750.00"))
+        bank_account.refresh_from_db()
+        self.assertEqual(bank_account.current_balance, Decimal("1750.00"))
+
+
+class ProjectProfitDateRangeTests(TestCase):
+    def test_project_profit_dashboard_respects_selected_date_range(self):
+        user = User.objects.create_superuser(username="profit_admin", email="profit@example.com", password="12345")
+        project = Project.objects.create(
+            project_id="PRO2026P001",
+            project_name="House Construction - Galle",
+            project_type="BL",
+            client_name="Client A",
+            status="ongoing",
+            created_by=user,
+        )
+
+        historical_expense = ProjectExpense.objects.create(
+            expense_no="PE-OLD-001",
+            project=project,
+            expense_date="2026-08-20",
+            description="August cost",
+            amount=Decimal("300.00"),
+            created_by=user,
+        )
+        current_expense = ProjectExpense.objects.create(
+            expense_no="PE-NEW-001",
+            project=project,
+            expense_date="2026-09-15",
+            description="September cost",
+            amount=Decimal("500.00"),
+            created_by=user,
+        )
+
+        invoice = ProjectInvoice.objects.create(
+            project=project,
+            invoice_date="2026-09-05",
+            description="September progress bill",
+            total_amount=Decimal("1000.00"),
+            created_by=user,
+        )
+        ProjectInvoicePayment.objects.create(
+            invoice=invoice,
+            payment_date="2026-09-05",
+            payment_type="progress",
+            payment_method="cash",
+            amount=Decimal("1000.00"),
+            created_by=user,
+        )
+
+        self.client.force_login(user)
+        response = self.client.get(
+            reverse("project_profit_dashboard"),
+            {
+                "from_date": "2026-09-01",
+                "to_date": "2026-09-30",
+                "project_id": str(project.id),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Project Profit Dashboard")
+        self.assertContains(response, "500.00")
+        self.assertNotContains(response, "300.00")
 
 
 class PayrollPaysheetViewTests(TestCase):
