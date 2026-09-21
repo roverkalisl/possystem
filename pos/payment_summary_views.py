@@ -23,7 +23,7 @@ def can_view_payment_summary(user):
 def payment_summary_dashboard(request):
     """
     POS Payment Summary Dashboard
-    Shows payment method breakdown and bank balances
+    Shows date-wise payment method breakdown and bank balances
     """
     # Get date parameters
     today = timezone.now().date()
@@ -49,37 +49,54 @@ def payment_summary_dashboard(request):
     sales = Sale.objects.filter(
         created_at__date__gte=from_date,
         created_at__date__lte=to_date
-    )
+    ).order_by('created_at__date')
 
-    # Payment method breakdown using aggregation
-    payment_summary = sales.values('payment_method').annotate(
-        total=Sum('grand_total'),
-        count=Count('id')
-    ).order_by('payment_method')
+    # Date-wise summary - group by date and payment method
+    date_wise_data = {}
+    period_totals = {
+        'cash': Decimal('0'),
+        'card': Decimal('0'),
+        'credit': Decimal('0'),
+        'bank_transfer': Decimal('0'),
+        'cheque': Decimal('0'),
+    }
 
-    # Prepare summary by payment method
-    cash_sales = Decimal('0')
-    card_sales = Decimal('0')
-    credit_sales = Decimal('0')
-    bank_transfer_sales = Decimal('0')
+    for sale in sales:
+        sale_date = sale.created_at.date()
+        if sale_date not in date_wise_data:
+            date_wise_data[sale_date] = {
+                'date': sale_date,
+                'cash': Decimal('0'),
+                'card': Decimal('0'),
+                'credit': Decimal('0'),
+                'bank_transfer': Decimal('0'),
+                'cheque': Decimal('0'),
+            }
 
-    for summary in payment_summary:
-        amount = Decimal(str(summary['total'] or 0))
-        if summary['payment_method'] == 'cash':
-            cash_sales = amount
-        elif summary['payment_method'] == 'card':
-            card_sales = amount
-        elif summary['payment_method'] == 'credit':
-            credit_sales = amount
-        elif summary['payment_method'] == 'bank_transfer':
-            bank_transfer_sales = amount
+        amount = Decimal(str(sale.grand_total or 0))
+        payment_method = sale.payment_method
 
-    total_sales = cash_sales + card_sales + credit_sales + bank_transfer_sales
+        # Map cheque payments (stored as payment_method or cheque_number field)
+        if payment_method == 'cheque' or (payment_method and sale.cheque_number):
+            date_wise_data[sale_date]['cheque'] += amount
+            period_totals['cheque'] += amount
+        elif payment_method in date_wise_data[sale_date]:
+            date_wise_data[sale_date][payment_method] += amount
+            period_totals[payment_method] += amount
 
-    # Get payment transactions for table (limit to recent 100)
-    transactions = sales.select_related(
-        'customer', 'bank_account'
-    ).order_by('-created_at')[:100]
+    # Convert to sorted list
+    date_summary = []
+    for sale_date in sorted(date_wise_data.keys()):
+        row = date_wise_data[sale_date]
+        daily_total = (
+            row['cash'] + row['card'] + row['credit'] +
+            row['bank_transfer'] + row['cheque']
+        )
+        row['total'] = daily_total
+        date_summary.append(row)
+
+    # Calculate period grand total
+    period_grand_total = sum(period_totals.values())
 
     # Bank Accounts and Balances
     bank_accounts = BankAccount.objects.filter(
@@ -94,29 +111,6 @@ def payment_summary_dashboard(request):
         current_balance = account.get_current_balance()
         total_bank_balance += current_balance
 
-        # Get ledger entries for the account in the date range
-        ledger_entries = BankLedgerEntry.objects.filter(
-            bank_account=account,
-            entry_date__gte=from_date,
-            entry_date__lte=to_date
-        )
-
-        deposits = Decimal(str(
-            ledger_entries.filter(
-                transaction_type__in=['deposit', 'transfer_in']
-            ).aggregate(
-                total=Sum('debit')
-            )['total'] or 0
-        ))
-
-        withdrawals = Decimal(str(
-            ledger_entries.filter(
-                transaction_type__in=['withdrawal', 'cheque', 'bank_transfer']
-            ).aggregate(
-                total=Sum('credit')
-            )['total'] or 0
-        ))
-
         bank_data.append({
             'account': account,
             'bank_name': account.bank_name,
@@ -124,22 +118,16 @@ def payment_summary_dashboard(request):
             'account_name': account.account_name,
             'account_number_masked': f"****{account.account_number[-4:]}" if len(account.account_number) > 4 else account.account_number,
             'current_balance': current_balance,
-            'deposits': deposits,
-            'withdrawals': withdrawals,
         })
 
     context = {
         'from_date': from_date,
         'to_date': to_date,
-        'cash_sales': cash_sales,
-        'card_sales': card_sales,
-        'credit_sales': credit_sales,
-        'bank_transfer_sales': bank_transfer_sales,
-        'total_sales': total_sales,
+        'date_summary': date_summary,
+        'period_totals': period_totals,
+        'period_grand_total': period_grand_total,
         'total_bank_balance': total_bank_balance,
         'bank_accounts': bank_data,
-        'transactions': transactions,
-        'payment_summary': payment_summary,
     }
 
     return render(request, 'pos/payment_summary_dashboard.html', context)
