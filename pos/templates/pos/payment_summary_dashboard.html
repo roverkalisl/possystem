@@ -5,25 +5,26 @@
 
 {% block head %}
 <style>
-    /* Common Report Styles */
-    .report-container {
+    /* Report Page Container */
+    .report-page {
         max-width: 1400px;
         margin: 0 auto;
         padding: 24px;
     }
 
-    .report-page-header {
+    /* Page Header */
+    .report-header {
         margin-bottom: 32px;
     }
 
-    .report-page-header h1 {
+    .report-header h1 {
         margin: 0 0 8px 0;
         font-size: 32px;
         font-weight: 600;
         color: #333;
     }
 
-    .report-page-header p {
+    .report-header p {
         margin: 0;
         color: #666;
         font-size: 14px;
@@ -33,32 +34,23 @@
     .report-filter-card {
         background: white;
         border: 1px solid #e0e0e0;
-        border-radius: 10px;
-        padding: 24px;
+        border-radius: 8px;
+        padding: 20px;
         margin-bottom: 24px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
 
-    .report-filter-card h3 {
-        margin: 0 0 20px 0;
-        font-size: 14px;
-        font-weight: 600;
-        color: #333;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    .filter-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 20px;
-        margin-bottom: 20px;
+    .filter-row {
+        display: flex;
+        gap: 16px;
+        align-items: flex-end;
+        flex-wrap: wrap;
     }
 
     .filter-field {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
     }
 
     .filter-field label {
@@ -69,20 +61,16 @@
         letter-spacing: 0.4px;
     }
 
-    .filter-field input,
-    .filter-field select {
+    .filter-field input {
         padding: 10px 12px;
         border: 1px solid #ddd;
-        border-radius: 6px;
+        border-radius: 4px;
         font-size: 14px;
-        font-family: inherit;
-        background: white;
-        color: #333;
         height: 40px;
+        min-width: 160px;
     }
 
-    .filter-field input:focus,
-    .filter-field select:focus {
+    .filter-field input:focus {
         outline: none;
         border-color: #007bff;
         box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
@@ -90,129 +78,87 @@
 
     .filter-buttons {
         display: flex;
-        gap: 12px;
+        gap: 10px;
         flex-wrap: wrap;
     }
 
-    .btn-report {
+    .btn-filter {
         padding: 10px 24px;
         border: none;
-        border-radius: 6px;
+        border-radius: 4px;
         cursor: pointer;
         font-weight: 600;
         font-size: 14px;
         transition: all 0.2s;
+        height: 40px;
     }
 
-    .btn-report-primary {
+    .btn-filter-primary {
         background: #007bff;
         color: white;
     }
 
-    .btn-report-primary:hover {
+    .btn-filter-primary:hover {
         background: #0056b3;
-        box-shadow: 0 2px 8px rgba(0,123,255,0.3);
     }
 
-    .btn-report-secondary {
+    .btn-filter-secondary {
         background: #6c757d;
         color: white;
     }
 
-    .btn-report-secondary:hover {
+    .btn-filter-secondary:hover {
         background: #5a6268;
     }
 
-    /* Bank Accounts Grid */
-    .bank-accounts-section {
-        margin-bottom: 24px;
-    }
-
-    .bank-accounts-section h3 {
-        font-size: 16px;
-        font-weight: 600;
-        color: #333;
-        margin: 0 0 16px 0;
-    }
-
-    .bank-accounts-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-        gap: 16px;
-    }
-
-    .bank-account-card {
+    /* Report Summary Section */
+    .report-summary {
         background: white;
         border: 1px solid #e0e0e0;
-        border-radius: 10px;
-        padding: 20px;
+        border-radius: 8px;
+        padding: 24px;
+        margin-bottom: 24px;
         box-shadow: 0 1px 3px rgba(0,0,0,0.08);
     }
 
-    .bank-account-card h4 {
-        margin: 0 0 16px 0;
-        font-size: 14px;
+    .report-summary h2 {
+        margin: 0 0 20px 0;
+        font-size: 18px;
         font-weight: 600;
         color: #333;
-        padding-bottom: 12px;
-        border-bottom: 2px solid #e0e0e0;
     }
 
-    .bank-account-detail {
-        display: flex;
-        justify-content: space-between;
-        padding: 6px 0;
-        font-size: 13px;
-        color: #555;
-    }
-
-    .bank-account-detail .label {
-        color: #666;
-    }
-
-    .bank-account-detail .value {
-        font-weight: 600;
-        color: #17a2b8;
-        text-align: right;
-    }
-
-    .bank-account-balance {
-        margin-top: 12px;
-        padding-top: 12px;
-        border-top: 2px solid #e0e0e0;
-        display: flex;
-        justify-content: space-between;
-        font-weight: 700;
-        font-size: 15px;
-        color: #28a745;
-    }
-
-    /* Report Table */
+    /* Table Wrapper for Horizontal Scroll */
     .report-table-wrapper {
         width: 100%;
         overflow-x: auto;
         -webkit-overflow-scrolling: touch;
+        margin-bottom: 0;
     }
 
-    .report-table-section {
-        background: white;
-        border: 1px solid #e0e0e0;
-        border-radius: 10px;
-        padding: 24px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    .report-table-wrapper::-webkit-scrollbar {
+        height: 8px;
     }
 
-    .report-table-section h3 {
-        margin: 0 0 20px 0;
-        font-size: 16px;
-        font-weight: 600;
-        color: #333;
+    .report-table-wrapper::-webkit-scrollbar-track {
+        background: #f1f1f1;
     }
 
+    .report-table-wrapper::-webkit-scrollbar-thumb {
+        background: #888;
+        border-radius: 4px;
+    }
+
+    .report-table-wrapper::-webkit-scrollbar-thumb:hover {
+        background: #555;
+    }
+
+    /* Report Table */
     .report-table {
         width: 100%;
         border-collapse: collapse;
         background: white;
+        min-width: 700px;
     }
 
     .report-table thead {
@@ -229,22 +175,38 @@
         text-transform: uppercase;
         letter-spacing: 0.4px;
         white-space: nowrap;
+        border-right: 1px solid #e0e0e0;
     }
 
-    .report-table th:not(:first-child) {
+    .report-table th:last-child {
+        border-right: none;
+    }
+
+    .report-table th:nth-child(n+2) {
         text-align: right;
     }
 
     .report-table td {
-        padding: 12px 14px;
+        padding: 14px;
         border-bottom: 1px solid #dee2e6;
+        border-right: 1px solid #f0f0f0;
         color: #555;
-        font-size: 13px;
+        font-size: 14px;
+        height: 48px;
         vertical-align: middle;
     }
 
-    .report-table td:not(:first-child) {
+    .report-table td:last-child {
+        border-right: none;
+    }
+
+    .report-table td:nth-child(n+2) {
         text-align: right;
+    }
+
+    .report-table td:first-child {
+        font-weight: 500;
+        width: 120px;
     }
 
     .report-table tbody tr:hover {
@@ -257,110 +219,148 @@
         font-variant-numeric: tabular-nums;
     }
 
-    .report-table tfoot tr {
+    /* Period Total Row */
+    .report-table tfoot {
         background: #f8f9fa;
-        font-weight: 700;
+    }
+
+    .report-table tfoot tr {
         border-top: 2px solid #dee2e6;
         border-bottom: 2px solid #dee2e6;
     }
 
     .report-table tfoot td {
         padding: 14px;
+        font-weight: 700;
         color: #333;
+        border-right: 1px solid #e0e0e0;
+        height: auto;
     }
 
-    .report-table tfoot td:not(:first-child) {
+    .report-table tfoot td:last-child {
+        border-right: none;
+    }
+
+    .report-table tfoot td:nth-child(n+2) {
         text-align: right;
+    }
+
+    .report-table tfoot td:first-child {
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
     }
 
     .report-table tfoot .amount {
         color: #dc3545;
-        font-size: 14px;
+        font-size: 15px;
     }
 
-    .no-data-message {
+    /* No Data Message */
+    .no-data {
         text-align: center;
-        padding: 40px 20px;
+        padding: 60px 20px;
         color: #999;
         font-size: 14px;
     }
 
-    /* Responsive */
+    /* Responsive Design */
     @media (max-width: 1024px) {
-        .filter-grid {
-            grid-template-columns: repeat(2, 1fr);
-            gap: 16px;
+        .report-page {
+            padding: 16px;
         }
 
-        .bank-accounts-grid {
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        .report-header h1 {
+            font-size: 28px;
+        }
+
+        .filter-row {
             gap: 12px;
+        }
+
+        .filter-field input {
+            min-width: 140px;
         }
     }
 
     @media (max-width: 768px) {
-        .report-container {
-            padding: 16px;
+        .report-page {
+            padding: 12px;
         }
 
-        .report-page-header h1 {
+        .report-header h1 {
             font-size: 24px;
         }
 
-        .report-filter-card,
-        .report-table-section {
+        .report-filter-card {
             padding: 16px;
         }
 
-        .filter-grid {
-            grid-template-columns: 1fr;
+        .filter-row {
+            flex-direction: column;
             gap: 12px;
         }
 
-        .filter-buttons {
-            justify-content: stretch;
+        .filter-field {
+            width: 100%;
         }
 
-        .btn-report {
+        .filter-field input {
+            width: 100%;
+            min-width: auto;
+        }
+
+        .filter-buttons {
+            gap: 8px;
+            width: 100%;
+        }
+
+        .btn-filter {
             flex: 1;
             min-width: 100px;
         }
 
-        .bank-accounts-grid {
-            grid-template-columns: 1fr;
-            gap: 12px;
+        .report-summary {
+            padding: 16px;
+        }
+
+        .report-summary h2 {
+            font-size: 16px;
+            margin-bottom: 16px;
+        }
+
+        .report-table {
+            font-size: 12px;
         }
 
         .report-table th,
         .report-table td {
-            padding: 8px 10px;
-            font-size: 12px;
+            padding: 10px 8px;
         }
 
-        .report-table th {
-            font-size: 11px;
+        .report-table td:first-child {
+            width: 100px;
         }
 
         .report-table tfoot td {
-            padding: 10px;
+            padding: 10px 8px;
         }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="report-container">
+<div class="report-page">
     <!-- Page Header -->
-    <div class="report-page-header">
+    <div class="report-header">
         <h1>POS Payment Summary</h1>
         <p>Date-wise payment method breakdown</p>
     </div>
 
     <!-- Filters -->
     <div class="report-filter-card">
-        <h3>Filters</h3>
         <form method="get">
-            <div class="filter-grid">
+            <div class="filter-row">
                 <div class="filter-field">
                     <label for="from_date">From Date</label>
                     <input type="date" id="from_date" name="from_date" value="{{ from_date|date:'Y-m-d' }}">
@@ -369,49 +369,17 @@
                     <label for="to_date">To Date</label>
                     <input type="date" id="to_date" name="to_date" value="{{ to_date|date:'Y-m-d' }}">
                 </div>
-            </div>
-            <div class="filter-buttons">
-                <button type="submit" class="btn-report btn-report-primary">Apply Filter</button>
-                <button type="button" class="btn-report btn-report-secondary" onclick="resetFilters()">Reset</button>
+                <div class="filter-buttons">
+                    <button type="submit" class="btn-filter btn-filter-primary">Apply Filter</button>
+                    <button type="button" class="btn-filter btn-filter-secondary" onclick="resetFilters()">Reset</button>
+                </div>
             </div>
         </form>
     </div>
 
-    <!-- Bank Accounts Section -->
-    {% if bank_accounts %}
-    <div class="bank-accounts-section">
-        <h3>Bank Accounts & Current Balances</h3>
-        <div class="bank-accounts-grid">
-            {% for account in bank_accounts %}
-            <div class="bank-account-card">
-                <h4>{{ account.bank_name }}</h4>
-                <div class="bank-account-detail">
-                    <span class="label">Account:</span>
-                    <span class="value">{{ account.account_name }}</span>
-                </div>
-                {% if account.branch %}
-                <div class="bank-account-detail">
-                    <span class="label">Branch:</span>
-                    <span class="value">{{ account.branch }}</span>
-                </div>
-                {% endif %}
-                <div class="bank-account-detail">
-                    <span class="label">Account No:</span>
-                    <span class="value">{{ account.account_number_masked }}</span>
-                </div>
-                <div class="bank-account-balance">
-                    <span>Balance:</span>
-                    <span>Rs. {{ account.current_balance|floatformat:2 }}</span>
-                </div>
-            </div>
-            {% endfor %}
-        </div>
-    </div>
-    {% endif %}
-
     <!-- Date-wise Summary Table -->
-    <div class="report-table-section">
-        <h3>Date-wise Payment Summary</h3>
+    <div class="report-summary">
+        <h2>Date-wise Payment Summary</h2>
         {% if date_summary %}
             <div class="report-table-wrapper">
                 <table class="report-table">
@@ -435,7 +403,7 @@
                             <td class="amount">Rs. {{ row.credit|floatformat:2 }}</td>
                             <td class="amount">Rs. {{ row.bank_transfer|floatformat:2 }}</td>
                             <td class="amount">Rs. {{ row.cheque|floatformat:2 }}</td>
-                            <td class="amount" style="font-weight: 700;">Rs. {{ row.total|floatformat:2 }}</td>
+                            <td class="amount" style="font-weight: 700; color: #dc3545;">Rs. {{ row.total|floatformat:2 }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -453,7 +421,7 @@
                 </table>
             </div>
         {% else %}
-            <div class="no-data-message">No transactions found for the selected date range.</div>
+            <div class="no-data">No transactions found for the selected date range.</div>
         {% endif %}
     </div>
 </div>
