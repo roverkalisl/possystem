@@ -1,587 +1,182 @@
 {% extends "base.html" %}
-{% load static %}
+{% load currency_filters %}
 
 {% block title %}POS Payment Report{% endblock %}
 
-{% block head %}
-<style>
-    /* Report Page Container */
-    .report-page {
-        max-width: 1400px;
-        margin: 0 auto;
-        padding: 24px;
-    }
-
-    /* Page Header */
-    .report-header {
-        margin-bottom: 32px;
-    }
-
-    .report-header h1 {
-        margin: 0 0 8px 0;
-        font-size: 32px;
-        font-weight: 600;
-        color: #333;
-    }
-
-    .report-header p {
-        margin: 0;
-        color: #666;
-        font-size: 14px;
-    }
-
-    /* Filter Card */
-    .report-filter-card {
-        background: white;
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 24px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }
-
-    .report-filter-card h3 {
-        margin: 0 0 16px 0;
-        font-size: 13px;
-        font-weight: 600;
-        color: #333;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    .filter-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-        gap: 16px;
-        margin-bottom: 16px;
-    }
-
-    .filter-field {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-    }
-
-    .filter-field label {
-        font-weight: 600;
-        font-size: 11px;
-        color: #333;
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-    }
-
-    .filter-field input,
-    .filter-field select {
-        padding: 10px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
-        height: 40px;
-    }
-
-    .filter-field input:focus,
-    .filter-field select:focus {
-        outline: none;
-        border-color: #007bff;
-        box-shadow: 0 0 0 3px rgba(0,123,255,0.1);
-    }
-
-    .filter-buttons {
-        display: flex;
-        gap: 10px;
-        flex-wrap: wrap;
-    }
-
-    .btn-filter {
-        padding: 10px 24px;
-        border: none;
-        border-radius: 4px;
-        cursor: pointer;
-        font-weight: 600;
-        font-size: 14px;
-        transition: all 0.2s;
-        height: 40px;
-    }
-
-    .btn-filter-primary {
-        background: #007bff;
-        color: white;
-    }
-
-    .btn-filter-primary:hover {
-        background: #0056b3;
-    }
-
-    .btn-filter-secondary {
-        background: #6c757d;
-        color: white;
-    }
-
-    .btn-filter-secondary:hover {
-        background: #5a6268;
-    }
-
-    /* Summary Cards */
-    .report-summary-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-        gap: 16px;
-        margin-bottom: 24px;
-    }
-
-    .report-summary-card {
-        background: white;
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        padding: 16px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-        text-align: center;
-    }
-
-    .report-summary-card h4 {
-        margin: 0 0 10px 0;
-        font-size: 11px;
-        font-weight: 600;
-        color: #666;
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-    }
-
-    .report-summary-card .amount {
-        font-size: 20px;
-        font-weight: 700;
-        color: #333;
-    }
-
-    .report-summary-card.cash .amount { color: #28a745; }
-    .report-summary-card.card .amount { color: #007bff; }
-    .report-summary-card.credit .amount { color: #ffc107; }
-    .report-summary-card.transfer .amount { color: #6c757d; }
-    .report-summary-card.grand .amount { color: #dc3545; }
-
-    /* Table Section */
-    .report-summary {
-        background: white;
-        border: 1px solid #e0e0e0;
-        border-radius: 8px;
-        padding: 24px;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-    }
-
-    .report-summary h2 {
-        margin: 0 0 20px 0;
-        font-size: 18px;
-        font-weight: 600;
-        color: #333;
-    }
-
-    /* Table Wrapper for Horizontal Scroll */
-    .report-table-wrapper {
-        width: 100%;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        margin-bottom: 0;
-    }
-
-    .report-table-wrapper::-webkit-scrollbar {
-        height: 8px;
-    }
-
-    .report-table-wrapper::-webkit-scrollbar-track {
-        background: #f1f1f1;
-    }
-
-    .report-table-wrapper::-webkit-scrollbar-thumb {
-        background: #888;
-        border-radius: 4px;
-    }
-
-    .report-table-wrapper::-webkit-scrollbar-thumb:hover {
-        background: #555;
-    }
-
-    /* Report Table */
-    .report-table {
-        width: 100%;
-        border-collapse: collapse;
-        background: white;
-        min-width: 1000px;
-    }
-
-    .report-table thead {
-        background: #f8f9fa;
-        border-bottom: 2px solid #dee2e6;
-    }
-
-    .report-table th {
-        padding: 12px 12px;
-        text-align: left;
-        font-weight: 600;
-        font-size: 11px;
-        color: #333;
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-        white-space: nowrap;
-        border-right: 1px solid #e0e0e0;
-    }
-
-    .report-table th:last-child {
-        border-right: none;
-    }
-
-    .report-table th:nth-child(n+5) {
-        text-align: right;
-    }
-
-    .report-table td {
-        padding: 12px;
-        border-bottom: 1px solid #dee2e6;
-        border-right: 1px solid #f0f0f0;
-        color: #555;
-        font-size: 13px;
-        height: 44px;
-        vertical-align: middle;
-    }
-
-    .report-table td:last-child {
-        border-right: none;
-    }
-
-    .report-table td:nth-child(n+5) {
-        text-align: right;
-    }
-
-    .report-table tbody tr:hover {
-        background: #f8f9fa;
-    }
-
-    .report-table .amount {
-        font-weight: 600;
-        color: #28a745;
-        font-variant-numeric: tabular-nums;
-    }
-
-    .report-table .dash {
-        color: #ccc;
-        text-align: center;
-    }
-
-    /* No Data Message */
-    .no-data {
-        text-align: center;
-        padding: 60px 20px;
-        color: #999;
-        font-size: 14px;
-    }
-
-    /* Pagination */
-    .report-pagination {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 8px;
-        margin-top: 20px;
-        flex-wrap: wrap;
-    }
-
-    .report-pagination a,
-    .report-pagination .page-info {
-        padding: 8px 12px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        text-decoration: none;
-        color: #007bff;
-        font-size: 12px;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-
-    .report-pagination a:hover {
-        background: #f8f9fa;
-        border-color: #007bff;
-    }
-
-    .report-pagination .page-current {
-        background: #007bff;
-        color: white;
-        border-color: #007bff;
-    }
-
-    .report-pagination .page-disabled {
-        color: #ccc;
-        cursor: not-allowed;
-        border-color: #ddd;
-    }
-
-    .report-pagination .page-info {
-        background: #f8f9fa;
-        border-color: #ddd;
-        color: #333;
-        cursor: default;
-    }
-
-    /* Responsive Design */
-    @media (max-width: 1024px) {
-        .report-page {
-            padding: 16px;
-        }
-
-        .report-header h1 {
-            font-size: 28px;
-        }
-
-        .filter-grid {
-            grid-template-columns: repeat(2, 1fr);
-        }
-
-        .report-summary-grid {
-            grid-template-columns: repeat(2, 1fr);
-        }
-    }
-
-    @media (max-width: 768px) {
-        .report-page {
-            padding: 12px;
-        }
-
-        .report-header h1 {
-            font-size: 24px;
-        }
-
-        .report-filter-card {
-            padding: 16px;
-        }
-
-        .filter-grid {
-            grid-template-columns: 1fr;
-        }
-
-        .filter-buttons {
-            gap: 8px;
-        }
-
-        .btn-filter {
-            flex: 1;
-        }
-
-        .report-summary-grid {
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-
-        .report-summary-card {
-            padding: 12px;
-        }
-
-        .report-summary-card h4 {
-            font-size: 10px;
-        }
-
-        .report-summary-card .amount {
-            font-size: 16px;
-        }
-
-        .report-summary {
-            padding: 16px;
-        }
-
-        .report-summary h2 {
-            font-size: 16px;
-            margin-bottom: 16px;
-        }
-
-        .report-table {
-            font-size: 11px;
-        }
-
-        .report-table th,
-        .report-table td {
-            padding: 8px;
-        }
-
-        .report-pagination {
-            gap: 4px;
-        }
-
-        .report-pagination a,
-        .report-pagination .page-info {
-            padding: 6px 10px;
-            font-size: 11px;
-        }
-    }
-</style>
-{% endblock %}
-
 {% block content %}
-<div class="report-page">
-    <!-- Page Header -->
-    <div class="report-header">
-        <h1>POS Payment Report</h1>
-        <p>Detailed transaction-level payment report</p>
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <div>
+            <h4 class="app-page-title">POS Payment Report</h4>
+            <p class="text-muted mb-0">Detailed transaction-level payment report.</p>
+        </div>
+        <div></div>
     </div>
 
-    <!-- Filters -->
-    <div class="report-filter-card">
-        <h3>Filters</h3>
-        <form method="get">
-            <div class="filter-grid">
-                <div class="filter-field">
-                    <label for="from_date">From Date</label>
-                    <input type="date" id="from_date" name="from_date" value="{{ from_date|date:'Y-m-d' }}">
-                </div>
-                <div class="filter-field">
-                    <label for="to_date">To Date</label>
-                    <input type="date" id="to_date" name="to_date" value="{{ to_date|date:'Y-m-d' }}">
-                </div>
-                <div class="filter-field">
-                    <label for="invoice_no">Invoice No</label>
-                    <input type="text" id="invoice_no" name="invoice_no" value="{{ invoice_no }}" placeholder="Search...">
-                </div>
-                <div class="filter-field">
-                    <label for="customer">Customer</label>
-                    <input type="text" id="customer" name="customer" value="{{ customer }}" placeholder="Search...">
-                </div>
-                <div class="filter-field">
-                    <label for="payment_method">Payment Method</label>
-                    <select id="payment_method" name="payment_method">
-                        <option value="">All Methods</option>
-                        {% for value, label in payment_methods %}
-                        <option value="{{ value }}" {% if payment_method == value %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="filter-field">
-                    <label for="bank_account">Bank Account</label>
-                    <select id="bank_account" name="bank_account">
-                        <option value="">All Accounts</option>
-                        {% for account in bank_accounts %}
-                        <option value="{{ account.id }}" {% if bank_account == account.id|stringformat:"s" %}selected{% endif %}>{{ account.bank_name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="filter-field">
-                    <label for="search">Search</label>
-                    <input type="text" id="search" name="search" value="{{ search }}" placeholder="Reference...">
-                </div>
-            </div>
-            <div class="filter-buttons">
-                <button type="submit" class="btn-filter btn-filter-primary">Apply Filters</button>
-                <button type="button" class="btn-filter btn-filter-secondary" onclick="resetFilters()">Reset</button>
-            </div>
-        </form>
-    </div>
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-2">
+            <label class="form-label small text-muted">From Date</label>
+            <input type="date" name="from_date" value="{{ from_date|date:'Y-m-d' }}" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small text-muted">To Date</label>
+            <input type="date" name="to_date" value="{{ to_date|date:'Y-m-d' }}" class="form-control form-control-sm">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small text-muted">Invoice No</label>
+            <input type="text" name="invoice_no" value="{{ invoice_no }}" class="form-control form-control-sm" placeholder="Search...">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small text-muted">Customer</label>
+            <input type="text" name="customer" value="{{ customer }}" class="form-control form-control-sm" placeholder="Search...">
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small text-muted">Payment Method</label>
+            <select name="payment_method" class="form-select form-select-sm">
+                <option value="">All Methods</option>
+                {% for value, label in payment_methods %}
+                <option value="{{ value }}" {% if payment_method == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small text-muted">Bank Account</label>
+            <select name="bank_account" class="form-select form-select-sm">
+                <option value="">All Accounts</option>
+                {% for account in bank_accounts %}
+                <option value="{{ account.id }}" {% if bank_account == account.id|stringformat:"s" %}selected{% endif %}>{{ account.bank_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+    </form>
 
-    <!-- Summary Cards -->
-    <div class="report-summary-grid">
-        <div class="report-summary-card cash">
-            <h4>Cash Total</h4>
-            <div class="amount">Rs. {{ cash_total|floatformat:2 }}</div>
+    <div class="row g-2 mb-3">
+        <div class="col-md-2">
+            <input type="text" name="search" value="{{ search }}" class="form-control form-control-sm" placeholder="Search reference...">
         </div>
-        <div class="report-summary-card card">
-            <h4>Card Total</h4>
-            <div class="amount">Rs. {{ card_total|floatformat:2 }}</div>
-        </div>
-        <div class="report-summary-card credit">
-            <h4>Credit Total</h4>
-            <div class="amount">Rs. {{ credit_total|floatformat:2 }}</div>
-        </div>
-        <div class="report-summary-card transfer">
-            <h4>Bank Transfer</h4>
-            <div class="amount">Rs. {{ transfer_total|floatformat:2 }}</div>
-        </div>
-        <div class="report-summary-card grand">
-            <h4>Grand Total</h4>
-            <div class="amount">Rs. {{ grand_total|floatformat:2 }}</div>
+        <div class="col-md-4 d-flex gap-2">
+            <button type="submit" class="btn btn-dark btn-sm flex-grow-1">Apply Filters</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="resetFilters()">Reset</button>
         </div>
     </div>
 
-    <!-- Transaction Table -->
-    <div class="report-summary">
-        <h2>Payment Transactions</h2>
-        {% if transactions %}
-            <div class="report-table-wrapper">
-                <table class="report-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Time</th>
-                            <th>Invoice</th>
-                            <th>Customer</th>
-                            <th>Cash</th>
-                            <th>Card</th>
-                            <th>Credit</th>
-                            <th>Bank Transfer</th>
-                            <th>Total</th>
-                            <th>Bank Account</th>
-                            <th>Reference</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for txn in transactions %}
-                        <tr>
-                            <td>{{ txn.created_at|date:'d M Y' }}</td>
-                            <td>{{ txn.created_at|date:'H:i' }}</td>
-                            <td>{{ txn.invoice_no }}</td>
-                            <td>{{ txn.customer_name|default:"--" }}</td>
-                            <td class="{% if txn.payment_method == 'cash' %}amount{% else %}dash{% endif %}">
-                                {% if txn.payment_method == 'cash' %}Rs. {{ txn.grand_total|floatformat:2 }}{% else %}-{% endif %}
-                            </td>
-                            <td class="{% if txn.payment_method == 'card' %}amount{% else %}dash{% endif %}">
-                                {% if txn.payment_method == 'card' %}Rs. {{ txn.grand_total|floatformat:2 }}{% else %}-{% endif %}
-                            </td>
-                            <td class="{% if txn.payment_method == 'credit' %}amount{% else %}dash{% endif %}">
-                                {% if txn.payment_method == 'credit' %}Rs. {{ txn.grand_total|floatformat:2 }}{% else %}-{% endif %}
-                            </td>
-                            <td class="{% if txn.payment_method == 'bank_transfer' %}amount{% else %}dash{% endif %}">
-                                {% if txn.payment_method == 'bank_transfer' %}Rs. {{ txn.grand_total|floatformat:2 }}{% else %}-{% endif %}
-                            </td>
-                            <td class="amount">Rs. {{ txn.grand_total|floatformat:2 }}</td>
-                            <td>
-                                {% if txn.payment_method == 'bank_transfer' and txn.bank_account %}
-                                    {{ txn.bank_account.account_name }}
-                                {% else %}
-                                    --
-                                {% endif %}
-                            </td>
-                            <td>
-                                {% if txn.payment_method == 'bank_transfer' and txn.bank_transfer_reference %}
-                                    {{ txn.bank_transfer_reference }}
-                                {% else %}
-                                    --
-                                {% endif %}
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+    <div class="row g-3 mb-3">
+        <div class="col-md-2">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Cash Total</div>
+                    <div class="fs-5 text-money">{{ cash_total|money }}</div>
+                </div>
             </div>
-
-            <!-- Pagination -->
-            {% if paginator.num_pages > 1 %}
-            <div class="report-pagination">
-                {% if transactions.has_previous %}
-                    <a href="?page=1{% if from_date %}&from_date={{ from_date|date:'Y-m-d' }}{% endif %}{% if to_date %}&to_date={{ to_date|date:'Y-m-d' }}{% endif %}{% if invoice_no %}&invoice_no={{ invoice_no }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if bank_account %}&bank_account={{ bank_account }}{% endif %}{% if search %}&search={{ search }}{% endif %}">First</a>
-                    <a href="?page={{ transactions.previous_page_number }}{% if from_date %}&from_date={{ from_date|date:'Y-m-d' }}{% endif %}{% if to_date %}&to_date={{ to_date|date:'Y-m-d' }}{% endif %}{% if invoice_no %}&invoice_no={{ invoice_no }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if bank_account %}&bank_account={{ bank_account }}{% endif %}{% if search %}&search={{ search }}{% endif %}">Prev</a>
-                {% else %}
-                    <span class="page-disabled">First</span>
-                    <span class="page-disabled">Prev</span>
-                {% endif %}
-
-                <span class="page-info">Page {{ transactions.number }} of {{ paginator.num_pages }}</span>
-
-                {% if transactions.has_next %}
-                    <a href="?page={{ transactions.next_page_number }}{% if from_date %}&from_date={{ from_date|date:'Y-m-d' }}{% endif %}{% if to_date %}&to_date={{ to_date|date:'Y-m-d' }}{% endif %}{% if invoice_no %}&invoice_no={{ invoice_no }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if bank_account %}&bank_account={{ bank_account }}{% endif %}{% if search %}&search={{ search }}{% endif %}">Next</a>
-                    <a href="?page={{ paginator.num_pages }}{% if from_date %}&from_date={{ from_date|date:'Y-m-d' }}{% endif %}{% if to_date %}&to_date={{ to_date|date:'Y-m-d' }}{% endif %}{% if invoice_no %}&invoice_no={{ invoice_no }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if bank_account %}&bank_account={{ bank_account }}{% endif %}{% if search %}&search={{ search }}{% endif %}">Last</a>
-                {% else %}
-                    <span class="page-disabled">Next</span>
-                    <span class="page-disabled">Last</span>
-                {% endif %}
+        </div>
+        <div class="col-md-2">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Card Total</div>
+                    <div class="fs-5 text-money">{{ card_total|money }}</div>
+                </div>
             </div>
-            {% endif %}
-        {% else %}
-            <div class="no-data">No transactions found for the selected filters.</div>
+        </div>
+        <div class="col-md-2">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Credit Total</div>
+                    <div class="fs-5 text-money">{{ credit_total|money }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Bank Transfer</div>
+                    <div class="fs-5 text-money">{{ transfer_total|money }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Grand Total</div>
+                    <div class="fs-5 text-money text-danger fw-bold">{{ grand_total|money }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Invoice</th>
+                    <th>Customer</th>
+                    <th class="text-end">Cash</th>
+                    <th class="text-end">Card</th>
+                    <th class="text-end">Credit</th>
+                    <th class="text-end">Bank Transfer</th>
+                    <th class="text-end">Total</th>
+                    <th>Bank Account</th>
+                    <th>Reference</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for txn in transactions %}
+                <tr>
+                    <td>{{ txn.created_at|date:'d M Y' }}</td>
+                    <td>{{ txn.created_at|date:'H:i' }}</td>
+                    <td>{{ txn.invoice_no }}</td>
+                    <td>{{ txn.customer_name|default:"--" }}</td>
+                    <td class="text-end {% if txn.payment_method == 'cash' %}text-money fw-bold{% else %}text-muted{% endif %}">
+                        {% if txn.payment_method == 'cash' %}{{ txn.grand_total|money }}{% else %}-{% endif %}
+                    </td>
+                    <td class="text-end {% if txn.payment_method == 'card' %}text-money fw-bold{% else %}text-muted{% endif %}">
+                        {% if txn.payment_method == 'card' %}{{ txn.grand_total|money }}{% else %}-{% endif %}
+                    </td>
+                    <td class="text-end {% if txn.payment_method == 'credit' %}text-money fw-bold{% else %}text-muted{% endif %}">
+                        {% if txn.payment_method == 'credit' %}{{ txn.grand_total|money }}{% else %}-{% endif %}
+                    </td>
+                    <td class="text-end {% if txn.payment_method == 'bank_transfer' %}text-money fw-bold{% else %}text-muted{% endif %}">
+                        {% if txn.payment_method == 'bank_transfer' %}{{ txn.grand_total|money }}{% else %}-{% endif %}
+                    </td>
+                    <td class="text-money text-end fw-bold">{{ txn.grand_total|money }}</td>
+                    <td>
+                        {% if txn.payment_method == 'bank_transfer' and txn.bank_account %}
+                            {{ txn.bank_account.account_name }}
+                        {% else %}
+                            --
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if txn.payment_method == 'bank_transfer' and txn.bank_transfer_reference %}
+                            {{ txn.bank_transfer_reference }}
+                        {% else %}
+                            --
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="11" class="text-center">No transactions found for the selected filters.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if paginator.num_pages > 1 %}
+    <div class="d-flex justify-content-center gap-2 mt-3 flex-wrap">
+        {% if transactions.has_previous %}
+            <a href="?page=1{% if from_date %}&from_date={{ from_date|date:'Y-m-d' }}{% endif %}{% if to_date %}&to_date={{ to_date|date:'Y-m-d' }}{% endif %}{% if invoice_no %}&invoice_no={{ invoice_no }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if bank_account %}&bank_account={{ bank_account }}{% endif %}{% if search %}&search={{ search }}{% endif %}" class="btn btn-sm btn-outline-dark">First</a>
+            <a href="?page={{ transactions.previous_page_number }}{% if from_date %}&from_date={{ from_date|date:'Y-m-d' }}{% endif %}{% if to_date %}&to_date={{ to_date|date:'Y-m-d' }}{% endif %}{% if invoice_no %}&invoice_no={{ invoice_no }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if bank_account %}&bank_account={{ bank_account }}{% endif %}{% if search %}&search={{ search }}{% endif %}" class="btn btn-sm btn-outline-dark">Prev</a>
+        {% endif %}
+        <span class="btn btn-sm btn-secondary disabled">Page {{ transactions.number }} of {{ paginator.num_pages }}</span>
+        {% if transactions.has_next %}
+            <a href="?page={{ transactions.next_page_number }}{% if from_date %}&from_date={{ from_date|date:'Y-m-d' }}{% endif %}{% if to_date %}&to_date={{ to_date|date:'Y-m-d' }}{% endif %}{% if invoice_no %}&invoice_no={{ invoice_no }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if bank_account %}&bank_account={{ bank_account }}{% endif %}{% if search %}&search={{ search }}{% endif %}" class="btn btn-sm btn-outline-dark">Next</a>
+            <a href="?page={{ paginator.num_pages }}{% if from_date %}&from_date={{ from_date|date:'Y-m-d' }}{% endif %}{% if to_date %}&to_date={{ to_date|date:'Y-m-d' }}{% endif %}{% if invoice_no %}&invoice_no={{ invoice_no }}{% endif %}{% if customer %}&customer={{ customer }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if bank_account %}&bank_account={{ bank_account }}{% endif %}{% if search %}&search={{ search }}{% endif %}" class="btn btn-sm btn-outline-dark">Last</a>
         {% endif %}
     </div>
+    {% endif %}
 </div>
 
 <script>
