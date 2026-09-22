@@ -10,7 +10,7 @@ from django.db.models import Sum, Count, Q
 from django.shortcuts import render
 from django.utils import timezone
 
-from .models import Sale, BankAccount, BankLedgerEntry
+from .models import Sale
 
 
 def can_view_payment_summary(user):
@@ -98,36 +98,12 @@ def payment_summary_dashboard(request):
     # Calculate period grand total
     period_grand_total = sum(period_totals.values())
 
-    # Bank Accounts and Balances
-    bank_accounts = BankAccount.objects.filter(
-        is_active=True,
-        is_deleted=False
-    ).order_by('bank_name', 'account_name')
-
-    bank_data = []
-    total_bank_balance = Decimal('0')
-
-    for account in bank_accounts:
-        current_balance = Decimal(str(account.current_balance or 0))
-        total_bank_balance += current_balance
-
-        bank_data.append({
-            'account': account,
-            'bank_name': account.bank_name,
-            'branch': account.branch,
-            'account_name': account.account_name,
-            'account_number_masked': f"****{account.account_number[-4:]}" if len(account.account_number) > 4 else account.account_number,
-            'current_balance': current_balance,
-        })
-
     context = {
         'from_date': from_date,
         'to_date': to_date,
         'date_summary': date_summary,
         'period_totals': period_totals,
         'period_grand_total': period_grand_total,
-        'total_bank_balance': total_bank_balance,
-        'bank_accounts': bank_data,
     }
 
     return render(request, 'pos/payment_summary_dashboard.html', context)
