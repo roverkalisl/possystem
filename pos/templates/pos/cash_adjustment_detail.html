@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Cash Adjustment {{ adjustment.reference }}{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <div>
+            <h4 class="app-page-title">{{ adjustment.reference }}</h4>
+            <p class="text-muted mb-0">{{ adjustment.get_adjustment_type_display }} - {{ adjustment.adjustment_date }}</p>
+        </div>
+        <div>
+            <span class="badge {% if adjustment.approval_status == 'draft' %}bg-secondary{% elif adjustment.approval_status == 'pending' %}bg-warning{% elif adjustment.approval_status == 'approved' %}bg-info{% elif adjustment.approval_status == 'posted' %}bg-success{% endif %}">
+                {{ adjustment.get_approval_status_display }}
+            </span>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Current Cash Balance</div>
+                    <div class="fs-5 text-money">{{ current_cash|money }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Adjustment Amount</div>
+                    <div class="fs-5 text-money fw-bold {% if adjustment.adjustment_type == 'cash_increase' %}text-success{% else %}text-danger{% endif %}">
+                        {% if adjustment.adjustment_type == 'cash_increase' %}+{% else %}-{% endif %}{{ adjustment.amount|money }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Preview Balance</div>
+                    <div class="fs-5 text-money fw-bold">{{ preview_cash|money }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title mb-3">Adjustment Details</h6>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Reference</label>
+                        <div class="fw-bold">{{ adjustment.reference }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Type</label>
+                        <div>{{ adjustment.get_adjustment_type_display }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Date</label>
+                        <div>{{ adjustment.adjustment_date }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Amount</label>
+                        <div class="text-money fw-bold">{{ adjustment.amount|money }}</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-body">
+                    <h6 class="card-title mb-3">Audit Trail</h6>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Created By</label>
+                        <div>{{ adjustment.created_by.get_full_name|default:adjustment.created_by.username }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Created At</label>
+                        <div>{{ adjustment.created_at|date:'d M Y, H:i' }}</div>
+                    </div>
+                    {% if adjustment.approved_by %}
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Approved By</label>
+                        <div>{{ adjustment.approved_by.get_full_name|default:adjustment.approved_by.username }}</div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Approved At</label>
+                        <div>{{ adjustment.approved_at|date:'d M Y, H:i' }}</div>
+                    </div>
+                    {% endif %}
+                    {% if adjustment.posted_at %}
+                    <div class="mb-3">
+                        <label class="form-label text-muted small">Posted At</label>
+                        <div>{{ adjustment.posted_at|date:'d M Y, H:i' }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h6 class="card-title mb-3">Reason</h6>
+            <p class="text-muted">{{ adjustment.reason }}</p>
+        </div>
+    </div>
+
+    <div class="d-flex gap-2">
+        {% if adjustment.approval_status == 'pending' %}
+            <form method="post" action="{% url 'approve_cash_adjustment' adjustment.id %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-info">Approve</button>
+            </form>
+        {% endif %}
+
+        {% if adjustment.approval_status == 'approved' %}
+            <form method="post" action="{% url 'post_cash_adjustment' adjustment.id %}" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-success">Post</button>
+            </form>
+        {% endif %}
+
+        <a href="{% url 'cash_adjustment_list' %}" class="btn btn-secondary">Back to List</a>
+    </div>
+</div>
+{% endblock %}

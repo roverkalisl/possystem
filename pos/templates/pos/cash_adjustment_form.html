@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}New Cash Adjustment{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <div>
+            <h4 class="app-page-title">Create Cash Adjustment</h4>
+            <p class="text-muted mb-0">Record manual cash balance adjustment.</p>
+        </div>
+        <div></div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Current Cash Balance</div>
+                    <div class="fs-5 text-money fw-bold">{{ current_cash|money }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <form method="post" class="row g-3">
+        {% csrf_token %}
+
+        <div class="col-md-6">
+            <label class="form-label">Adjustment Date <span class="text-danger">*</span></label>
+            <input type="date" name="adjustment_date" class="form-control" required>
+        </div>
+
+        <div class="col-md-6">
+            <label class="form-label">Adjustment Type <span class="text-danger">*</span></label>
+            <select name="adjustment_type" class="form-select" required>
+                <option value="">-- Select Type --</option>
+                <option value="cash_increase">Cash Increase</option>
+                <option value="cash_decrease">Cash Decrease</option>
+            </select>
+        </div>
+
+        <div class="col-md-6">
+            <label class="form-label">Amount (Rs) <span class="text-danger">*</span></label>
+            <input type="number" name="amount" class="form-control" step="0.01" min="0" required placeholder="0.00">
+            <small class="text-muted">Always enter as positive value</small>
+        </div>
+
+        <div class="col-md-12">
+            <label class="form-label">Reason <span class="text-danger">*</span></label>
+            <textarea name="reason" class="form-control" rows="4" required placeholder="Explain the reason for this adjustment..."></textarea>
+        </div>
+
+        <div class="col-md-12">
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-dark">Create Adjustment</button>
+                <a href="{% url 'cash_adjustment_list' %}" class="btn btn-secondary">Cancel</a>
+            </div>
+        </div>
+    </form>
+</div>
+{% endblock %}

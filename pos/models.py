@@ -3346,3 +3346,49 @@ class RestoreLog(models.Model):
 
     def __str__(self):
         return f"Restore {self.id} - {self.status}"
+
+
+# =========================
+# CASH ADJUSTMENT
+# =========================
+class CashAdjustment(models.Model):
+    ADJUSTMENT_TYPE_CHOICES = [
+        ("cash_increase", "Cash Increase"),
+        ("cash_decrease", "Cash Decrease"),
+    ]
+
+    APPROVAL_STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending", "Pending Approval"),
+        ("approved", "Approved"),
+        ("posted", "Posted"),
+    ]
+
+    adjustment_date = models.DateField()
+    adjustment_type = models.CharField(max_length=20, choices=ADJUSTMENT_TYPE_CHOICES)
+    amount = models.DecimalField(max_digits=14, decimal_places=2)
+    reason = models.TextField()
+    reference = models.CharField(max_length=50, unique=True)
+    approval_status = models.CharField(max_length=20, choices=APPROVAL_STATUS_CHOICES, default="draft")
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_cash_adjustments")
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="approved_cash_adjustments")
+    created_at = models.DateTimeField(auto_now_add=True)
+    approved_at = models.DateTimeField(blank=True, null=True)
+    posted_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["-adjustment_date", "-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.reference} - {self.get_adjustment_type_display()} Rs. {self.amount}"
+
+    @property
+    def is_posted(self):
+        return self.approval_status == "posted"
+
+    @property
+    def adjusted_amount(self):
+        if self.adjustment_type == "cash_increase":
+            return Decimal(str(self.amount))
+        else:  # cash_decrease
+            return -Decimal(str(self.amount))

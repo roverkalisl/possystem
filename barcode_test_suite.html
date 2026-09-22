@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code 128 Barcode Test</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 30px;
+            margin: 20px 0;
+            page-break-inside: avoid;
+        }
+        .title {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .subtitle {
+            font-size: 14px;
+            color: #666;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .barcode-container {
+            text-align: center;
+            border: 2px solid #000;
+            padding: 15px;
+            margin: 20px 0;
+            background: white;
+        }
+        .barcode-container svg {
+            display: block;
+            margin: 0 auto;
+            max-width: 100%;
+            height: auto;
+        }
+        .barcode-value {
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            text-align: center;
+        }
+        .instructions {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+        .metrics {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 20px 0;
+            font-size: 12px;
+            font-family: 'Courier New', monospace;
+        }
+        .metrics div {
+            margin: 5px 0;
+        }
+        @media print {
+            body {
+                background: white;
+                margin: 0;
+                padding: 0;
+            }
+            .test-section {
+                margin: 10mm 0;
+                page-break-inside: avoid;
+            }
+            .instructions {
+                display: none;
+            }
+            .metrics {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="test-section">
+        <div class="title">Code 128 Barcode Test</div>
+        <div class="subtitle">Value: 1000000073</div>
+
+        <div class="instructions">
+            <strong>Instructions for Testing:</strong>
+            <ol>
+                <li>Print this page at 100% scale (no scaling, no "fit to page")</li>
+                <li>Use a reliable barcode scanner to scan each barcode</li>
+                <li>The scanner MUST return exactly: <strong>1000000073</strong></li>
+                <li>If it returns something else (e.g., "1000E00033"), note it as a FAIL</li>
+                <li>Compare results with known-good barcode scanners</li>
+            </ol>
+        </div>
+
+        <div class="barcode-container">
+            <svg xmlns="http://www.w3.org/2000/svg" width="54.450mm" height="18mm" viewBox="0 0 54.450 18" preserveAspectRatio="xMidYMid meet" shape-rendering="crispEdges" role="img" aria-label="Barcode 1000000073"><rect x="0" y="0" width="54.450" height="18" fill="#fff"/><g fill="#000"><rect x="3.300" y="0" width="0.660" height="18"/><rect x="4.290" y="0" width="0.330" height="18"/><rect x="5.280" y="0" width="0.330" height="18"/><rect x="6.930" y="0" width="0.330" height="18"/><rect x="7.920" y="0" width="0.990" height="18"/><rect x="9.570" y="0" width="0.660" height="18"/><rect x="10.560" y="0" width="0.330" height="18"/><rect x="11.550" y="0" width="0.990" height="18"/><rect x="12.870" y="0" width="0.660" height="18"/><rect x="14.190" y="0" width="0.330" height="18"/><rect x="15.180" y="0" width="0.990" height="18"/><rect x="16.500" y="0" width="0.660" height="18"/><rect x="17.820" y="0" width="0.330" height="18"/><rect x="18.810" y="0" width="0.990" height="18"/><rect x="20.130" y="0" width="0.660" height="18"/><rect x="21.450" y="0" width="0.330" height="18"/><rect x="22.440" y="0" width="0.990" height="18"/><rect x="23.760" y="0" width="0.660" height="18"/><rect x="25.080" y="0" width="0.330" height="18"/><rect x="26.070" y="0" width="0.990" height="18"/><rect x="27.390" y="0" width="0.660" height="18"/><rect x="28.710" y="0" width="0.330" height="18"/><rect x="29.700" y="0" width="0.990" height="18"/><rect x="31.020" y="0" width="0.660" height="18"/><rect x="32.340" y="0" width="0.330" height="18"/><rect x="33.330" y="0" width="0.990" height="18"/><rect x="34.650" y="0" width="0.660" height="18"/><rect x="35.970" y="0" width="0.990" height="18"/><rect x="37.290" y="0" width="0.660" height="18"/><rect x="38.280" y="0" width="0.990" height="18"/><rect x="39.600" y="0" width="0.660" height="18"/><rect x="40.920" y="0" width="0.330" height="18"/><rect x="41.580" y="0" width="0.990" height="18"/><rect x="43.230" y="0" width="0.990" height="18"/><rect x="44.550" y="0" width="0.990" height="18"/><rect x="45.870" y="0" width="0.660" height="18"/><rect x="46.860" y="0" width="0.660" height="18"/><rect x="48.510" y="0" width="0.990" height="18"/><rect x="49.830" y="0" width="0.330" height="18"/><rect x="50.490" y="0" width="0.660" height="18"/></g></svg>
+        </div>
+
+        <div class="barcode-value">1000000073</div>
+
+        <div class="metrics">
+            <div><strong>Encoding Details:</strong></div>
+            <div>• Barcode type: Code 128 (Subset B)</div>
+            <div>• Value length: 10 characters</div>
+            <div>• Module width: 0.33 mm</div>
+            <div>• Total modules: 145</div>
+            <div>• Content width: 47.85 mm</div>
+            <div>• Total width (with quiet zones): 54.45 mm</div>
+            <div>• Bar height: 18 mm</div>
+            <div>• Quiet zone: 3.30 mm (10 modules)</div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <div class="title">Code 128 Barcode Test</div>
+        <div class="subtitle">Value: TEST123</div>
+
+        <div class="instructions">
+            <strong>Instructions for Testing:</strong>
+            <ol>
+                <li>Print this page at 100% scale (no scaling, no "fit to page")</li>
+                <li>Use a reliable barcode scanner to scan each barcode</li>
+                <li>The scanner MUST return exactly: <strong>TEST123</strong></li>
+                <li>If it returns something else (e.g., "1000E00033"), note it as a FAIL</li>
+                <li>Compare results with known-good barcode scanners</li>
+            </ol>
+        </div>
+
+        <div class="barcode-container">
+            <svg xmlns="http://www.w3.org/2000/svg" width="43.560mm" height="18mm" viewBox="0 0 43.560 18" preserveAspectRatio="xMidYMid meet" shape-rendering="crispEdges" role="img" aria-label="Barcode TEST123"><rect x="0" y="0" width="43.560" height="18" fill="#fff"/><g fill="#000"><rect x="3.300" y="0" width="0.660" height="18"/><rect x="4.290" y="0" width="0.330" height="18"/><rect x="5.280" y="0" width="0.330" height="18"/><rect x="6.930" y="0" width="0.660" height="18"/><rect x="7.920" y="0" width="0.990" height="18"/><rect x="9.900" y="0" width="0.330" height="18"/><rect x="10.560" y="0" width="0.330" height="18"/><rect x="11.880" y="0" width="0.660" height="18"/><rect x="12.870" y="0" width="0.330" height="18"/><rect x="14.190" y="0" width="0.660" height="18"/><rect x="15.180" y="0" width="0.990" height="18"/><rect x="16.500" y="0" width="0.330" height="18"/><rect x="17.820" y="0" width="0.660" height="18"/><rect x="18.810" y="0" width="0.990" height="18"/><rect x="20.790" y="0" width="0.330" height="18"/><rect x="21.450" y="0" width="0.330" height="18"/><rect x="22.440" y="0" width="0.990" height="18"/><rect x="24.090" y="0" width="0.660" height="18"/><rect x="25.080" y="0" width="0.660" height="18"/><rect x="26.400" y="0" width="0.990" height="18"/><rect x="28.050" y="0" width="0.330" height="18"/><rect x="28.710" y="0" width="0.660" height="18"/><rect x="30.030" y="0" width="0.330" height="18"/><rect x="30.690" y="0" width="0.990" height="18"/><rect x="32.340" y="0" width="0.330" height="18"/><rect x="33.000" y="0" width="0.330" height="18"/><rect x="34.320" y="0" width="1.320" height="18"/><rect x="35.970" y="0" width="0.660" height="18"/><rect x="37.620" y="0" width="0.990" height="18"/><rect x="38.940" y="0" width="0.330" height="18"/><rect x="39.600" y="0" width="0.660" height="18"/></g></svg>
+        </div>
+
+        <div class="barcode-value">TEST123</div>
+
+        <div class="metrics">
+            <div><strong>Encoding Details:</strong></div>
+            <div>• Barcode type: Code 128 (Subset B)</div>
+            <div>• Value length: 7 characters</div>
+            <div>• Module width: 0.33 mm</div>
+            <div>• Total modules: 112</div>
+            <div>• Content width: 36.96 mm</div>
+            <div>• Total width (with quiet zones): 43.56 mm</div>
+            <div>• Bar height: 18 mm</div>
+            <div>• Quiet zone: 3.30 mm (10 modules)</div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <div class="title">Code 128 Barcode Test</div>
+        <div class="subtitle">Value: 123456789012</div>
+
+        <div class="instructions">
+            <strong>Instructions for Testing:</strong>
+            <ol>
+                <li>Print this page at 100% scale (no scaling, no "fit to page")</li>
+                <li>Use a reliable barcode scanner to scan each barcode</li>
+                <li>The scanner MUST return exactly: <strong>123456789012</strong></li>
+                <li>If it returns something else (e.g., "1000E00033"), note it as a FAIL</li>
+                <li>Compare results with known-good barcode scanners</li>
+            </ol>
+        </div>
+
+        <div class="barcode-container">
+            <svg xmlns="http://www.w3.org/2000/svg" width="61.710mm" height="18mm" viewBox="0 0 61.710 18" preserveAspectRatio="xMidYMid meet" shape-rendering="crispEdges" role="img" aria-label="Barcode 123456789012"><rect x="0" y="0" width="61.710" height="18" fill="#fff"/><g fill="#000"><rect x="3.300" y="0" width="0.660" height="18"/><rect x="4.290" y="0" width="0.330" height="18"/><rect x="5.280" y="0" width="0.330" height="18"/><rect x="6.930" y="0" width="0.330" height="18"/><rect x="7.920" y="0" width="0.990" height="18"/><rect x="9.570" y="0" width="0.660" height="18"/><rect x="10.560" y="0" width="0.660" height="18"/><rect x="11.880" y="0" width="0.990" height="18"/><rect x="13.530" y="0" width="0.330" height="18"/><rect x="14.190" y="0" width="0.660" height="18"/><rect x="15.510" y="0" width="0.330" height="18"/><rect x="16.170" y="0" width="0.990" height="18"/><rect x="17.820" y="0" width="0.660" height="18"/><rect x="19.140" y="0" width="0.330" height="18"/><rect x="20.130" y="0" width="0.990" height="18"/><rect x="21.450" y="0" width="0.660" height="18"/><rect x="22.440" y="0" width="0.990" height="18"/><rect x="24.090" y="0" width="0.330" height="18"/><rect x="25.080" y="0" width="0.660" height="18"/><rect x="26.400" y="0" width="0.990" height="18"/><rect x="27.720" y="0" width="0.330" height="18"/><rect x="28.710" y="0" width="0.990" height="18"/><rect x="30.030" y="0" width="0.660" height="18"/><rect x="31.020" y="0" width="0.990" height="18"/><rect x="32.340" y="0" width="0.990" height="18"/><rect x="33.660" y="0" width="0.330" height="18"/><rect x="34.650" y="0" width="0.660" height="18"/><rect x="35.970" y="0" width="0.990" height="18"/><rect x="37.620" y="0" width="0.330" height="18"/><rect x="38.280" y="0" width="0.660" height="18"/><rect x="39.600" y="0" width="0.330" height="18"/><rect x="40.590" y="0" width="0.990" height="18"/><rect x="41.910" y="0" width="0.660" height="18"/><rect x="43.230" y="0" width="0.330" height="18"/><rect x="44.220" y="0" width="0.990" height="18"/><rect x="45.870" y="0" width="0.660" height="18"/><rect x="46.860" y="0" width="0.660" height="18"/><rect x="48.180" y="0" width="0.990" height="18"/><rect x="49.830" y="0" width="0.330" height="18"/><rect x="50.490" y="0" width="0.990" height="18"/><rect x="51.810" y="0" width="0.330" height="18"/><rect x="52.800" y="0" width="0.660" height="18"/><rect x="54.120" y="0" width="0.660" height="18"/><rect x="55.770" y="0" width="0.990" height="18"/><rect x="57.090" y="0" width="0.330" height="18"/><rect x="57.750" y="0" width="0.660" height="18"/></g></svg>
+        </div>
+
+        <div class="barcode-value">123456789012</div>
+
+        <div class="metrics">
+            <div><strong>Encoding Details:</strong></div>
+            <div>• Barcode type: Code 128 (Subset B)</div>
+            <div>• Value length: 12 characters</div>
+            <div>• Module width: 0.33 mm</div>
+            <div>• Total modules: 167</div>
+            <div>• Content width: 55.11 mm</div>
+            <div>• Total width (with quiet zones): 61.71 mm</div>
+            <div>• Bar height: 18 mm</div>
+            <div>• Quiet zone: 3.30 mm (10 modules)</div>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <div class="title">Troubleshooting Guide</div>
+        <p>If the barcode scans correctly, proceed with bulk printing.</p>
+        <p>If the barcode scans incorrectly (scanner returns wrong value):</p>
+        <ol>
+            <li>Verify the barcode rendering - check if bars are clear and distinct</li>
+            <li>Test with multiple barcode scanners (different brands/models)</li>
+            <li>Check if there's a CSS issue scaling the barcode (should print at true mm size)</li>
+            <li>Verify the Code 128 pattern library is correct</li>
+            <li>Check if SVG rendering is corrupting the bar/space ratios</li>
+            <li>Ensure print settings use 100% scale (not "Fit to page")</li>
+        </ol>
+    </div>
+</body>
+</html>

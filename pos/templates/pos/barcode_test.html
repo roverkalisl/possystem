@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>Barcode Test - {{ value }}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 24px; background: #f3f4f6; color: #111; font-family: Arial, sans-serif; }
+        .toolbar { text-align: center; margin-bottom: 20px; }
+        .toolbar button { padding: 8px 20px; cursor: pointer; }
+        .card { max-width: 420px; margin: 0 auto; background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 24px; text-align: center; }
+        .barcode { line-height: 0; margin: 16px 0; }
+        /* No CSS width/height on the svg: it renders at its true physical (mm) size, unstretched. */
+        .human-readable { font-size: 16px; letter-spacing: 2px; font-weight: bold; margin-top: 6px; }
+        .dims { margin-top: 16px; font-size: 12px; color: #555; text-align: left; }
+        .dims div { padding: 2px 0; }
+        .error { color: #b91c1c; font-weight: bold; }
+        @media print {
+            @page { margin: 10mm; }
+            body { background: #fff; padding: 0; }
+            .toolbar, .dims { display: none; }
+            .card { border: none; max-width: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="toolbar">
+        <button type="button" onclick="window.print()">Print</button>
+        <span style="display:block; margin-top:6px; font-size:12px; color:#b91c1c;">
+            Print at 100% scale (disable "Fit to page" / "Shrink to fit").
+        </span>
+    </div>
+    <div class="card">
+        {% if error %}
+            <p class="error">Could not render barcode: {{ error }}</p>
+        {% else %}
+            <div class="barcode">{{ barcode_svg|safe }}</div>
+            <div class="human-readable">{{ value }}</div>
+            <div class="dims">
+                <div><strong>Module width (X-dim):</strong> {{ metrics.module_width_mm }} mm</div>
+                <div><strong>Bar height:</strong> {{ metrics.height_mm }} mm</div>
+                <div><strong>Quiet zone:</strong> {{ metrics.quiet_zone_mm|floatformat:2 }} mm ({{ metrics.quiet_zone_modules }} modules) each side</div>
+                <div><strong>Encoded content width:</strong> {{ metrics.content_width_mm|floatformat:2 }} mm</div>
+                <div><strong>Total barcode width (incl. quiet zones):</strong> {{ metrics.total_width_mm|floatformat:2 }} mm</div>
+                <div><strong>Total modules:</strong> {{ metrics.total_modules }}</div>
+            </div>
+        {% endif %}
+    </div>
+</body>
+</html>

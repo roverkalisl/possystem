@@ -10,12 +10,32 @@ from django.db.models import Sum, Count, Q
 from django.shortcuts import render
 from django.utils import timezone
 
-from .models import Sale
+from .models import Sale, CashAdjustment
 
 
 def can_view_payment_summary(user):
     """Check if user can view payment summary."""
     return user.is_superuser or user.is_staff
+
+
+def get_current_cash_balance():
+    """Calculate current cash balance from sales + posted adjustments."""
+    cash_sales = Sale.objects.filter(
+        payment_method='cash',
+        is_deleted=False
+    ).aggregate(total=Sum('grand_total'))['total'] or Decimal('0')
+
+    adjustments = CashAdjustment.objects.filter(
+        approval_status='posted'
+    ).aggregate(
+        increases=Sum('amount', filter=Q(adjustment_type='cash_increase')),
+        decreases=Sum('amount', filter=Q(adjustment_type='cash_decrease'))
+    )
+
+    increase_total = Decimal(str(adjustments['increases'] or 0))
+    decrease_total = Decimal(str(adjustments['decreases'] or 0))
+
+    return Decimal(str(cash_sales)) + increase_total - decrease_total
 
 
 @login_required
@@ -98,12 +118,16 @@ def payment_summary_dashboard(request):
     # Calculate period grand total
     period_grand_total = sum(period_totals.values())
 
+    # Get current cash balance (includes posted adjustments)
+    current_cash = get_current_cash_balance()
+
     context = {
         'from_date': from_date,
         'to_date': to_date,
         'date_summary': date_summary,
         'period_totals': period_totals,
         'period_grand_total': period_grand_total,
+        'current_cash': current_cash,
     }
 
     return render(request, 'pos/payment_summary_dashboard.html', context)

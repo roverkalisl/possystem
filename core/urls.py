@@ -5,6 +5,7 @@ from pos import cost_analysis_views
 from pos import backup_views
 from pos import payment_summary_views
 from pos import payment_report_views
+from pos import cash_adjustment_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -42,6 +43,11 @@ urlpatterns = [
     path('pos/barcode-lookup/', views.barcode_lookup, name='barcode_lookup'),
     path('pos/payment-summary/', payment_summary_views.payment_summary_dashboard, name='payment_summary_dashboard'),
     path('pos/payment-report/', payment_report_views.payment_report, name='payment_report'),
+    path('pos/cash-adjustment/', cash_adjustment_views.cash_adjustment_list, name='cash_adjustment_list'),
+    path('pos/cash-adjustment/create/', cash_adjustment_views.create_cash_adjustment, name='create_cash_adjustment'),
+    path('pos/cash-adjustment/<int:pk>/', cash_adjustment_views.cash_adjustment_detail, name='cash_adjustment_detail'),
+    path('pos/cash-adjustment/<int:pk>/approve/', cash_adjustment_views.approve_cash_adjustment, name='approve_cash_adjustment'),
+    path('pos/cash-adjustment/<int:pk>/post/', cash_adjustment_views.post_cash_adjustment, name='post_cash_adjustment'),
     path('bank-transactions/', views.bank_transactions, name='bank_transactions'),
     path('bank-transactions/<int:transaction_id>/submit/', views.submit_bank_transaction, name='submit_bank_transaction'),
     path('bank-transactions/<int:transaction_id>/approve/', views.approve_bank_transaction, name='approve_bank_transaction'),

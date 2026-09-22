@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+
+{% block title %}Cash Adjustments{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <div>
+            <h4 class="app-page-title">Cash Adjustments</h4>
+            <p class="text-muted mb-0">Manage cash balance adjustments and approvals.</p>
+        </div>
+        <div>
+            <a href="{% url 'create_cash_adjustment' %}" class="btn btn-dark btn-sm">+ New Adjustment</a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card card-soft">
+                <div class="card-body">
+                    <div class="text-muted small">Current Cash Balance</div>
+                    <div class="fs-5 text-money fw-bold">{{ current_cash|money }}</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mb-3">
+        <div class="btn-group btn-group-sm">
+            <a href="{% url 'cash_adjustment_list' %}" class="btn btn-outline-dark {% if not status_filter %}active{% endif %}">All</a>
+            <a href="?status=draft" class="btn btn-outline-dark {% if status_filter == 'draft' %}active{% endif %}">Draft</a>
+            <a href="?status=pending" class="btn btn-outline-dark {% if status_filter == 'pending' %}active{% endif %}">Pending</a>
+            <a href="?status=approved" class="btn btn-outline-dark {% if status_filter == 'approved' %}active{% endif %}">Approved</a>
+            <a href="?status=posted" class="btn btn-outline-dark {% if status_filter == 'posted' %}active{% endif %}">Posted</a>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Reference</th>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th class="text-end">Amount</th>
+                    <th>Status</th>
+                    <th>Created By</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for adj in adjustments %}
+                <tr>
+                    <td><strong>{{ adj.reference }}</strong></td>
+                    <td>{{ adj.adjustment_date }}</td>
+                    <td>
+                        <span class="badge {% if adj.adjustment_type == 'cash_increase' %}bg-success{% else %}bg-danger{% endif %}">
+                            {{ adj.get_adjustment_type_display }}
+                        </span>
+                    </td>
+                    <td class="text-end text-money fw-bold">{{ adj.amount|money }}</td>
+                    <td>
+                        <span class="badge {% if adj.approval_status == 'draft' %}bg-secondary{% elif adj.approval_status == 'pending' %}bg-warning{% elif adj.approval_status == 'approved' %}bg-info{% elif adj.approval_status == 'posted' %}bg-success{% endif %}">
+                            {{ adj.get_approval_status_display }}
+                        </span>
+                    </td>
+                    <td>{{ adj.created_by.username|default:"--" }}</td>
+                    <td>
+                        <a href="{% url 'cash_adjustment_detail' adj.id %}" class="btn btn-sm btn-outline-dark">View</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="text-center">No cash adjustments found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
