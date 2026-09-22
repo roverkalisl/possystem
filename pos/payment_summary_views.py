@@ -108,7 +108,7 @@ def payment_summary_dashboard(request):
     total_bank_balance = Decimal('0')
 
     for account in bank_accounts:
-        current_balance = account.get_current_balance()
+        current_balance = Decimal(str(account.current_balance or 0))
         total_bank_balance += current_balance
 
         bank_data.append({
