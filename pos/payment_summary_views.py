@@ -21,8 +21,7 @@ def can_view_payment_summary(user):
 def get_current_cash_balance():
     """Calculate current cash balance from sales + posted adjustments."""
     cash_sales = Sale.objects.filter(
-        payment_method='cash',
-        is_deleted=False
+        payment_method='cash'
     ).aggregate(total=Sum('grand_total'))['total'] or Decimal('0')
 
     adjustments = CashAdjustment.objects.filter(

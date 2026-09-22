@@ -41,8 +41,7 @@ def get_current_cash_balance():
     """Calculate current cash balance from sales + approved adjustments."""
     # Sum all sales with payment_method='cash'
     cash_sales = Sale.objects.filter(
-        payment_method='cash',
-        is_deleted=False
+        payment_method='cash'
     ).aggregate(total=Sum('grand_total'))['total'] or Decimal('0')
 
     # Sum all posted cash adjustments
