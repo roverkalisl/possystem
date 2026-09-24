@@ -70,7 +70,7 @@ class BarcodeWorkflowTests(TestCase):
 
         response = self.client.get(reverse("barcode_lookup"), {"barcode": "UNKNOWN"})
         self.assertEqual(response.status_code, 404)
-        self.assertEqual(response.json()["message"], "Barcode not found.")
+        self.assertEqual(response.json()["message"], "Barcode not found. Please check Item Master.")
 
 
 class EmployeeConstructionPayrollTests(TestCase):

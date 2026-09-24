@@ -1774,7 +1774,7 @@ def barcode_lookup(request):
     barcode = (request.GET.get("barcode") or "").strip()
     item = Item.objects.filter(barcode=barcode, is_active=True).select_related("category").first()
     if not item:
-        return JsonResponse({"status": "error", "message": "Barcode not found."}, status=404)
+        return JsonResponse({"status": "error", "message": "Barcode not found. Please check Item Master."}, status=404)
     return JsonResponse({
         "status": "success",
         "item": {
