@@ -28,6 +28,33 @@
         </div>
     </form>
 
+    <div class="row g-3 mb-3">
+        <div class="col-md-3">
+            <div class="card card-soft"><div class="card-body">
+                <div class="text-muted small">Retail Shop Cash Sales</div>
+                <div class="fs-5 text-money">{{ cash_breakdown.retail_cash_sales|money }}</div>
+            </div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-soft"><div class="card-body">
+                <div class="text-muted small">+ Approved Cash Increases</div>
+                <div class="fs-5 text-money">{{ cash_breakdown.cash_increases|money }}</div>
+            </div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-soft"><div class="card-body">
+                <div class="text-muted small">- Approved Cash Decreases</div>
+                <div class="fs-5 text-money">{{ cash_breakdown.cash_decreases|money }}</div>
+            </div></div>
+        </div>
+        <div class="col-md-3">
+            <div class="card card-soft"><div class="card-body">
+                <div class="text-muted small">= Current Retail Shop Cash Balance</div>
+                <div class="fs-5 text-money fw-bold">{{ cash_breakdown.balance|money }}</div>
+            </div></div>
+        </div>
+    </div>
+
     <div class="table-responsive">
         <table class="table table-bordered table-striped bg-white align-middle">
             <thead class="table-dark">

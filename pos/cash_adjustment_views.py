@@ -7,10 +7,14 @@ from datetime import datetime
 from django.contrib.auth.decorators import login_required, user_passes_test
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
-from django.db.models import Sum, Q
 from django.contrib import messages
 
-from .models import CashAdjustment, Sale
+from .models import CashAdjustment
+from .payment_summary_views import (
+    COUNTED_ADJUSTMENT_STATUSES,
+    get_cash_balance_breakdown,
+    get_current_cash_balance,
+)
 
 
 def can_manage_cash_adjustment(user):
@@ -37,27 +41,6 @@ def generate_adjustment_reference():
     return f'CA-{date_str}-{seq:04d}'
 
 
-def get_current_cash_balance():
-    """Calculate current cash balance from sales + approved adjustments."""
-    # Sum all sales with payment_method='cash'
-    cash_sales = Sale.objects.filter(
-        payment_method='cash'
-    ).aggregate(total=Sum('grand_total'))['total'] or Decimal('0')
-
-    # Sum all posted cash adjustments
-    adjustments = CashAdjustment.objects.filter(
-        approval_status='posted'
-    ).aggregate(
-        increases=Sum('amount', filter=Q(adjustment_type='cash_increase')),
-        decreases=Sum('amount', filter=Q(adjustment_type='cash_decrease'))
-    )
-
-    increase_total = Decimal(str(adjustments['increases'] or 0))
-    decrease_total = Decimal(str(adjustments['decreases'] or 0))
-
-    return Decimal(str(cash_sales)) + increase_total - decrease_total
-
-
 @login_required
 @user_passes_test(can_manage_cash_adjustment)
 def cash_adjustment_list(request):
@@ -69,11 +52,12 @@ def cash_adjustment_list(request):
     if status_filter:
         adjustments = adjustments.filter(approval_status=status_filter)
 
-    current_cash = get_current_cash_balance()
+    cash_breakdown = get_cash_balance_breakdown()
 
     context = {
         'adjustments': adjustments,
-        'current_cash': current_cash,
+        'current_cash': cash_breakdown['balance'],
+        'cash_breakdown': cash_breakdown,
         'status_filter': status_filter,
     }
 
@@ -121,8 +105,10 @@ def cash_adjustment_detail(request, pk):
     adjustment = get_object_or_404(CashAdjustment, pk=pk)
     current_cash = get_current_cash_balance()
 
-    # Calculate preview
-    if adjustment.adjustment_type == 'cash_increase':
+    # Approved/posted adjustments are already inside current_cash
+    if adjustment.approval_status in COUNTED_ADJUSTMENT_STATUSES:
+        preview_cash = current_cash
+    elif adjustment.adjustment_type == 'cash_increase':
         preview_cash = current_cash + adjustment.amount
     else:
         preview_cash = current_cash - adjustment.amount

@@ -21,6 +21,7 @@ from .models import (
     ProjectExpense,
     ProjectInvoice,
     ProjectInvoicePayment,
+    CashAdjustment,
     Sale,
     SaleRecovery,
     SalaryAdvance,
@@ -532,3 +533,98 @@ class PayrollProjectIntegrationTests(TestCase):
         self.assertEqual(payroll.total_allowances, Decimal("5000"))
         self.assertEqual(payroll.total_deductions, Decimal("20000"))
         self.assertEqual(payroll.net_salary, Decimal("85000"))
+
+
+class RetailCashBalanceTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_superuser(username="cash_admin", email="cash@example.com", password="12345")
+        self.project = Project.objects.create(project_id="P-CASH", project_name="Cash Test Project")
+        self.seq = 0
+
+    def make_sale(self, amount, sale_type="retail", payment_method="cash", **extra):
+        self.seq += 1
+        return Sale.objects.create(
+            invoice_no=f"INVCB{self.seq:04d}",
+            total=Decimal(amount),
+            grand_total=Decimal(amount),
+            sale_type=sale_type,
+            payment_method=payment_method,
+            created_by=self.user,
+            **extra,
+        )
+
+    def make_adjustment(self, adjustment_type, amount, status):
+        self.seq += 1
+        return CashAdjustment.objects.create(
+            adjustment_date=date(2026, 9, 22),
+            adjustment_type=adjustment_type,
+            amount=Decimal(amount),
+            reason="test",
+            reference=f"CA-TEST-{self.seq:04d}",
+            approval_status=status,
+            created_by=self.user,
+        )
+
+    def balance(self):
+        from .payment_summary_views import get_current_cash_balance
+        return get_current_cash_balance()
+
+    def test_retail_cash_included(self):
+        self.make_sale("50000.00")
+        self.assertEqual(self.balance(), Decimal("50000.00"))
+
+    def test_project_cash_excluded(self):
+        self.make_sale("30000.00", sale_type="project_issue", project=self.project)
+        self.assertEqual(self.balance(), Decimal("0"))
+
+    def test_retail_non_cash_methods_excluded(self):
+        customer = Customer.objects.create(name="Credit Cust", registration_no="R1", credit_limit=Decimal("100000"))
+        self.make_sale("20000.00", payment_method="card", card_last4="1234")
+        self.make_sale("10000.00", payment_method="credit", customer=customer, cheque_number="CH-1")
+        self.make_sale("7000.00", payment_method="bank_transfer", bank_transfer_reference="REF1")
+        self.assertEqual(self.balance(), Decimal("0"))
+
+    def test_spec_example_with_approved_decrease(self):
+        self.make_sale("50000.00")
+        self.make_sale("30000.00", sale_type="project_issue", project=self.project)
+        self.make_sale("20000.00", payment_method="card", card_last4="1234")
+        self.make_adjustment("cash_decrease", "5000.00", "approved")
+        self.assertEqual(self.balance(), Decimal("45000.00"))
+
+    def test_draft_and_pending_adjustments_do_not_affect_balance(self):
+        self.make_sale("1000.00")
+        self.make_adjustment("cash_increase", "500.00", "draft")
+        self.make_adjustment("cash_decrease", "300.00", "pending")
+        self.assertEqual(self.balance(), Decimal("1000.00"))
+
+    def test_approved_and_posted_adjustments_affect_balance(self):
+        self.make_sale("1000.00")
+        self.make_adjustment("cash_increase", "500.00", "approved")
+        self.make_adjustment("cash_increase", "200.00", "posted")
+        self.make_adjustment("cash_decrease", "300.00", "posted")
+        from .payment_summary_views import get_cash_balance_breakdown
+        breakdown = get_cash_balance_breakdown()
+        self.assertEqual(breakdown["retail_cash_sales"], Decimal("1000.00"))
+        self.assertEqual(breakdown["cash_increases"], Decimal("700.00"))
+        self.assertEqual(breakdown["cash_decreases"], Decimal("300.00"))
+        self.assertEqual(breakdown["balance"], Decimal("1400.00"))
+
+    def test_pages_show_breakdown_and_do_not_change_sales(self):
+        self.make_sale("50000.00")
+        self.make_adjustment("cash_decrease", "5000.00", "approved")
+        before = list(Sale.objects.values_list("id", "grand_total", "sale_type", "payment_method"))
+        self.client.force_login(self.user)
+        for name in ("payment_summary_dashboard", "cash_adjustment_list"):
+            response = self.client.get(reverse(name))
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.context["cash_breakdown"]["balance"], Decimal("45000.00"))
+        self.assertEqual(before, list(Sale.objects.values_list("id", "grand_total", "sale_type", "payment_method")))
+
+    def test_detail_preview_does_not_double_count_approved_adjustment(self):
+        self.make_sale("50000.00")
+        adj = self.make_adjustment("cash_decrease", "5000.00", "approved")
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("cash_adjustment_detail", args=[adj.id]))
+        self.assertEqual(response.context["current_cash"], Decimal("45000.00"))
+        self.assertEqual(response.context["preview_cash"], Decimal("45000.00"))
+

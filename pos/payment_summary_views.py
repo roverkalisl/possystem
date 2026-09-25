@@ -18,23 +18,37 @@ def can_view_payment_summary(user):
     return user.is_superuser or user.is_staff
 
 
-def get_current_cash_balance():
-    """Calculate current cash balance from sales + posted adjustments."""
+COUNTED_ADJUSTMENT_STATUSES = ('approved', 'posted')
+
+
+def get_cash_balance_breakdown():
+    """Retail shop cash balance: retail cash sales + approved/posted adjustments."""
     cash_sales = Sale.objects.filter(
+        sale_type='retail',
         payment_method='cash'
-    ).aggregate(total=Sum('grand_total'))['total'] or Decimal('0')
+    ).aggregate(total=Sum('grand_total'))['total']
 
     adjustments = CashAdjustment.objects.filter(
-        approval_status='posted'
+        approval_status__in=COUNTED_ADJUSTMENT_STATUSES
     ).aggregate(
         increases=Sum('amount', filter=Q(adjustment_type='cash_increase')),
         decreases=Sum('amount', filter=Q(adjustment_type='cash_decrease'))
     )
 
-    increase_total = Decimal(str(adjustments['increases'] or 0))
-    decrease_total = Decimal(str(adjustments['decreases'] or 0))
+    retail_cash_sales = Decimal(str(cash_sales or 0))
+    increases = Decimal(str(adjustments['increases'] or 0))
+    decreases = Decimal(str(adjustments['decreases'] or 0))
 
-    return Decimal(str(cash_sales)) + increase_total - decrease_total
+    return {
+        'retail_cash_sales': retail_cash_sales,
+        'cash_increases': increases,
+        'cash_decreases': decreases,
+        'balance': retail_cash_sales + increases - decreases,
+    }
+
+
+def get_current_cash_balance():
+    return get_cash_balance_breakdown()['balance']
 
 
 @login_required
@@ -117,8 +131,7 @@ def payment_summary_dashboard(request):
     # Calculate period grand total
     period_grand_total = sum(period_totals.values())
 
-    # Get current cash balance (includes posted adjustments)
-    current_cash = get_current_cash_balance()
+    cash_breakdown = get_cash_balance_breakdown()
 
     context = {
         'from_date': from_date,
@@ -126,7 +139,8 @@ def payment_summary_dashboard(request):
         'date_summary': date_summary,
         'period_totals': period_totals,
         'period_grand_total': period_grand_total,
-        'current_cash': current_cash,
+        'current_cash': cash_breakdown['balance'],
+        'cash_breakdown': cash_breakdown,
     }
 
     return render(request, 'pos/payment_summary_dashboard.html', context)
