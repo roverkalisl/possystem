@@ -43,6 +43,17 @@
 
         <div class="row g-2 mt-1">
             <div class="col-md-6">
+                <label class="form-label">Company</label>
+                <select name="company" class="form-select form-select-sm">
+                    {% for company in companies %}
+                    <option value="{{ company.id }}" {% if project.company_id == company.id %}selected{% endif %}>{{ company.company_code }} - {{ company.company_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="row g-2 mt-1">
+            <div class="col-md-6">
                 <label class="form-label">Client Name</label>
                 <input type="text" name="client_name" class="form-control form-control-sm" value="{{ project.client_name }}" required>
             </div>

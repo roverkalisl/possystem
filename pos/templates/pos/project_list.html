@@ -31,6 +31,7 @@
                     <th>Project ID</th>
                     <th>Project Name</th>
                     <th>Type</th>
+                    <th>Company</th>
                     <th>Client</th>
                     <th>Location</th>
                     <th>Estimated Value</th>
@@ -46,6 +47,7 @@
                     <td>{{ p.project_id }}</td>
                     <td>{{ p.project_name }}</td>
                     <td>{{ p.get_project_type_display }}</td>
+                    <td>{{ p.company.company_code|default:"-" }}</td>
                     <td>{{ p.client_name }}</td>
                     <td>{{ p.location|default:"-" }}</td>
                     <td class="text-money">{{ p.estimated_value|money }}</td>
@@ -65,7 +67,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="{% if request.user.is_superuser or is_owner %}8{% else %}7{% endif %}" class="text-center">No projects found</td>
+                    <td colspan="{% if request.user.is_superuser or is_owner %}9{% else %}8{% endif %}" class="text-center">No projects found</td>
                 </tr>
                 {% endfor %}
             </tbody>

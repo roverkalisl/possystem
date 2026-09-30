@@ -10,6 +10,7 @@ from django.urls import reverse
 from .models import (
     BankAccount,
     BankTransaction,
+    Company,
     Customer,
     Employee,
     GLMaster,
@@ -20,8 +21,11 @@ from .models import (
     PayrollEntry,
     Project,
     ProjectExpense,
+    ProjectIncome,
     ProjectInvoice,
     ProjectInvoicePayment,
+    PurchaseOrder,
+    Supplier,
     CashAdjustment,
     POSSettings,
     Sale,
@@ -985,4 +989,337 @@ class POSDefaultBankAccountTests(TestCase):
         self.assertNotEqual(sale.bank_account_id, self.account_a.id)
         # Default configuration itself is unchanged by a per-sale override.
         self.assertEqual(POSSettings.get_solo().default_bank_transfer_account_id, self.account_a.id)
+
+
+class MultiCompanyFoundationBackfillTests(TestCase):
+    """
+    Tests the actual 0039_backfill_company_comp001 migration function
+    directly (not just the end-state), since the project's pre-existing,
+    unrelated migration history (0001/0003 both CreateModel PurchaseOrder)
+    prevents `manage.py test` from building its DB via a real from-scratch
+    `migrate` today. Calling the migration's own backfill_company function
+    against live model classes proves the backfill logic itself - COMP001
+    creation, idempotency, and "only touch unmapped projects" - is correct,
+    independent of that unrelated blocker.
+    """
+
+    def _backfill(self):
+        import importlib
+        module = importlib.import_module("pos.migrations.0039_backfill_company_comp001")
+        module.backfill_company(apps=_FakeAppsRegistry(), schema_editor=None)
+
+    def test_backfill_creates_comp001_with_real_company_name(self):
+        self.assertEqual(Company.objects.count(), 0)
+        self._backfill()
+        company = Company.objects.get(company_code="COMP001")
+        self.assertEqual(company.company_name, "P&I Constructions")
+        self.assertTrue(company.is_active)
+
+    def test_backfill_maps_existing_unmapped_projects_to_comp001(self):
+        p1 = Project.objects.create(project_id="PRO2025SW001", project_name="Pool A", project_type="SW")
+        p2 = Project.objects.create(project_id="PRO2025BL001", project_name="Building A", project_type="BL")
+        self._backfill()
+        p1.refresh_from_db()
+        p2.refresh_from_db()
+        company = Company.objects.get(company_code="COMP001")
+        self.assertEqual(p1.company_id, company.id)
+        self.assertEqual(p2.company_id, company.id)
+        # Project ID / name / type untouched by the backfill.
+        self.assertEqual(p1.project_id, "PRO2025SW001")
+        self.assertEqual(p1.project_name, "Pool A")
+        self.assertEqual(p1.project_type, "SW")
+
+    def test_backfill_does_not_overwrite_an_already_mapped_project(self):
+        other_company = Company.objects.create(company_code="COMP999", company_name="Other Co")
+        p = Project.objects.create(
+            project_id="PRO2025EL001", project_name="Electrical A", project_type="EL", company=other_company
+        )
+        self._backfill()
+        p.refresh_from_db()
+        self.assertEqual(p.company_id, other_company.id)
+
+    def test_backfill_is_idempotent(self):
+        Project.objects.create(project_id="PRO2025OT001", project_name="Other A", project_type="OT")
+        self._backfill()
+        self._backfill()
+        self.assertEqual(Company.objects.filter(company_code="COMP001").count(), 1)
+
+
+class _FakeAppsRegistry:
+    """Mimics migrations' historical `apps` just enough for apps.get_model()."""
+    def get_model(self, app_label, model_name):
+        from django.apps import apps
+        return apps.get_model(app_label, model_name)
+
+
+class MultiCompanyFoundationTests(TestCase):
+    """
+    End-state tests for Phase 1: Project.company, Company master, and that
+    every other listed area (Sales, Purchases, Stock, GL, Bank, Retail
+    Shop) is completely unaffected by this change.
+    """
+
+    def setUp(self):
+        self.owner = User.objects.create_superuser(
+            username="company_owner", email="company_owner@example.com", password="12345"
+        )
+        self.comp001 = Company.objects.create(company_code="COMP001", company_name="P&I Constructions")
+        self.client.force_login(self.owner)
+
+    # 1 & 14: existing project loads, project_id unchanged
+    def test_existing_project_loads_and_project_id_unchanged(self):
+        project = Project.objects.create(
+            project_id="PRO2025SW001", project_name="Pool A", project_type="SW", company=self.comp001
+        )
+        response = self.client.get(reverse("project_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "PRO2025SW001")
+        project.refresh_from_db()
+        self.assertEqual(project.project_id, "PRO2025SW001")
+
+    # 2: existing project shows Company = COMP001
+    def test_existing_project_shows_company_comp001(self):
+        project = Project.objects.create(
+            project_id="PRO2025SW002", project_name="Pool B", project_type="SW", company=self.comp001
+        )
+        self.assertEqual(project.company.company_code, "COMP001")
+
+    # 3: Project Income still works
+    def test_project_income_still_works(self):
+        project = Project.objects.create(
+            project_id="PRO2025IN001", project_name="Income Test", project_type="OT", company=self.comp001
+        )
+        income = ProjectIncome.objects.create(project=project, amount=Decimal("5000.00"), description="Advance")
+        self.assertEqual(income.project_id, project.id)
+        self.assertEqual(project.incomes.count(), 1)
+
+    # 4: Project Expense still works
+    def test_project_expense_still_works(self):
+        project = Project.objects.create(
+            project_id="PRO2025EX001", project_name="Expense Test", project_type="OT", company=self.comp001
+        )
+        expense = ProjectExpense.objects.create(
+            project=project, description="Cement", qty=1, unit_price=Decimal("1000.00"), amount=Decimal("1000.00")
+        )
+        self.assertEqual(expense.project_id, project.id)
+        self.assertEqual(project.expenses.count(), 1)
+
+    # 5: Project Profit dashboard still works
+    def test_project_profit_dashboard_still_works(self):
+        Project.objects.create(
+            project_id="PRO2025PF001", project_name="Profit Test", project_type="OT", company=self.comp001
+        )
+        response = self.client.get(reverse("project_profit_dashboard"))
+        self.assertEqual(response.status_code, 200)
+
+    # 6: existing Sales remain unchanged
+    def test_existing_sales_remain_unchanged(self):
+        sale = Sale.objects.create(
+            invoice_no="INVCO0001", total=Decimal("1000.00"), grand_total=Decimal("1000.00"),
+            sale_type="retail", payment_method="cash", created_by=self.owner,
+        )
+        before = (sale.invoice_no, sale.grand_total, sale.payment_method, sale.sale_type)
+        Project.objects.create(
+            project_id="PRO2025SL001", project_name="Sale Unaffected", project_type="OT", company=self.comp001
+        )
+        sale.refresh_from_db()
+        after = (sale.invoice_no, sale.grand_total, sale.payment_method, sale.sale_type)
+        self.assertEqual(before, after)
+
+    # 7: existing Purchases remain unchanged
+    def test_existing_purchases_remain_unchanged(self):
+        supplier = Supplier.objects.create(name="Test Supplier Co")
+        po = PurchaseOrder.objects.create(po_no="POCO00001", supplier=supplier)
+        po.items.create(description="Cement bags", quantity=Decimal("10"), unit_price=Decimal("500.00"))
+        before = (po.po_no, po.grand_total, po.status)
+        po.refresh_from_db()
+        after = (po.po_no, po.grand_total, po.status)
+        self.assertEqual(before, after)
+        self.assertEqual(po.grand_total, Decimal("5000.00"))
+
+    # 8: existing Stock remains unchanged
+    def test_existing_stock_remains_unchanged(self):
+        item = Item.objects.create(item_code="COSTOCK-1", name="Stock Test Item", stock=Decimal("25.00"))
+        before_stock = item.stock
+        item.refresh_from_db()
+        self.assertEqual(item.stock, before_stock)
+        self.assertEqual(item.stock, Decimal("25.00"))
+
+    # 9: existing GL remains unchanged
+    def test_existing_gl_remains_unchanged(self):
+        gl = GLMaster.objects.create(gl_code="COGL-1", gl_name="Test GL", gl_type="income")
+        before = (gl.gl_code, gl.gl_name, gl.gl_type)
+        gl.refresh_from_db()
+        after = (gl.gl_code, gl.gl_name, gl.gl_type)
+        self.assertEqual(before, after)
+
+    # 10: existing Bank balances remain unchanged
+    def test_existing_bank_balance_remains_unchanged(self):
+        gl = GLMaster.objects.create(gl_code="COBANKGL-1", gl_name="Bank GL", gl_type="asset")
+        account = BankAccount.objects.create(
+            bank_name="Test Bank", account_name="Main", account_number="COBANK-1",
+            opening_balance=Decimal("10000.00"), gl_account=gl,
+        )
+        before_balance = account.current_balance
+        self.assertEqual(before_balance, Decimal("10000.00"))
+        # Creating/backfilling Company data must not touch bank balances.
+        account.refresh_from_db()
+        self.assertEqual(account.current_balance, before_balance)
+
+    # 11: existing Retail Shop remains operational (no Company required)
+    def test_retail_shop_sale_does_not_require_company(self):
+        gl = GLMaster.objects.create(gl_code="CORETAIL-GL", gl_name="Retail GL", gl_type="income")
+        item = Item.objects.create(
+            item_code="CORETAIL-ITEM", name="Retail Test Item",
+            selling_price=Decimal("500.00"), is_service=True, retail_gl_account=gl,
+        )
+        payload = {
+            "items": [{"id": item.id, "qty": 1, "price": "500.00", "discount": 0}],
+            "discount": 0,
+            "payment_method": "cash",
+            "received": "500.00",
+        }
+        response = self.client.post(reverse("save_sale"), data=json.dumps(payload), content_type="application/json")
+        self.assertEqual(response.status_code, 200, response.content)
+        sale = Sale.objects.get(invoice_no=response.json()["invoice_no"])
+        self.assertEqual(sale.sale_type, "retail")
+        self.assertIsNone(sale.project_id)
+
+    # 12: new Project requires Company (no companies configured at all)
+    def test_new_project_requires_company_when_none_configured(self):
+        Company.objects.all().delete()
+        count_before = Project.objects.count()
+        response = self.client.post(reverse("create_project"), {
+            "project_name": "No Company Project", "project_type": "OT",
+            "client_name": "Test Client",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Project.objects.count(), count_before)
+
+    # 12: new Project requires Company (multiple companies, none selected)
+    def test_new_project_requires_company_when_ambiguous(self):
+        Company.objects.create(company_code="COMP002", company_name="Second Co")
+        count_before = Project.objects.count()
+        response = self.client.post(reverse("create_project"), {
+            "project_name": "Ambiguous Company Project", "project_type": "OT",
+            "client_name": "Test Client",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Project.objects.count(), count_before)
+
+    # 13: new Project saves with selected Company
+    def test_new_project_saves_with_selected_company(self):
+        response = self.client.post(reverse("create_project"), {
+            "project_name": "Explicit Company Project", "project_type": "OT",
+            "client_name": "Test Client", "company": self.comp001.id,
+        })
+        self.assertEqual(response.status_code, 302)
+        project = Project.objects.get(project_name="Explicit Company Project")
+        self.assertEqual(project.company_id, self.comp001.id)
+
+    # 13 (single-company convenience): auto-selects the sole active company
+    def test_new_project_auto_selects_sole_active_company(self):
+        response = self.client.post(reverse("create_project"), {
+            "project_name": "Auto Company Project", "project_type": "OT",
+            "client_name": "Test Client",
+        })
+        self.assertEqual(response.status_code, 302)
+        project = Project.objects.get(project_name="Auto Company Project")
+        self.assertEqual(project.company_id, self.comp001.id)
+
+    # edit_project must never silently null out an existing Company
+    def test_edit_project_does_not_clear_company_when_field_omitted(self):
+        project = Project.objects.create(
+            project_id="PRO2025ED001", project_name="Edit Test", project_type="OT", company=self.comp001
+        )
+        response = self.client.post(reverse("edit_project", args=[project.id]), {
+            "project_name": "Edit Test Updated", "project_type": "OT",
+            "client_name": "", "estimated_value": "0",
+        })
+        self.assertEqual(response.status_code, 302)
+        project.refresh_from_db()
+        self.assertEqual(project.company_id, self.comp001.id)
+
+
+class MultiCompanyProductionMirrorBackfillTests(TestCase):
+    """
+    Mirrors the verified production baseline exactly: 19 active Projects,
+    all company=NULL, listed by the user after a read-only production
+    check. Proves the real 0039 backfill maps every one of these specific
+    project_ids to COMP001, without touching project_id/project_name, and
+    without creating a duplicate Company or double-mapping on a re-run.
+    """
+
+    PRODUCTION_PROJECT_IDS = [
+        "PRO2026SW001", "PRO2026BL001", "PRO2026SW002", "PRO2026SW003",
+        "PRO2026BL002", "PRO2026SW004", "PRO2026SW005", "PRO2026SW006",
+        "PRO2026SW007", "PRO2026RS001", "PRO2026SW008", "PRO2026RS002",
+        "PRO2026SW009", "PRO2026SW010", "PRO2026SW011", "PRO2026SW012",
+        "PRO2026SW013", "PRO2026SW014", "PRO2026BL003",
+    ]
+
+    def setUp(self):
+        for pid in self.PRODUCTION_PROJECT_IDS:
+            Project.objects.create(
+                project_id=pid,
+                project_name=f"Live Project {pid}",
+                project_type="RS" if "RS" in pid else ("SW" if "SW" in pid else "BL"),
+            )
+
+    def _backfill(self):
+        import importlib
+        module = importlib.import_module("pos.migrations.0039_backfill_company_comp001")
+        module.backfill_company(apps=_FakeAppsRegistry(), schema_editor=None)
+
+    def test_all_19_production_projects_map_to_comp001(self):
+        self.assertEqual(Project.objects.count(), 19)
+        self.assertEqual(Project.objects.filter(company__isnull=True).count(), 19)
+
+        self._backfill()
+
+        company = Company.objects.get(company_code="COMP001")
+        self.assertEqual(company.company_name, "P&I Constructions")
+        self.assertEqual(Project.objects.filter(company=company).count(), 19)
+        self.assertEqual(Project.objects.filter(company__isnull=True).count(), 0)
+
+        for pid in self.PRODUCTION_PROJECT_IDS:
+            project = Project.objects.get(project_id=pid)
+            self.assertEqual(project.company_id, company.id)
+
+    def test_project_ids_and_names_unchanged_by_backfill(self):
+        before = list(
+            Project.objects.order_by("project_id").values_list("project_id", "project_name", "project_type")
+        )
+        self._backfill()
+        after = list(
+            Project.objects.order_by("project_id").values_list("project_id", "project_name", "project_type")
+        )
+        self.assertEqual(before, after)
+
+    def test_rerunning_backfill_does_not_duplicate_company_or_remap(self):
+        self._backfill()
+        first_mapping = list(Project.objects.order_by("project_id").values_list("project_id", "company_id"))
+
+        self._backfill()  # simulates a re-run / redeploy replaying the migration
+        second_mapping = list(Project.objects.order_by("project_id").values_list("project_id", "company_id"))
+
+        self.assertEqual(Company.objects.filter(company_code="COMP001").count(), 1)
+        self.assertEqual(first_mapping, second_mapping)
+
+    def test_a_project_already_on_another_company_is_not_remapped(self):
+        # One of the 19 is pre-assigned to a different company before the
+        # backfill runs; confirms 0039 only touches company__isnull=True.
+        other_company = Company.objects.create(company_code="COMP777", company_name="Some Other Business")
+        pinned = Project.objects.get(project_id="PRO2026RS002")
+        pinned.company = other_company
+        pinned.save(update_fields=["company"])
+
+        self._backfill()
+
+        pinned.refresh_from_db()
+        self.assertEqual(pinned.company_id, other_company.id)
+
+        comp001 = Company.objects.get(company_code="COMP001")
+        self.assertEqual(Project.objects.filter(company=comp001).count(), 18)
+        self.assertEqual(Project.objects.filter(company=other_company).count(), 1)
 

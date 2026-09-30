@@ -33,7 +33,14 @@ from .models import (
     BankTransaction,
     BankLedgerEntry,
     BankGLEntry,
+    Company,
 )
+
+
+@admin.register(Company)
+class CompanyAdmin(admin.ModelAdmin):
+    list_display = ['company_code', 'company_name', 'is_active', 'created_at']
+    search_fields = ['company_code', 'company_name']
 
 
 # Logging Models

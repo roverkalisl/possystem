@@ -32,6 +32,7 @@ from .models import (
     BackupRecord, BackupSettings,
     BankAccount, BankTransaction, BankLedgerEntry,
     POSSettings,
+    Company,
 )
 from .backup_engine import compute_next_scheduled
 
@@ -2257,13 +2258,31 @@ def create_project(request):
         messages.error(request, "Only owner can create projects")
         return redirect("dashboard")
 
+    companies = Company.objects.filter(is_active=True).order_by("company_code")
+
     if request.method == "POST":
         project_type = request.POST.get("project_type")
+
+        company_id = request.POST.get("company") or None
+        if not company_id and companies.count() == 1:
+            # Single-company mode: auto-select the only active company so
+            # existing single-company workflows keep working without the
+            # cashier/owner having to pick from a one-item dropdown.
+            company_id = companies.first().id
+
+        if not company_id:
+            messages.error(request, "Company is required to create a project.")
+            return render(request, "pos/create_project.html", {
+                "gl_accounts": GLMaster.objects.filter(is_active=True).order_by("gl_code"),
+                "employees": Employee.objects.filter(is_active=True).order_by("full_name"),
+                "companies": companies,
+            })
 
         Project.objects.create(
             project_id=generate_project_id(project_type),
             project_name=request.POST.get("project_name"),
             project_type=project_type,
+            company_id=company_id,
             client_name=request.POST.get("client_name"),
             location=request.POST.get("location"),
             estimated_value=request.POST.get("estimated_value") or 0,
@@ -2280,6 +2299,7 @@ def create_project(request):
     return render(request, "pos/create_project.html", {
         "gl_accounts": GLMaster.objects.filter(is_active=True).order_by("gl_code"),
         "employees": Employee.objects.filter(is_active=True).order_by("full_name"),
+        "companies": companies,
     })
 
 
@@ -2289,6 +2309,7 @@ def edit_project(request, project_id):
     project_types = Project.PROJECT_TYPE_CHOICES
     gl_accounts = GLMaster.objects.filter(is_active=True).order_by("gl_code")
     employees = Employee.objects.filter(is_active=True).order_by("full_name")
+    companies = Company.objects.filter(is_active=True).order_by("company_code")
 
     if request.method == "POST":
         project.project_name = (request.POST.get("project_name") or "").strip()
@@ -2297,6 +2318,12 @@ def edit_project(request, project_id):
         project.location = (request.POST.get("location") or "").strip()
         project.estimated_value = to_decimal(request.POST.get("estimated_value"))
         project.status = request.POST.get("status") or project.status
+        # Company is only changed if a value was submitted, so an older
+        # form render or a partial POST can never silently null out an
+        # existing project's Company assignment.
+        submitted_company_id = request.POST.get("company")
+        if submitted_company_id:
+            project.company_id = submitted_company_id
         project.default_labour_gl_account_id = request.POST.get("default_labour_gl_account") or None
         project.default_cost_gl_account_id = request.POST.get("default_cost_gl_account") or None
         project.default_supervisor_id = request.POST.get("default_supervisor") or None
@@ -2312,6 +2339,7 @@ def edit_project(request, project_id):
         "project_types": project_types,
         "gl_accounts": gl_accounts,
         "employees": employees,
+        "companies": companies,
     })
 
 

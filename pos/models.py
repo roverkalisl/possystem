@@ -29,6 +29,34 @@ AUTO_DEDUCTION_TAG = "[AUTO]"
 # =========================
 # MASTER TABLES
 # =========================
+class Company(models.Model):
+    """
+    Multi-Company foundation (Phase 1). Single row (COMP001) today; Project
+    is the only model with a direct Company FK — everything else that is
+    project-scoped (ProjectExpense, ProjectIncome, ProjectInvoice, etc.)
+    derives its Company transitively through Project, per design. Retail
+    Shop transactions (Sale, etc.) are not yet Company-scoped and are
+    unaffected by this model.
+    """
+    company_code = models.CharField(max_length=20, unique=True)
+    company_name = models.CharField(max_length=255)
+    address = models.TextField(blank=True, null=True)
+    phone = models.CharField(max_length=30, blank=True, null=True)
+    email = models.EmailField(blank=True, null=True)
+    registration_no = models.CharField(max_length=100, blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["company_code"]
+        verbose_name = "Company"
+        verbose_name_plural = "Companies"
+
+    def __str__(self):
+        return f"{self.company_code} - {self.company_name}"
+
+
 class Category(models.Model):
     name = models.CharField(max_length=100, unique=True)
     description = models.TextField(blank=True, null=True)
@@ -997,6 +1025,13 @@ class Project(models.Model):
     project_id = models.CharField(max_length=30, unique=True)
     project_name = models.CharField(max_length=255)
     project_type = models.CharField(max_length=10, choices=PROJECT_TYPE_CHOICES)
+    company = models.ForeignKey(
+        "Company",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="projects",
+    )
     client_name = models.CharField(max_length=255, blank=True, null=True)
     location = models.CharField(max_length=255, blank=True, null=True)
     estimated_value = models.DecimalField(max_digits=14, decimal_places=2, default=0)
