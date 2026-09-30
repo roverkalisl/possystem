@@ -3350,41 +3350,17 @@ def add_project_transfer(request):
 # =========================
 # PROJECT PROFIT
 # =========================
-@user_passes_test(can_use_project)
-def project_profit_dashboard(request):
-    from_date = request.GET.get("from_date")
-    to_date = request.GET.get("to_date")
-    project_id = request.GET.get("project_id")
-    project_type = request.GET.get("project_type")
-    status = request.GET.get("status")
+def compute_project_profit_rows(projects, from_date=None, to_date=None):
+    """
+    Single source of truth for per-project Income / Expense / Cost / Profit,
+    used by both project_profit_dashboard and company_dashboard. Do not
+    duplicate this loop elsewhere - extend it here if a new consumer needs
+    the same figures.
 
-    if "company_id" in request.GET:
-        # User explicitly chose a filter this request - including
-        # explicitly choosing "All Companies" (submitted as empty).
-        company_id = request.GET.get("company_id") or None
-    else:
-        # No filter submitted yet (first load / other filters changed
-        # without touching Company) - default to the session's active
-        # Company, same fallback rules as everywhere else in Phase 2.2.
-        active_company = get_active_company(request)
-        company_id = active_company.id if active_company else None
-
-    all_active_projects = Project.objects.filter(is_active=True).order_by("-created_at")
-
-    projects = all_active_projects
-    if project_id:
-        projects = projects.filter(id=project_id)
-    if project_type:
-        projects = projects.filter(project_type=project_type)
-    if status:
-        projects = projects.filter(status=status)
-    if company_id:
-        projects = projects.filter(company_id=company_id)
-
-    project_dropdown_options = (
-        all_active_projects.filter(company_id=company_id) if company_id else all_active_projects
-    )
-
+    Returns (project_rows, grand_totals) where grand_totals has keys:
+    income, direct_expense, returns_credit, petty_cash, special_cost_transfer,
+    net_expense, profit.
+    """
     project_rows = []
 
     for project in projects:
@@ -3431,13 +3407,62 @@ def project_profit_dashboard(request):
             "profit": profit,
         })
 
-    grand_income = sum((row["total_income"] for row in project_rows), Decimal("0"))
-    grand_direct_expense = sum((row["direct_expense"] for row in project_rows), Decimal("0"))
-    grand_returns_credit = sum((row["returns_credit"] for row in project_rows), Decimal("0"))
-    grand_petty_cash = sum((row["petty_cash_expense"] for row in project_rows), Decimal("0"))
-    grand_special_cost_transfer = sum((row["special_cost_transfer"] for row in project_rows), Decimal("0"))
-    grand_net_expense = sum((row["net_expense"] for row in project_rows), Decimal("0"))
-    grand_profit = sum((row["profit"] for row in project_rows), Decimal("0"))
+    grand_totals = {
+        "income": sum((row["total_income"] for row in project_rows), Decimal("0")),
+        "direct_expense": sum((row["direct_expense"] for row in project_rows), Decimal("0")),
+        "returns_credit": sum((row["returns_credit"] for row in project_rows), Decimal("0")),
+        "petty_cash": sum((row["petty_cash_expense"] for row in project_rows), Decimal("0")),
+        "special_cost_transfer": sum((row["special_cost_transfer"] for row in project_rows), Decimal("0")),
+        "net_expense": sum((row["net_expense"] for row in project_rows), Decimal("0")),
+        "profit": sum((row["profit"] for row in project_rows), Decimal("0")),
+    }
+
+    return project_rows, grand_totals
+
+
+@user_passes_test(can_use_project)
+def project_profit_dashboard(request):
+    from_date = request.GET.get("from_date")
+    to_date = request.GET.get("to_date")
+    project_id = request.GET.get("project_id")
+    project_type = request.GET.get("project_type")
+    status = request.GET.get("status")
+
+    if "company_id" in request.GET:
+        # User explicitly chose a filter this request - including
+        # explicitly choosing "All Companies" (submitted as empty).
+        company_id = request.GET.get("company_id") or None
+    else:
+        # No filter submitted yet (first load / other filters changed
+        # without touching Company) - default to the session's active
+        # Company, same fallback rules as everywhere else in Phase 2.2.
+        active_company = get_active_company(request)
+        company_id = active_company.id if active_company else None
+
+    all_active_projects = Project.objects.filter(is_active=True).order_by("-created_at")
+
+    projects = all_active_projects
+    if project_id:
+        projects = projects.filter(id=project_id)
+    if project_type:
+        projects = projects.filter(project_type=project_type)
+    if status:
+        projects = projects.filter(status=status)
+    if company_id:
+        projects = projects.filter(company_id=company_id)
+
+    project_dropdown_options = (
+        all_active_projects.filter(company_id=company_id) if company_id else all_active_projects
+    )
+
+    project_rows, grand_totals = compute_project_profit_rows(projects, from_date, to_date)
+    grand_income = grand_totals["income"]
+    grand_direct_expense = grand_totals["direct_expense"]
+    grand_returns_credit = grand_totals["returns_credit"]
+    grand_petty_cash = grand_totals["petty_cash"]
+    grand_special_cost_transfer = grand_totals["special_cost_transfer"]
+    grand_net_expense = grand_totals["net_expense"]
+    grand_profit = grand_totals["profit"]
 
     return render(request, "pos/project_profit_dashboard.html", {
         "project_rows": project_rows,
@@ -3458,6 +3483,58 @@ def project_profit_dashboard(request):
         "companies": Company.objects.filter(is_active=True).order_by("company_code"),
         "project_type_choices": Project.PROJECT_TYPE_CHOICES,
         "status_choices": Project.STATUS_CHOICES,
+    })
+
+
+# =========================
+# COMPANY DASHBOARD (Phase 3)
+# =========================
+@user_passes_test(can_use_project)
+def company_dashboard(request):
+    """
+    Company-specific summary: Projects / Income / Expenses / Cost / Profit
+    / Profit % for the currently active Company (Phase 2.2 session
+    context). Reuses compute_project_profit_rows() - the exact same
+    calculation as project_profit_dashboard - so the two reports always
+    agree for the same Company/date range. Never aggregates across
+    Companies; if none is active, it asks for a selection instead of
+    guessing.
+    """
+    active_company = get_active_company(request)
+    from_date = request.GET.get("from_date")
+    to_date = request.GET.get("to_date")
+
+    if not active_company:
+        return render(request, "pos/company_dashboard.html", {
+            "active_company": None,
+            "from_date": from_date,
+            "to_date": to_date,
+        })
+
+    projects = Project.objects.filter(is_active=True, company=active_company).order_by("-created_at")
+    project_rows, grand_totals = compute_project_profit_rows(projects, from_date, to_date)
+
+    grand_income = grand_totals["income"]
+    grand_cost = grand_totals["net_expense"]
+    grand_profit = grand_totals["profit"]
+    profit_percent = (grand_profit / grand_income * Decimal("100")) if grand_income else Decimal("0")
+
+    for row in project_rows:
+        row["profit_percent"] = (
+            (row["profit"] / row["total_income"] * Decimal("100")) if row["total_income"] else Decimal("0")
+        )
+
+    return render(request, "pos/company_dashboard.html", {
+        "active_company": active_company,
+        "from_date": from_date,
+        "to_date": to_date,
+        "total_projects": projects.count(),
+        "project_rows": project_rows,
+        "grand_income": grand_income,
+        "grand_expenses": grand_totals["direct_expense"],
+        "grand_cost": grand_cost,
+        "grand_profit": grand_profit,
+        "profit_percent": profit_percent,
     })
 
 

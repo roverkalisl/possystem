@@ -20,6 +20,7 @@ from .models import (
     PayrollDeduction,
     PayrollEntry,
     Project,
+    ProjectCostActual,
     ProjectExpense,
     ProjectIncome,
     ProjectInvoice,
@@ -1688,4 +1689,199 @@ class Phase22CompanyManagementTests(TestCase):
         from django.urls import NoReverseMatch
         with self.assertRaises(NoReverseMatch):
             reverse("delete_company")
+
+
+class Phase3CompanyDashboardTests(TestCase):
+    """
+    Phase 3: Company Dashboard. Reuses compute_project_profit_rows() -
+    the exact same helper project_profit_dashboard now calls - so this
+    class also directly cross-checks its numbers against that report.
+    """
+
+    def setUp(self):
+        self.owner = User.objects.create_superuser(
+            username="phase3_owner", email="phase3_owner@example.com", password="12345"
+        )
+        self.comp001 = Company.objects.create(company_code="COMP001", company_name="P&I Constructions")
+        self.comp002 = Company.objects.create(company_code="COMP002", company_name="Second Business")
+
+        self.p1 = Project.objects.create(
+            project_id="P3P001", project_name="Comp001 Project", project_type="OT", company=self.comp001
+        )
+        self.p2 = Project.objects.create(
+            project_id="P3P002", project_name="Comp002 Project", project_type="OT", company=self.comp002
+        )
+
+        ProjectExpense.objects.create(
+            project=self.p1, description="P1 cost", qty=1, unit_price=Decimal("1000.00"),
+            amount=Decimal("1000.00"), expense_date=date(2026, 3, 15),
+        )
+        inv1 = ProjectInvoice.objects.create(project=self.p1, total_amount=Decimal("3000.00"))
+        ProjectInvoicePayment.objects.create(invoice=inv1, amount=Decimal("3000.00"), payment_date=date(2026, 3, 20))
+
+        ProjectExpense.objects.create(
+            project=self.p2, description="P2 cost", qty=1, unit_price=Decimal("500.00"),
+            amount=Decimal("500.00"), expense_date=date(2026, 3, 15),
+        )
+        inv2 = ProjectInvoice.objects.create(project=self.p2, total_amount=Decimal("1500.00"))
+        ProjectInvoicePayment.objects.create(invoice=inv2, amount=Decimal("1500.00"), payment_date=date(2026, 3, 20))
+
+        self.client.force_login(self.owner)
+
+    def _switch_to(self, company):
+        self.client.post(reverse("switch_active_company"), {"company_id": company.id})
+
+    def _dashboard(self, **params):
+        response = self.client.get(reverse("company_dashboard"), params)
+        self.assertEqual(response.status_code, 200)
+        return response.context
+
+    def _profit_report(self, **params):
+        response = self.client.get(reverse("project_profit_dashboard"), params)
+        self.assertEqual(response.status_code, 200)
+        return response.context
+
+    # A & C: COMP001 dashboard returns exactly its Projects, correct count
+    def test_comp001_dashboard_returns_exactly_its_projects(self):
+        self._switch_to(self.comp001)
+        ctx = self._dashboard()
+        self.assertEqual(ctx["total_projects"], 1)
+        project_ids = [row["project"].id for row in ctx["project_rows"]]
+        self.assertEqual(project_ids, [self.p1.id])
+
+    # B: excludes another Company's Projects
+    def test_dashboard_excludes_other_company_projects(self):
+        self._switch_to(self.comp001)
+        ctx = self._dashboard()
+        project_ids = [row["project"].id for row in ctx["project_rows"]]
+        self.assertNotIn(self.p2.id, project_ids)
+
+    # D, E, F: Income / Cost / Profit exactly match the Project Profit report
+    def test_income_cost_profit_match_project_profit_report(self):
+        self._switch_to(self.comp001)
+        dash_ctx = self._dashboard()
+        report_ctx = self._profit_report(company_id=self.comp001.id)
+
+        self.assertEqual(dash_ctx["grand_income"], report_ctx["grand_income"])
+        self.assertEqual(dash_ctx["grand_cost"], report_ctx["grand_net_expense"])
+        self.assertEqual(dash_ctx["grand_profit"], report_ctx["grand_profit"])
+
+        self.assertEqual(dash_ctx["grand_income"], Decimal("3000.00"))
+        self.assertEqual(dash_ctx["grand_cost"], Decimal("1000.00"))
+        self.assertEqual(dash_ctx["grand_profit"], Decimal("2000.00"))
+
+    # G: Profit % is derived purely from the reused income/profit figures
+    # (no prior Profit % existed anywhere in the system to "match" against -
+    # this is the obvious standard ratio computed only from those two
+    # already-reused numbers, not a new independent calculation).
+    def test_profit_percent_derived_from_reused_income_and_profit(self):
+        self._switch_to(self.comp001)
+        ctx = self._dashboard()
+        expected = (ctx["grand_profit"] / ctx["grand_income"] * Decimal("100"))
+        self.assertEqual(ctx["profit_percent"], expected)
+        self.assertAlmostEqual(float(ctx["profit_percent"]), 66.666666, places=3)
+
+    # H: From/To date filter works, using the existing date-field logic
+    def test_date_filter_excludes_out_of_range_transactions(self):
+        self._switch_to(self.comp001)
+        # Add an expense outside the March window.
+        ProjectExpense.objects.create(
+            project=self.p1, description="Later cost", qty=1, unit_price=Decimal("400.00"),
+            amount=Decimal("400.00"), expense_date=date(2026, 6, 1),
+        )
+        ctx_filtered = self._dashboard(from_date="2026-03-01", to_date="2026-03-31")
+        self.assertEqual(ctx_filtered["grand_cost"], Decimal("1000.00"))  # June expense excluded
+
+        ctx_unfiltered = self._dashboard()
+        self.assertEqual(ctx_unfiltered["grand_cost"], Decimal("1400.00"))  # both included
+
+    # I: empty Company (no Projects) is safe - zero values, no errors
+    def test_empty_company_returns_zero_values_safely(self):
+        empty_company = Company.objects.create(company_code="COMP003", company_name="Empty Co")
+        self._switch_to(empty_company)
+        ctx = self._dashboard()
+        self.assertEqual(ctx["total_projects"], 0)
+        self.assertEqual(ctx["grand_income"], Decimal("0"))
+        self.assertEqual(ctx["grand_profit"], Decimal("0"))
+        self.assertEqual(ctx["profit_percent"], Decimal("0"))
+        self.assertEqual(list(ctx["project_rows"]), [])
+        response = self.client.get(reverse("company_dashboard"))
+        self.assertContains(response, "No projects found for this company.")
+
+    # I (continued): a Project with zero transactions is also safe
+    def test_project_with_no_transactions_shows_zero_row(self):
+        empty_company = Company.objects.create(company_code="COMP004", company_name="Quiet Co")
+        Project.objects.create(
+            project_id="P3P003", project_name="No Activity", project_type="OT", company=empty_company
+        )
+        self._switch_to(empty_company)
+        ctx = self._dashboard()
+        self.assertEqual(ctx["total_projects"], 1)
+        self.assertEqual(ctx["project_rows"][0]["total_income"], Decimal("0"))
+        self.assertEqual(ctx["project_rows"][0]["profit_percent"], Decimal("0"))
+
+    # J: switching active Company changes dashboard scope
+    def test_switching_company_changes_dashboard_scope(self):
+        self._switch_to(self.comp001)
+        ctx1 = self._dashboard()
+        self.assertEqual([r["project"].id for r in ctx1["project_rows"]], [self.p1.id])
+
+        self._switch_to(self.comp002)
+        ctx2 = self._dashboard()
+        self.assertEqual([r["project"].id for r in ctx2["project_rows"]], [self.p2.id])
+        self.assertEqual(ctx2["grand_income"], Decimal("1500.00"))
+
+    # No active Company at all -> asks for a selection, never aggregates
+    def test_no_active_company_does_not_aggregate_everything(self):
+        response = self.client.get(reverse("company_dashboard"))
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.context["active_company"])
+        self.assertNotIn("project_rows", response.context)
+
+    # K: existing Project values are unchanged
+    def test_existing_project_values_unchanged(self):
+        before = (self.p1.project_id, self.p1.project_name, self.p1.project_type, self.p1.company_id)
+        self._switch_to(self.comp001)
+        self._dashboard()
+        self._dashboard(from_date="2026-01-01", to_date="2026-12-31")
+        self.p1.refresh_from_db()
+        after = (self.p1.project_id, self.p1.project_name, self.p1.project_type, self.p1.company_id)
+        self.assertEqual(before, after)
+
+    # L: existing ProjectExpense / ProjectIncome / ProjectCostActual unchanged
+    def test_existing_child_transaction_values_unchanged(self):
+        gl = GLMaster.objects.create(gl_code="P3GL-1", gl_name="Cost GL", gl_type="expense")
+        income_entry = ProjectIncome.objects.create(
+            project=self.p1, amount=Decimal("750.00"), description="Misc income"
+        )
+        cost_actual = ProjectCostActual.objects.create(
+            project=self.p1, gl_account=gl, source_type="project_expense",
+            source_id="1", transaction_date=date(2026, 3, 15), amount=Decimal("1000.00"),
+        )
+        expense = ProjectExpense.objects.filter(project=self.p1).first()
+
+        before = (
+            Decimal(str(expense.amount)),
+            Decimal(str(income_entry.amount)),
+            Decimal(str(cost_actual.amount)),
+        )
+
+        self._switch_to(self.comp001)
+        self._dashboard()
+
+        expense.refresh_from_db()
+        income_entry.refresh_from_db()
+        cost_actual.refresh_from_db()
+        after = (
+            Decimal(str(expense.amount)),
+            Decimal(str(income_entry.amount)),
+            Decimal(str(cost_actual.amount)),
+        )
+        self.assertEqual(before, after)
+
+    # M: no Company field exists on any child project transaction model
+    def test_no_company_field_on_child_transaction_models(self):
+        for model in (ProjectExpense, ProjectIncome, ProjectInvoice, ProjectCostActual):
+            self.assertFalse(hasattr(model, "company"), f"{model.__name__} must not have a company field")
+            self.assertFalse(hasattr(model, "company_id"), f"{model.__name__} must not have a company_id field")
 

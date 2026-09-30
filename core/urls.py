@@ -111,6 +111,7 @@ urlpatterns = [
     path('companies/', views.company_list, name='company_list'),
     path('companies/add/', views.add_company, name='add_company'),
     path('companies/<int:company_id>/edit/', views.edit_company, name='edit_company'),
+    path('company-dashboard/', views.company_dashboard, name='company_dashboard'),
 
     # =========================
     # PROJECTS
