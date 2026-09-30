@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}Companies{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <div>
+            <h4 class="app-page-title">Companies</h4>
+            <p class="text-muted mb-0">Manage companies for the multi-company setup.</p>
+        </div>
+        <div>
+            <a href="{% url 'add_company' %}" class="btn btn-dark btn-sm">+ Add Company</a>
+        </div>
+    </div>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Phone</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for company in companies %}
+                <tr>
+                    <td><strong>{{ company.company_code }}</strong></td>
+                    <td>{{ company.company_name }}</td>
+                    <td>{{ company.phone|default:"--" }}</td>
+                    <td>{{ company.email|default:"--" }}</td>
+                    <td>
+                        <span class="badge {% if company.is_active %}bg-success{% else %}bg-secondary{% endif %}">
+                            {% if company.is_active %}Active{% else %}Inactive{% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="{% url 'edit_company' company.id %}" class="btn btn-sm btn-outline-dark">Edit</a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6" class="text-center">No companies found.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

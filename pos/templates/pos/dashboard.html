@@ -5,6 +5,11 @@
 {% block title %}Dashboard{% endblock %}
 
 {% block content %}
+{% if active_company %}
+<div class="mb-3 small text-muted">Active Company: <strong>{{ active_company.company_name }}</strong> ({{ active_company.company_code }})</div>
+{% elif switchable_companies %}
+<div class="mb-3 small text-muted">Active Company: <strong>All Companies</strong></div>
+{% endif %}
 <!-- Financial Summary Cards -->
 <div class="row mb-4">
     <div class="col-md-2">
@@ -445,6 +450,9 @@
                 <a href="{% url 'project_list' %}" class="simple-dashboard-btn primary">Project List</a>
                 <a href="{% url 'create_project' %}" class="simple-dashboard-btn">Create Project</a>
                 <a href="{% url 'project_expense_list' %}" class="simple-dashboard-btn">Project Expenses</a>
+                {% if is_owner_flag %}
+                <a href="{% url 'company_list' %}" class="simple-dashboard-btn">Companies</a>
+                {% endif %}
             </div>
         </div>
 

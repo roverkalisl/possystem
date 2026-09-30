@@ -105,6 +105,14 @@ urlpatterns = [
     path('administration/licenses/reports/expiry/', views.license_expiry_report, name='license_expiry_report'),
 
     # =========================
+    # MULTI-COMPANY (Phase 2.2)
+    # =========================
+    path('switch-company/', views.switch_active_company, name='switch_active_company'),
+    path('companies/', views.company_list, name='company_list'),
+    path('companies/add/', views.add_company, name='add_company'),
+    path('companies/<int:company_id>/edit/', views.edit_company, name='edit_company'),
+
+    # =========================
     # PROJECTS
     # =========================
     path('projects/', views.project_list, name='project_list'),

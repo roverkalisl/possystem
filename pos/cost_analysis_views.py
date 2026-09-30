@@ -22,6 +22,7 @@ from .models import (
 )
 from .forms import BudgetUploadForm, ProjectBudgetForm, ProjectBudgetLineFormSet
 from .cost_analysis import ProjectCostAnalyzer
+from .company_context import get_active_company
 
 
 def has_cost_analysis_permission(user):
@@ -39,7 +40,11 @@ def project_cost_analysis_list(request):
         messages.error(request, 'You do not have permission to access cost analysis')
         return redirect('dashboard')
     
-    company_id = request.GET.get('company_id')
+    if 'company_id' in request.GET:
+        company_id = request.GET.get('company_id') or None
+    else:
+        active_company = get_active_company(request)
+        company_id = active_company.id if active_company else None
 
     projects = Project.objects.filter(is_active=True).prefetch_related('budget')
     if company_id:
@@ -48,7 +53,7 @@ def project_cost_analysis_list(request):
     context = {
         'projects': projects,
         'companies': Company.objects.filter(is_active=True).order_by('company_code'),
-        'selected_company': company_id,
+        'selected_company': str(company_id) if company_id else '',
         'page_title': 'Project Cost Analysis'
     }
     return render(request, 'pos/cost_analysis_list.html', context)
@@ -144,7 +149,12 @@ def cost_analysis_by_gl_group(request):
     gl_group = request.GET.get('gl_group')
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
-    company_id = request.GET.get('company_id')
+
+    if 'company_id' in request.GET:
+        company_id = request.GET.get('company_id') or None
+    else:
+        active_company = get_active_company(request)
+        company_id = active_company.id if active_company else None
 
     projects = Project.objects.filter(is_active=True)
     summary_data = {}
@@ -209,7 +219,7 @@ def cost_analysis_by_gl_group(request):
         'page_title': 'GL Group Cost Analysis',
         'selected_project': project_id,
         'selected_group': gl_group,
-        'selected_company': company_id,
+        'selected_company': str(company_id) if company_id else '',
         'companies': Company.objects.filter(is_active=True).order_by('company_code'),
         'show_gl_wise': show_gl_wise and gl_wise_data,
     }

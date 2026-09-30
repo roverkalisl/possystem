@@ -1452,3 +1452,240 @@ class Phase21CompanyReportFilterTests(TestCase):
         project_ids = set(response.context["projects"].values_list("id", flat=True))
         self.assertEqual(project_ids, {self.p1.id, self.p2.id})
 
+
+class Phase22CompanyContextTests(TestCase):
+    """
+    Phase 2.2: active Company lives only in request.session - never on the
+    User model, never on any transaction table. Covers get_active_company(),
+    the switch_active_company view, and how create_project / the report
+    Project dropdowns consume it.
+    """
+
+    def setUp(self):
+        self.owner = User.objects.create_superuser(
+            username="phase22_owner", email="phase22_owner@example.com", password="12345"
+        )
+        self.comp001 = Company.objects.create(company_code="COMP001", company_name="P&I Constructions")
+        self.comp002 = Company.objects.create(company_code="COMP002", company_name="Second Business")
+        self.inactive_company = Company.objects.create(
+            company_code="COMPX", company_name="Inactive Co", is_active=False
+        )
+        self.client.force_login(self.owner)
+
+    def _session_company_id(self):
+        return self.client.session.get("active_company_id")
+
+    # A: no active Company in session (2+ active companies -> no guessing)
+    def test_no_active_company_when_nothing_selected_and_multiple_exist(self):
+        from pos.company_context import get_active_company
+        from django.test import RequestFactory
+        request = RequestFactory().get("/")
+        request.session = self.client.session
+        self.assertIsNone(get_active_company(request))
+
+    # B & C: COMP001 can be selected, and the correct id lands in session
+    def test_selecting_comp001_stores_correct_id_in_session(self):
+        response = self.client.post(reverse("switch_active_company"), {"company_id": self.comp001.id})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self._session_company_id(), self.comp001.id)
+
+    # D: switching companies changes only the session, nothing else
+    def test_switching_company_changes_only_session_context(self):
+        project = Project.objects.create(
+            project_id="P22SW001", project_name="Session Test", project_type="OT", company=self.comp001
+        )
+        before = (project.project_id, project.project_name, project.company_id)
+
+        self.client.post(reverse("switch_active_company"), {"company_id": self.comp001.id})
+        self.assertEqual(self._session_company_id(), self.comp001.id)
+
+        self.client.post(reverse("switch_active_company"), {"company_id": self.comp002.id})
+        self.assertEqual(self._session_company_id(), self.comp002.id)
+
+        project.refresh_from_db()
+        after = (project.project_id, project.project_name, project.company_id)
+        self.assertEqual(before, after)
+
+    # E: an inactive Company cannot become active
+    def test_inactive_company_cannot_become_active(self):
+        self.client.post(reverse("switch_active_company"), {"company_id": self.comp001.id})
+        response = self.client.post(reverse("switch_active_company"), {"company_id": self.inactive_company.id})
+        self.assertEqual(response.status_code, 302)
+        # Session must not have been overwritten with the inactive company.
+        self.assertEqual(self._session_company_id(), self.comp001.id)
+
+    # F: a nonexistent Company id cannot become active
+    def test_nonexistent_company_cannot_become_active(self):
+        self.client.post(reverse("switch_active_company"), {"company_id": self.comp001.id})
+        response = self.client.post(reverse("switch_active_company"), {"company_id": 999999})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(self._session_company_id(), self.comp001.id)
+
+    # G: Project creation with Company works
+    def test_project_creation_with_explicit_company_works(self):
+        response = self.client.post(reverse("create_project"), {
+            "project_name": "P22 Explicit", "project_type": "OT",
+            "client_name": "Client", "company": self.comp001.id,
+        })
+        self.assertEqual(response.status_code, 302)
+        project = Project.objects.get(project_name="P22 Explicit")
+        self.assertEqual(project.company_id, self.comp001.id)
+
+    # H: cannot silently create a Project without Company when multiple
+    # active Companies exist and none is selected (session or form)
+    def test_project_creation_without_company_is_rejected_when_ambiguous(self):
+        count_before = Project.objects.count()
+        response = self.client.post(reverse("create_project"), {
+            "project_name": "P22 No Company", "project_type": "OT", "client_name": "Client",
+        })
+        self.assertEqual(response.status_code, 200)  # re-rendered with an error, not redirected
+        self.assertEqual(Project.objects.count(), count_before)
+
+    # H (continued): but an active session Company removes the ambiguity
+    def test_project_creation_uses_active_session_company_when_form_omits_it(self):
+        self.client.post(reverse("switch_active_company"), {"company_id": self.comp002.id})
+        response = self.client.post(reverse("create_project"), {
+            "project_name": "P22 From Session", "project_type": "OT", "client_name": "Client",
+        })
+        self.assertEqual(response.status_code, 302)
+        project = Project.objects.get(project_name="P22 From Session")
+        self.assertEqual(project.company_id, self.comp002.id)
+
+    # I: Project dropdown is restricted by the active Company
+    def test_project_dropdown_restricted_by_active_company(self):
+        p1 = Project.objects.create(
+            project_id="P22DD001", project_name="Comp001 Proj", project_type="OT", company=self.comp001
+        )
+        p2 = Project.objects.create(
+            project_id="P22DD002", project_name="Comp002 Proj", project_type="OT", company=self.comp002
+        )
+        self.client.post(reverse("switch_active_company"), {"company_id": self.comp001.id})
+
+        response = self.client.get(reverse("project_profit_dashboard"))
+        dropdown_ids = [p.id for p in response.context["projects"]]
+        self.assertIn(p1.id, dropdown_ids)
+        self.assertNotIn(p2.id, dropdown_ids)
+
+        # Explicitly choosing "All Companies" still shows the full list.
+        response_all = self.client.get(reverse("project_profit_dashboard"), {"company_id": ""})
+        dropdown_ids_all = [p.id for p in response_all.context["projects"]]
+        self.assertIn(p1.id, dropdown_ids_all)
+        self.assertIn(p2.id, dropdown_ids_all)
+
+    # J: project-based transaction Company context derives from Project.company
+    def test_transaction_company_context_derives_from_project_company(self):
+        project = Project.objects.create(
+            project_id="P22TX001", project_name="Derivation Test", project_type="OT", company=self.comp001
+        )
+        expense = ProjectExpense.objects.create(
+            project=project, description="Cost", qty=1, unit_price=Decimal("100.00"), amount=Decimal("100.00")
+        )
+        self.assertFalse(hasattr(ProjectExpense, "company"))
+        self.assertEqual(expense.project.company_id, self.comp001.id)
+        self.assertEqual(expense.project.company.company_code, "COMP001")
+
+    # K: existing Projects remain unchanged by Company context features
+    def test_existing_projects_unchanged_by_switching_and_viewing(self):
+        project = Project.objects.create(
+            project_id="P22EXIST001", project_name="Existing Project", project_type="SW", company=self.comp001
+        )
+        before = (project.project_id, project.project_name, project.project_type, project.company_id)
+
+        self.client.post(reverse("switch_active_company"), {"company_id": self.comp001.id})
+        self.client.get(reverse("project_profit_dashboard"))
+        self.client.get(reverse("project_cost_analysis_list"))
+        self.client.get(reverse("cost_analysis_by_gl_group"))
+        self.client.post(reverse("switch_active_company"), {"company_id": self.comp002.id})
+
+        project.refresh_from_db()
+        after = (project.project_id, project.project_name, project.project_type, project.company_id)
+        self.assertEqual(before, after)
+
+    # L: no financial record is modified by viewing/switching Company
+    def test_no_financial_record_modified_by_viewing_or_switching(self):
+        project = Project.objects.create(
+            project_id="P22FIN001", project_name="Financial Safety", project_type="OT", company=self.comp001
+        )
+        expense = ProjectExpense.objects.create(
+            project=project, description="Cost", qty=1, unit_price=Decimal("250.00"), amount=Decimal("250.00")
+        )
+        sale = Sale.objects.create(
+            invoice_no="P22FININV0001", total=Decimal("500.00"), grand_total=Decimal("500.00"),
+            sale_type="retail", payment_method="cash", created_by=self.owner,
+        )
+        before = (
+            Decimal(str(expense.amount)), expense.project_id,
+            sale.grand_total, sale.payment_method, sale.invoice_no,
+        )
+
+        self.client.post(reverse("switch_active_company"), {"company_id": self.comp001.id})
+        self.client.get(reverse("project_profit_dashboard"))
+        self.client.post(reverse("switch_active_company"), {"company_id": self.comp002.id})
+        self.client.get(reverse("dashboard"))
+
+        expense.refresh_from_db()
+        sale.refresh_from_db()
+        after = (
+            Decimal(str(expense.amount)), expense.project_id,
+            sale.grand_total, sale.payment_method, sale.invoice_no,
+        )
+        self.assertEqual(before, after)
+
+
+class Phase22CompanyManagementTests(TestCase):
+    """Company list/add/edit - no delete, COMP001 never modified by these."""
+
+    def setUp(self):
+        self.owner = User.objects.create_superuser(
+            username="phase22_mgmt_owner", email="phase22_mgmt_owner@example.com", password="12345"
+        )
+        self.cashier_group, _ = Group.objects.get_or_create(name="Cashier")
+        self.cashier = User.objects.create_user(username="phase22_mgmt_cashier", password="12345")
+        self.cashier.groups.add(self.cashier_group)
+        self.comp001 = Company.objects.create(company_code="COMP001", company_name="P&I Constructions")
+
+    def test_owner_can_list_companies(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("company_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "COMP001")
+
+    def test_non_owner_cannot_access_company_management(self):
+        self.client.force_login(self.cashier)
+        self.assertNotEqual(self.client.get(reverse("company_list")).status_code, 200)
+        self.assertNotEqual(self.client.get(reverse("add_company")).status_code, 200)
+
+    def test_owner_can_add_company(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(reverse("add_company"), {
+            "company_code": "COMP002", "company_name": "New Branch", "is_active": "on",
+        })
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(Company.objects.filter(company_code="COMP002", company_name="New Branch").exists())
+
+    def test_duplicate_company_code_is_rejected(self):
+        self.client.force_login(self.owner)
+        count_before = Company.objects.count()
+        response = self.client.post(reverse("add_company"), {
+            "company_code": "COMP001", "company_name": "Duplicate Attempt", "is_active": "on",
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Company.objects.count(), count_before)
+
+    def test_owner_can_edit_company_and_toggle_active_status(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(reverse("edit_company", args=[self.comp001.id]), {
+            "company_name": "P&I Constructions Updated", "is_active": "",
+        })
+        self.assertEqual(response.status_code, 302)
+        self.comp001.refresh_from_db()
+        self.assertEqual(self.comp001.company_name, "P&I Constructions Updated")
+        self.assertFalse(self.comp001.is_active)
+        # Company Code itself is never changed by edit_company.
+        self.assertEqual(self.comp001.company_code, "COMP001")
+
+    def test_no_delete_endpoint_exists_for_company(self):
+        from django.urls import NoReverseMatch
+        with self.assertRaises(NoReverseMatch):
+            reverse("delete_company")
+

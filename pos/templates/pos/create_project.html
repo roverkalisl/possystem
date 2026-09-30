@@ -36,9 +36,9 @@
             <div class="col-md-6">
                 <label class="form-label">Company</label>
                 <select name="company" class="form-select form-select-sm" required>
-                    {% if companies.count != 1 %}<option value="">Select Company</option>{% endif %}
+                    <option value="">Select Company</option>
                     {% for company in companies %}
-                    <option value="{{ company.id }}" {% if companies.count == 1 %}selected{% endif %}>{{ company.company_code }} - {{ company.company_name }}</option>
+                    <option value="{{ company.id }}" {% if active_company_id == company.id %}selected{% elif not active_company_id and companies.count == 1 %}selected{% endif %}>{{ company.company_code }} - {{ company.company_name }}</option>
                     {% endfor %}
                 </select>
             </div>

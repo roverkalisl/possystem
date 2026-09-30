@@ -14,6 +14,7 @@ from django.db.models import Q, Sum, F, Count, Max
 from django.http import JsonResponse
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.decorators.http import require_POST
 
 from .models import (
@@ -35,6 +36,7 @@ from .models import (
     Company,
 )
 from .backup_engine import compute_next_scheduled
+from .company_context import get_active_company, set_active_company
 
 from .forms import QuotationForm, QuotationItemFormSet
 from .barcode_services import generate_barcode_for_item, generate_missing_barcodes
@@ -1023,6 +1025,96 @@ def pos_settings_view(request):
         "settings_row": settings_row,
         "bank_accounts": bank_accounts,
     })
+
+
+# =========================
+# MULTI-COMPANY CONTEXT (Phase 2.2)
+# =========================
+@login_required
+@require_POST
+def switch_active_company(request):
+    """
+    Sets/clears request.session["active_company_id"]. Never touches any
+    transaction record - this only changes what the current user's
+    session considers the active Company for filtering/defaults.
+    """
+    company_id = request.POST.get("company_id") or None
+
+    if company_id:
+        company = Company.objects.filter(id=company_id, is_active=True).first()
+        if company:
+            set_active_company(request, company)
+            messages.success(request, f"Active company switched to {company.company_name}.")
+        else:
+            messages.error(request, "Selected company is not available.")
+    else:
+        set_active_company(request, None)
+        messages.success(request, "Viewing all companies.")
+
+    next_url = request.POST.get("next")
+    if next_url and url_has_allowed_host_and_scheme(
+        next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()
+    ):
+        return redirect(next_url)
+    return redirect("dashboard")
+
+
+@user_passes_test(is_owner)
+def company_list(request):
+    companies = Company.objects.order_by("company_code")
+    return render(request, "pos/company_list.html", {"companies": companies})
+
+
+@user_passes_test(is_owner)
+def add_company(request):
+    if request.method == "POST":
+        company_code = (request.POST.get("company_code") or "").strip()
+        company_name = (request.POST.get("company_name") or "").strip()
+
+        if not company_code or not company_name:
+            messages.error(request, "Company Code and Company Name are required.")
+            return render(request, "pos/company_form.html", {"mode": "add"})
+
+        if Company.objects.filter(company_code=company_code).exists():
+            messages.error(request, f"Company Code '{company_code}' already exists.")
+            return render(request, "pos/company_form.html", {"mode": "add"})
+
+        Company.objects.create(
+            company_code=company_code,
+            company_name=company_name,
+            address=(request.POST.get("address") or "").strip() or None,
+            phone=(request.POST.get("phone") or "").strip() or None,
+            email=(request.POST.get("email") or "").strip() or None,
+            registration_no=(request.POST.get("registration_no") or "").strip() or None,
+            is_active=request.POST.get("is_active") == "on",
+        )
+        messages.success(request, "Company created successfully.")
+        return redirect("company_list")
+
+    return render(request, "pos/company_form.html", {"mode": "add"})
+
+
+@user_passes_test(is_owner)
+def edit_company(request, company_id):
+    company = get_object_or_404(Company, id=company_id)
+
+    if request.method == "POST":
+        company_name = (request.POST.get("company_name") or "").strip()
+        if not company_name:
+            messages.error(request, "Company Name is required.")
+            return render(request, "pos/company_form.html", {"mode": "edit", "company": company})
+
+        company.company_name = company_name
+        company.address = (request.POST.get("address") or "").strip() or None
+        company.phone = (request.POST.get("phone") or "").strip() or None
+        company.email = (request.POST.get("email") or "").strip() or None
+        company.registration_no = (request.POST.get("registration_no") or "").strip() or None
+        company.is_active = request.POST.get("is_active") == "on"
+        company.save()
+        messages.success(request, "Company updated successfully.")
+        return redirect("company_list")
+
+    return render(request, "pos/company_form.html", {"mode": "edit", "company": company})
 
 
 def pos_page(request):
@@ -2264,11 +2356,13 @@ def create_project(request):
         project_type = request.POST.get("project_type")
 
         company_id = request.POST.get("company") or None
-        if not company_id and companies.count() == 1:
-            # Single-company mode: auto-select the only active company so
-            # existing single-company workflows keep working without the
-            # cashier/owner having to pick from a one-item dropdown.
-            company_id = companies.first().id
+        if not company_id:
+            # Auto-select only when unambiguous: the user's active Company
+            # (session), or the sole active Company if there's just one.
+            # See get_active_company() - it never guesses among several.
+            active_company = get_active_company(request)
+            if active_company:
+                company_id = active_company.id
 
         if not company_id:
             messages.error(request, "Company is required to create a project.")
@@ -2296,10 +2390,12 @@ def create_project(request):
         messages.success(request, "Project created successfully")
         return redirect("project_list")
 
+    active_company = get_active_company(request)
     return render(request, "pos/create_project.html", {
         "gl_accounts": GLMaster.objects.filter(is_active=True).order_by("gl_code"),
         "employees": Employee.objects.filter(is_active=True).order_by("full_name"),
         "companies": companies,
+        "active_company_id": active_company.id if active_company else None,
     })
 
 
@@ -3261,7 +3357,17 @@ def project_profit_dashboard(request):
     project_id = request.GET.get("project_id")
     project_type = request.GET.get("project_type")
     status = request.GET.get("status")
-    company_id = request.GET.get("company_id")
+
+    if "company_id" in request.GET:
+        # User explicitly chose a filter this request - including
+        # explicitly choosing "All Companies" (submitted as empty).
+        company_id = request.GET.get("company_id") or None
+    else:
+        # No filter submitted yet (first load / other filters changed
+        # without touching Company) - default to the session's active
+        # Company, same fallback rules as everywhere else in Phase 2.2.
+        active_company = get_active_company(request)
+        company_id = active_company.id if active_company else None
 
     all_active_projects = Project.objects.filter(is_active=True).order_by("-created_at")
 
@@ -3274,6 +3380,10 @@ def project_profit_dashboard(request):
         projects = projects.filter(status=status)
     if company_id:
         projects = projects.filter(company_id=company_id)
+
+    project_dropdown_options = (
+        all_active_projects.filter(company_id=company_id) if company_id else all_active_projects
+    )
 
     project_rows = []
 
@@ -3343,8 +3453,8 @@ def project_profit_dashboard(request):
         "project_id": project_id,
         "project_type": project_type,
         "status": status,
-        "company_id": company_id,
-        "projects": all_active_projects,
+        "company_id": str(company_id) if company_id else "",
+        "projects": project_dropdown_options,
         "companies": Company.objects.filter(is_active=True).order_by("company_code"),
         "project_type_choices": Project.PROJECT_TYPE_CHOICES,
         "status_choices": Project.STATUS_CHOICES,

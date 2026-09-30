@@ -2,8 +2,23 @@
     <div class="container-fluid">
         <a class="navbar-brand" href="{% url 'dashboard' %}">POS System</a>
 
-        <div class="d-flex ms-auto">
+        <div class="d-flex ms-auto align-items-center">
             {% if request.user.is_authenticated %}
+                {% if switchable_companies %}
+                <form method="POST" action="{% url 'switch_active_company' %}" class="d-flex align-items-center me-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+                    <label class="navbar-text text-white me-2 mb-0 small">Company:</label>
+                    <select name="company_id" class="form-select form-select-sm" onchange="this.form.submit()" style="width:auto;">
+                        <option value="">All Companies</option>
+                        {% for company in switchable_companies %}
+                        <option value="{{ company.id }}" {% if active_company and active_company.id == company.id %}selected{% endif %}>
+                            {{ company.company_code }} - {{ company.company_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </form>
+                {% endif %}
                 <span class="navbar-text text-white me-3">
                     {{ request.user.username }}
                 </span>
