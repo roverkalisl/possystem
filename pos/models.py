@@ -612,6 +612,7 @@ class Sale(models.Model):
         ("card", "Card"),
         ("credit", "Credit"),
         ("bank_transfer", "Bank Transfer"),
+        ("cheque", "Cheque"),
     ]
 
     SALE_TYPE_CHOICES = [

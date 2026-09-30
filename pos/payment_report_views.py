@@ -86,13 +86,15 @@ def payment_report(request):
         card_total=Sum('grand_total', filter=Q(payment_method='card')),
         credit_total=Sum('grand_total', filter=Q(payment_method='credit')),
         transfer_total=Sum('grand_total', filter=Q(payment_method='bank_transfer')),
+        cheque_total=Sum('grand_total', filter=Q(payment_method='cheque')),
     )
 
     cash_total = Decimal(str(totals['cash_total'] or 0))
     card_total = Decimal(str(totals['card_total'] or 0))
     credit_total = Decimal(str(totals['credit_total'] or 0))
     transfer_total = Decimal(str(totals['transfer_total'] or 0))
-    grand_total = cash_total + card_total + credit_total + transfer_total
+    cheque_total = Decimal(str(totals['cheque_total'] or 0))
+    grand_total = cash_total + card_total + credit_total + transfer_total + cheque_total
 
     # Pagination
     paginator = Paginator(transactions, 50)  # 50 rows per page
@@ -127,6 +129,7 @@ def payment_report(request):
         ('card', 'Card'),
         ('credit', 'Credit'),
         ('bank_transfer', 'Bank Transfer'),
+        ('cheque', 'Cheque'),
     ]
 
     context = {
@@ -144,6 +147,7 @@ def payment_report(request):
         'card_total': card_total,
         'credit_total': credit_total,
         'transfer_total': transfer_total,
+        'cheque_total': cheque_total,
         'grand_total': grand_total,
         'bank_accounts': bank_accounts,
         'payment_methods': payment_methods,

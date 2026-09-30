@@ -96,6 +96,14 @@
         <div class="col-md-2">
             <div class="card card-soft">
                 <div class="card-body">
+                    <div class="text-muted small">Cheque Total</div>
+                    <div class="fs-5 text-money">{{ cheque_total|money }}</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card card-soft">
+                <div class="card-body">
                     <div class="text-muted small">Grand Total</div>
                     <div class="fs-5 text-money text-danger fw-bold">{{ grand_total|money }}</div>
                 </div>
@@ -115,6 +123,7 @@
                     <th class="text-end">Card</th>
                     <th class="text-end">Credit</th>
                     <th class="text-end">Bank Transfer</th>
+                    <th class="text-end">Cheque</th>
                     <th class="text-end">Total</th>
                     <th>Bank Account</th>
                     <th>Reference</th>
@@ -139,6 +148,9 @@
                     <td class="text-end {% if txn.payment_method == 'bank_transfer' %}text-money fw-bold{% else %}text-muted{% endif %}">
                         {% if txn.payment_method == 'bank_transfer' %}{{ txn.grand_total|money }}{% else %}-{% endif %}
                     </td>
+                    <td class="text-end {% if txn.payment_method == 'cheque' %}text-money fw-bold{% else %}text-muted{% endif %}">
+                        {% if txn.payment_method == 'cheque' %}{{ txn.grand_total|money }}{% else %}-{% endif %}
+                    </td>
                     <td class="text-money text-end fw-bold">{{ txn.grand_total|money }}</td>
                     <td>
                         {% if txn.payment_method == 'bank_transfer' and txn.bank_account %}
@@ -157,7 +169,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="11" class="text-center">No transactions found for the selected filters.</td>
+                    <td colspan="12" class="text-center">No transactions found for the selected filters.</td>
                 </tr>
                 {% endfor %}
             </tbody>

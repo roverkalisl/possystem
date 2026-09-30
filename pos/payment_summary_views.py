@@ -109,8 +109,10 @@ def payment_summary_dashboard(request):
         amount = Decimal(str(sale.grand_total or 0))
         payment_method = sale.payment_method
 
-        # Map cheque payments (stored as payment_method or cheque_number field)
-        if payment_method == 'cheque' or (payment_method and sale.cheque_number):
+        # Cheque bucket is strictly payment_method == 'cheque'.
+        # cheque_number is also used as the reference no. for Credit sales
+        # and must NOT be used to classify a sale as Cheque.
+        if payment_method == 'cheque':
             date_wise_data[sale_date]['cheque'] += amount
             period_totals['cheque'] += amount
         elif payment_method in date_wise_data[sale_date]:

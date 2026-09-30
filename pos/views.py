@@ -1085,14 +1085,17 @@ def save_sale(request):
                     id=bank_account_id, is_active=True, is_deleted=False
                 ).first()
 
-            if payment_method not in ["cash", "card", "credit", "bank_transfer"]:
+            if payment_method not in ["cash", "card", "credit", "bank_transfer", "cheque"]:
                 return JsonResponse({"status": "error", "message": "Invalid payment method."}, status=400)
 
             if payment_method == "card" and not card_last4:
                 return JsonResponse({"status": "error", "message": "Card last 4 digits required for card payment."}, status=400)
 
             if payment_method == "credit" and not cheque_number:
-                return JsonResponse({"status": "error", "message": "Cheque / Ref No required for credit sale."}, status=400)
+                return JsonResponse({"status": "error", "message": "Reference No is required for credit sale."}, status=400)
+
+            if payment_method == "cheque" and not cheque_number:
+                return JsonResponse({"status": "error", "message": "Cheque Number is required for cheque payments."}, status=400)
 
             if payment_method == "bank_transfer":
                 if not bank_account:
@@ -1128,7 +1131,7 @@ def save_sale(request):
                 received_amount=received_amount if payment_method == "cash" else None,
                 balance=Decimal("0"),
                 card_last4=card_last4 if payment_method == "card" else None,
-                cheque_number=cheque_number if payment_method == "credit" else None,
+                cheque_number=cheque_number if payment_method in ("credit", "cheque") else None,
                 bank_account=bank_account if payment_method == "bank_transfer" else None,
                 bank_transfer_reference=bank_transfer_reference if payment_method == "bank_transfer" else None,
                 bank_transfer_remarks=bank_transfer_remarks if payment_method == "bank_transfer" else None,

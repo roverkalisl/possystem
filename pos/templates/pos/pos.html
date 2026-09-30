@@ -273,6 +273,7 @@
                         <option value="card">Card</option>
                         <option value="credit">Credit</option>
                         <option value="bank_transfer">Bank Transfer</option>
+                        <option value="cheque">Cheque</option>
                     </select>
                 </div>
 
@@ -292,8 +293,8 @@
                     <input type="text" id="card_last4" class="form-control form-control-sm" maxlength="4">
                 </div>
 
-                <div class="mt-2" id="credit_field" style="display:none;">
-                    <label class="form-label">Cheque / Reference No</label>
+                <div class="mt-2" id="cheque_number_field" style="display:none;">
+                    <label class="form-label" id="cheque_number_label">Reference No</label>
                     <input type="text" id="cheque_number" class="form-control form-control-sm">
                 </div>
 
@@ -442,8 +443,21 @@ function togglePaymentFields() {
     const method = document.getElementById("payment_method").value;
     document.getElementById("cash_fields").style.display = method === "cash" ? "flex" : "none";
     document.getElementById("card_field").style.display = method === "card" ? "block" : "none";
-    document.getElementById("credit_field").style.display = method === "credit" ? "block" : "none";
     document.getElementById("bank_transfer_field").style.display = method === "bank_transfer" ? "block" : "none";
+
+    const chequeNumberField = document.getElementById("cheque_number_field");
+    const chequeNumberLabel = document.getElementById("cheque_number_label");
+    if (method === "credit") {
+        chequeNumberField.style.display = "block";
+        chequeNumberLabel.textContent = "Reference No";
+    } else if (method === "cheque") {
+        chequeNumberField.style.display = "block";
+        chequeNumberLabel.textContent = "Cheque Number";
+    } else {
+        chequeNumberField.style.display = "none";
+        document.getElementById("cheque_number").value = "";
+    }
+
     refreshCustomerOptions();
     setCustomerFieldsReadOnly(method === "credit");
     updateBalance();
@@ -852,9 +866,14 @@ function saveSale() {
         }
 
         if (!chequeNumber) {
-            alert("Please enter the cheque/reference number for the credit sale.");
+            alert("Please enter the reference number for the credit sale.");
             return;
         }
+    }
+
+    if (paymentMethod === "cheque" && !chequeNumber) {
+        alert("Cheque Number is required for cheque payments.");
+        return;
     }
 
     if (paymentMethod === "card" && !cardLast4) {

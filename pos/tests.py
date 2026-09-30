@@ -1,3 +1,4 @@
+import json
 from datetime import date
 from decimal import Decimal
 
@@ -627,4 +628,264 @@ class RetailCashBalanceTests(TestCase):
         response = self.client.get(reverse("cash_adjustment_detail", args=[adj.id]))
         self.assertEqual(response.context["current_cash"], Decimal("45000.00"))
         self.assertEqual(response.context["preview_cash"], Decimal("45000.00"))
+
+
+class PaymentSummaryChequeClassificationTests(TestCase):
+    """
+    Regression tests for: Credit sales were being counted in the Cheque
+    column because cheque_number (reused as a reference no. for Credit
+    sales) was treated as evidence of a cheque payment. Cheque must be
+    based strictly on payment_method == 'cheque'.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            username="cheque_admin", email="cheque_admin@example.com", password="12345"
+        )
+        self.customer = Customer.objects.create(
+            name="Cheque Test Customer", registration_no="RCH1", credit_limit=Decimal("100000")
+        )
+        self.seq = 0
+
+    def make_sale(self, amount, payment_method, cheque_number=None, **extra):
+        self.seq += 1
+        return Sale.objects.create(
+            invoice_no=f"INVCHQ{self.seq:04d}",
+            total=Decimal(amount),
+            grand_total=Decimal(amount),
+            sale_type="retail",
+            payment_method=payment_method,
+            cheque_number=cheque_number,
+            created_by=self.user,
+            **extra,
+        )
+
+    def summary_totals(self):
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("payment_summary_dashboard"))
+        self.assertEqual(response.status_code, 200)
+        return response.context["period_totals"]
+
+    def test_credit_with_cheque_number_counts_as_credit_not_cheque(self):
+        # Test 1: mirrors production examples INV00139/INV00137 - Credit
+        # sale with a "reference no." accidentally looking like a cheque no.
+        self.make_sale("3500.00", "credit", cheque_number="0001", customer=self.customer)
+        totals = self.summary_totals()
+        self.assertEqual(totals["credit"], Decimal("3500.00"))
+        self.assertEqual(totals["cheque"], Decimal("0"))
+
+    def test_credit_without_cheque_number_counts_as_credit(self):
+        # Test 2
+        self.make_sale("1200.00", "credit", cheque_number=None, customer=self.customer)
+        totals = self.summary_totals()
+        self.assertEqual(totals["credit"], Decimal("1200.00"))
+        self.assertEqual(totals["cheque"], Decimal("0"))
+
+    def test_actual_cheque_payment_method_counts_as_cheque(self):
+        # Test 3
+        self.make_sale("900.00", "cheque", cheque_number="CQ-1")
+        totals = self.summary_totals()
+        self.assertEqual(totals["cheque"], Decimal("900.00"))
+        self.assertEqual(totals["credit"], Decimal("0"))
+
+    def test_cash_counts_only_as_cash(self):
+        # Test 4
+        self.make_sale("500.00", "cash")
+        totals = self.summary_totals()
+        self.assertEqual(totals["cash"], Decimal("500.00"))
+        self.assertEqual(totals["cheque"], Decimal("0"))
+        self.assertEqual(totals["credit"], Decimal("0"))
+
+    def test_card_counts_only_as_card(self):
+        # Test 5
+        self.make_sale("650.00", "card", card_last4="1234")
+        totals = self.summary_totals()
+        self.assertEqual(totals["card"], Decimal("650.00"))
+        self.assertEqual(totals["cheque"], Decimal("0"))
+
+    def test_bank_transfer_counts_only_as_bank_transfer(self):
+        # Test 6
+        self.make_sale("2200.00", "bank_transfer", bank_transfer_reference="REF-1")
+        totals = self.summary_totals()
+        self.assertEqual(totals["bank_transfer"], Decimal("2200.00"))
+        self.assertEqual(totals["cheque"], Decimal("0"))
+
+    def test_period_grand_total_matches_sum_of_all_methods(self):
+        self.make_sale("3500.00", "credit", cheque_number="0001", customer=self.customer)
+        self.make_sale("500.00", "cash")
+        self.make_sale("650.00", "card", card_last4="1234")
+        self.make_sale("2200.00", "bank_transfer", bank_transfer_reference="REF-1")
+        self.make_sale("900.00", "cheque", cheque_number="CQ-1")
+        totals = self.summary_totals()
+        self.assertEqual(sum(totals.values()), Decimal("7750.00"))
+
+    def test_receipt_shows_reference_no_not_cheque_no_for_credit(self):
+        sale = self.make_sale("3500.00", "credit", cheque_number="0001", customer=self.customer)
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("invoice_page", args=[sale.id]))
+        content = response.content.decode()
+        self.assertIn("Reference No", content)
+        self.assertNotIn("Cheque No", content)
+
+    def test_receipt_shows_cheque_no_for_actual_cheque_payment(self):
+        sale = self.make_sale("900.00", "cheque", cheque_number="CQ-1")
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("invoice_page", args=[sale.id]))
+        content = response.content.decode()
+        self.assertIn("Cheque No", content)
+
+
+class PosChequePaymentMethodTests(TestCase):
+    """
+    Cheque is now a real Sale.payment_method choice. These tests drive the
+    actual POS save_sale endpoint end-to-end (not just model-level
+    aggregation) for the new payment method, alongside Cash/Card/Credit/
+    Bank Transfer to prove nothing else broke.
+    """
+
+    def setUp(self):
+        self.user = User.objects.create_superuser(
+            username="cheque_pm_admin", email="cheque_pm_admin@example.com", password="12345"
+        )
+        self.customer = Customer.objects.create(
+            name="Cheque PM Customer", registration_no="RCHPM1", credit_limit=Decimal("100000")
+        )
+        gl = GLMaster.objects.create(gl_code="CHQPM-1", gl_name="Retail Sales GL", gl_type="income")
+        self.item = Item.objects.create(
+            item_code="CHQPM-ITEM",
+            name="Cheque PM Test Service",
+            selling_price=Decimal("1000.00"),
+            is_service=True,
+            retail_gl_account=gl,
+        )
+        self.client.force_login(self.user)
+
+    def post_sale(self, payment_method, **extra):
+        payload = {
+            "items": [{"id": self.item.id, "qty": 1, "price": "1000.00", "discount": 0}],
+            "discount": 0,
+            "payment_method": payment_method,
+        }
+        payload.update(extra)
+        return self.client.post(
+            reverse("save_sale"), data=json.dumps(payload), content_type="application/json"
+        )
+
+    def test_a_cash_sale_goes_to_cash_column(self):
+        response = self.post_sale("cash", received="1000.00")
+        self.assertEqual(response.status_code, 200, response.content)
+        sale = Sale.objects.get(invoice_no=response.json()["invoice_no"])
+        self.assertEqual(sale.payment_method, "cash")
+        totals = self.client.get(reverse("payment_summary_dashboard")).context["period_totals"]
+        self.assertEqual(totals["cash"], Decimal("1000.00"))
+        self.assertEqual(totals["cheque"], Decimal("0"))
+
+    def test_b_card_sale_goes_to_card_column(self):
+        response = self.post_sale("card", card_last4="1234")
+        self.assertEqual(response.status_code, 200, response.content)
+        totals = self.client.get(reverse("payment_summary_dashboard")).context["period_totals"]
+        self.assertEqual(totals["card"], Decimal("1000.00"))
+        self.assertEqual(totals["cheque"], Decimal("0"))
+
+    def test_c_credit_sale_with_reference_goes_to_credit_not_cheque(self):
+        response = self.post_sale(
+            "credit", cheque_number="0001", customer_id=self.customer.id, customer_name=self.customer.name
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        sale = Sale.objects.get(invoice_no=response.json()["invoice_no"])
+        self.assertEqual(sale.payment_method, "credit")
+        self.assertEqual(sale.cheque_number, "0001")
+        totals = self.client.get(reverse("payment_summary_dashboard")).context["period_totals"]
+        self.assertEqual(totals["credit"], Decimal("1000.00"))
+        self.assertEqual(totals["cheque"], Decimal("0"))
+
+    def test_d_bank_transfer_sale_goes_to_bank_transfer_column(self):
+        bank_gl = GLMaster.objects.create(gl_code="CHQPM-BANK-GL", gl_name="Bank GL", gl_type="asset")
+        bank = BankAccount.objects.create(
+            bank_name="Cheque PM Bank", account_name="Main", account_number="ACC-1",
+            opening_balance=Decimal("0"), gl_account=bank_gl,
+        )
+        response = self.post_sale(
+            "bank_transfer", bank_account_id=bank.id, bank_transfer_reference="REF-1"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        totals = self.client.get(reverse("payment_summary_dashboard")).context["period_totals"]
+        self.assertEqual(totals["bank_transfer"], Decimal("1000.00"))
+        self.assertEqual(totals["cheque"], Decimal("0"))
+
+    def test_e_cheque_sale_with_cheque_number_goes_to_cheque_column(self):
+        response = self.post_sale("cheque", cheque_number="CQ-9001")
+        self.assertEqual(response.status_code, 200, response.content)
+        sale = Sale.objects.get(invoice_no=response.json()["invoice_no"])
+        self.assertEqual(sale.payment_method, "cheque")
+        self.assertEqual(sale.cheque_number, "CQ-9001")
+        totals = self.client.get(reverse("payment_summary_dashboard")).context["period_totals"]
+        self.assertEqual(totals["cheque"], Decimal("1000.00"))
+        self.assertEqual(totals["credit"], Decimal("0"))
+
+    def test_f_cheque_sale_without_cheque_number_is_rejected_and_not_saved(self):
+        count_before = Sale.objects.count()
+        response = self.post_sale("cheque")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["message"], "Cheque Number is required for cheque payments.")
+        self.assertEqual(Sale.objects.count(), count_before)
+
+    def test_g_credit_sale_with_numeric_looking_reference_is_not_cheque(self):
+        response = self.post_sale(
+            "credit", cheque_number="0001", customer_id=self.customer.id, customer_name=self.customer.name
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        sale = Sale.objects.get(invoice_no=response.json()["invoice_no"])
+        self.assertEqual(sale.payment_method, "credit")
+        self.assertNotEqual(sale.payment_method, "cheque")
+
+    def test_h_receipt_labels_reference_no_for_credit_and_cheque_no_for_cheque(self):
+        credit_resp = self.post_sale(
+            "credit", cheque_number="0001", customer_id=self.customer.id, customer_name=self.customer.name
+        )
+        cheque_resp = self.post_sale("cheque", cheque_number="CQ-9001")
+        credit_sale = Sale.objects.get(invoice_no=credit_resp.json()["invoice_no"])
+        cheque_sale = Sale.objects.get(invoice_no=cheque_resp.json()["invoice_no"])
+
+        credit_html = self.client.get(reverse("invoice_page", args=[credit_sale.id])).content.decode()
+        self.assertIn("Reference No", credit_html)
+        self.assertNotIn("Cheque No", credit_html)
+
+        cheque_html = self.client.get(reverse("invoice_page", args=[cheque_sale.id])).content.decode()
+        self.assertIn("Cheque No", cheque_html)
+
+    def test_i_payment_summary_cheque_total_is_payment_method_cheque_only(self):
+        self.post_sale("credit", cheque_number="0001", customer_id=self.customer.id, customer_name=self.customer.name)
+        self.post_sale("cheque", cheque_number="CQ-1")
+        totals = self.client.get(reverse("payment_summary_dashboard")).context["period_totals"]
+        self.assertEqual(totals["cheque"], Decimal("1000.00"))
+        self.assertEqual(totals["credit"], Decimal("1000.00"))
+
+    def test_payment_report_cheque_total_is_payment_method_cheque_only(self):
+        self.post_sale("credit", cheque_number="0001", customer_id=self.customer.id, customer_name=self.customer.name)
+        self.post_sale("cheque", cheque_number="CQ-1")
+        context = self.client.get(reverse("payment_report")).context
+        self.assertEqual(context["cheque_total"], Decimal("1000.00"))
+        self.assertEqual(context["credit_total"], Decimal("1000.00"))
+
+    def test_historical_credit_sale_with_cheque_like_reference_is_not_converted(self):
+        # Simulates the pre-existing production data pattern (Credit sale
+        # whose cheque_number field happens to hold "0001") and proves the
+        # new payment method does not retroactively reclassify it.
+        historical = Sale.objects.create(
+            invoice_no="INVHIST0001",
+            total=Decimal("2500.00"),
+            grand_total=Decimal("2500.00"),
+            sale_type="retail",
+            payment_method="credit",
+            cheque_number="0001",
+            customer=self.customer,
+            customer_name=self.customer.name,
+            created_by=self.user,
+        )
+        historical.refresh_from_db()
+        self.assertEqual(historical.payment_method, "credit")
+        totals = self.client.get(reverse("payment_summary_dashboard")).context["period_totals"]
+        self.assertEqual(totals["credit"], Decimal("2500.00"))
+        self.assertEqual(totals["cheque"], Decimal("0"))
 

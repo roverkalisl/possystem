@@ -186,7 +186,7 @@
 
         {% if sale.cheque_number %}
         <tr>
-            <td class="bold">Cheque No</td>
+            <td class="bold">{% if sale.payment_method == 'cheque' %}Cheque No{% else %}Reference No{% endif %}</td>
             <td>{{ sale.cheque_number }}</td>
         </tr>
         {% endif %}
