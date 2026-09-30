@@ -38,6 +38,17 @@
                         {% endfor %}
                     </select>
                 </div>
+                <div class="col-md-4">
+                    <label class="form-label">Company</label>
+                    <select name="company_id" class="form-select">
+                        <option value="">All Companies</option>
+                        {% for company in companies %}
+                            <option value="{{ company.id }}" {% if company.id|stringformat:"s" == selected_company %}selected{% endif %}>
+                                {{ company.company_code }} - {{ company.company_name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
                 <div class="col-md-4 d-flex align-items-end">
                     <button type="submit" class="btn btn-primary w-100">
                         <i class="fas fa-filter"></i> Filter

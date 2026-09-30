@@ -75,6 +75,15 @@
                 </select>
             </div>
             <div class="col-md-2">
+                <label class="form-label">Company</label>
+                <select name="company_id" class="form-select form-select-sm">
+                    <option value="">All Companies</option>
+                    {% for company in companies %}
+                    <option value="{{ company.id }}" {% if company_id == company.id|stringformat:'s' %}selected{% endif %}>{{ company.company_code }} - {{ company.company_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
                 <button class="btn btn-primary btn-sm w-100">Apply</button>
             </div>
         </div>

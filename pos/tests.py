@@ -1323,3 +1323,132 @@ class MultiCompanyProductionMirrorBackfillTests(TestCase):
         self.assertEqual(Project.objects.filter(company=comp001).count(), 18)
         self.assertEqual(Project.objects.filter(company=other_company).count(), 1)
 
+
+class Phase21CompanyReportFilterTests(TestCase):
+    """
+    Phase 2.1: read-side Company filter for project_profit_dashboard,
+    project_cost_analysis_list, cost_analysis_by_gl_group. Company is
+    derived through Project.company only - no child transaction model
+    (ProjectExpense/ProjectInvoice/etc.) gets its own company field.
+    """
+
+    def setUp(self):
+        self.owner = User.objects.create_superuser(
+            username="phase21_owner", email="phase21_owner@example.com", password="12345"
+        )
+        self.comp001 = Company.objects.create(company_code="COMP001", company_name="P&I Constructions")
+        self.comp002 = Company.objects.create(company_code="COMP002", company_name="Second Business")
+
+        self.gl = GLMaster.objects.create(gl_code="P21GL-1", gl_name="Project Expense GL", gl_type="expense")
+
+        self.p1 = Project.objects.create(
+            project_id="P21P001", project_name="Comp001 Project", project_type="OT", company=self.comp001
+        )
+        self.p2 = Project.objects.create(
+            project_id="P21P002", project_name="Comp002 Project", project_type="OT", company=self.comp002
+        )
+
+        # Expense + income for each project, via the real ProjectExpense /
+        # ProjectInvoice / ProjectInvoicePayment models the dashboard reads.
+        ProjectExpense.objects.create(
+            project=self.p1, description="P1 cost", qty=1, unit_price=Decimal("1000.00"), amount=Decimal("1000.00")
+        )
+        ProjectExpense.objects.create(
+            project=self.p2, description="P2 cost", qty=1, unit_price=Decimal("500.00"), amount=Decimal("500.00")
+        )
+        inv1 = ProjectInvoice.objects.create(project=self.p1, total_amount=Decimal("3000.00"))
+        ProjectInvoicePayment.objects.create(invoice=inv1, amount=Decimal("3000.00"))
+        inv2 = ProjectInvoice.objects.create(project=self.p2, total_amount=Decimal("1500.00"))
+        ProjectInvoicePayment.objects.create(invoice=inv2, amount=Decimal("1500.00"))
+
+        self.client.force_login(self.owner)
+
+    def _profit_totals(self, **params):
+        response = self.client.get(reverse("project_profit_dashboard"), params)
+        self.assertEqual(response.status_code, 200)
+        return response.context
+
+    # A: no Company filter -> existing (unfiltered) totals
+    def test_profit_dashboard_no_filter_totals_unchanged(self):
+        ctx = self._profit_totals()
+        self.assertEqual(ctx["grand_income"], Decimal("4500.00"))
+        self.assertEqual(ctx["grand_direct_expense"], Decimal("1500.00"))
+        self.assertEqual(len(ctx["project_rows"]), 2)
+
+    # B: "All Companies" (empty company_id) equals the unfiltered totals
+    def test_profit_dashboard_all_companies_equals_unfiltered(self):
+        unfiltered = self._profit_totals()
+        all_companies = self._profit_totals(company_id="")
+        self.assertEqual(unfiltered["grand_income"], all_companies["grand_income"])
+        self.assertEqual(unfiltered["grand_direct_expense"], all_companies["grand_direct_expense"])
+        self.assertEqual(len(unfiltered["project_rows"]), len(all_companies["project_rows"]))
+
+    # C: COMP001 selected -> only COMP001 projects included
+    def test_profit_dashboard_comp001_only_includes_comp001_projects(self):
+        ctx = self._profit_totals(company_id=self.comp001.id)
+        self.assertEqual(len(ctx["project_rows"]), 1)
+        self.assertEqual(ctx["project_rows"][0]["project"].id, self.p1.id)
+        self.assertEqual(ctx["grand_income"], Decimal("3000.00"))
+        self.assertEqual(ctx["grand_direct_expense"], Decimal("1000.00"))
+
+    # D: a second Company excludes COMP001 projects
+    def test_profit_dashboard_comp002_excludes_comp001_projects(self):
+        ctx = self._profit_totals(company_id=self.comp002.id)
+        self.assertEqual(len(ctx["project_rows"]), 1)
+        self.assertEqual(ctx["project_rows"][0]["project"].id, self.p2.id)
+        project_ids_in_result = [row["project"].id for row in ctx["project_rows"]]
+        self.assertNotIn(self.p1.id, project_ids_in_result)
+
+    # E: Company scope is derived through Project.company only
+    def test_child_transaction_models_have_no_company_field(self):
+        self.assertFalse(hasattr(ProjectExpense, "company"))
+        self.assertFalse(hasattr(ProjectExpense, "company_id"))
+        self.assertFalse(hasattr(ProjectInvoice, "company"))
+        self.assertFalse(hasattr(ProjectInvoice, "company_id"))
+        # Yet the filter still correctly scopes them, via project__company.
+        ctx = self._profit_totals(company_id=self.comp001.id)
+        self.assertEqual(ctx["grand_income"], Decimal("3000.00"))
+
+    # F: historical records untouched by simply viewing the filtered report
+    def test_viewing_filtered_report_does_not_modify_records(self):
+        before = (
+            list(Project.objects.order_by("id").values_list("id", "project_id", "company_id")),
+            list(ProjectExpense.objects.order_by("id").values_list("id", "amount", "project_id")),
+        )
+        self._profit_totals(company_id=self.comp001.id)
+        self._profit_totals(company_id=self.comp002.id)
+        self._profit_totals()
+        after = (
+            list(Project.objects.order_by("id").values_list("id", "project_id", "company_id")),
+            list(ProjectExpense.objects.order_by("id").values_list("id", "amount", "project_id")),
+        )
+        self.assertEqual(before, after)
+
+    # project_cost_analysis_list: Company filter scopes the projects list
+    def test_cost_analysis_list_company_filter_scopes_projects(self):
+        response = self.client.get(reverse("project_cost_analysis_list"), {"company_id": self.comp001.id})
+        self.assertEqual(response.status_code, 200)
+        project_ids = [p.id for p in response.context["projects"]]
+        self.assertIn(self.p1.id, project_ids)
+        self.assertNotIn(self.p2.id, project_ids)
+
+    def test_cost_analysis_list_no_filter_includes_all(self):
+        response = self.client.get(reverse("project_cost_analysis_list"))
+        self.assertEqual(response.status_code, 200)
+        project_ids = [p.id for p in response.context["projects"]]
+        self.assertIn(self.p1.id, project_ids)
+        self.assertIn(self.p2.id, project_ids)
+
+    # cost_analysis_by_gl_group: Company filter scopes the projects list
+    def test_gl_group_report_company_filter_scopes_projects(self):
+        response = self.client.get(reverse("cost_analysis_by_gl_group"), {"company_id": self.comp002.id})
+        self.assertEqual(response.status_code, 200)
+        project_ids = list(response.context["projects"].values_list("id", flat=True))
+        self.assertEqual(project_ids, [self.p2.id])
+
+    def test_gl_group_report_no_filter_includes_all(self):
+        response = self.client.get(reverse("cost_analysis_by_gl_group"))
+        self.assertEqual(response.status_code, 200)
+        project_ids = set(response.context["projects"].values_list("id", flat=True))
+        self.assertEqual(project_ids, {self.p1.id, self.p2.id})
+

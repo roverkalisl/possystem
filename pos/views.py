@@ -3261,14 +3261,19 @@ def project_profit_dashboard(request):
     project_id = request.GET.get("project_id")
     project_type = request.GET.get("project_type")
     status = request.GET.get("status")
+    company_id = request.GET.get("company_id")
 
-    projects = Project.objects.filter(is_active=True).order_by("-created_at")
+    all_active_projects = Project.objects.filter(is_active=True).order_by("-created_at")
+
+    projects = all_active_projects
     if project_id:
         projects = projects.filter(id=project_id)
     if project_type:
         projects = projects.filter(project_type=project_type)
     if status:
         projects = projects.filter(status=status)
+    if company_id:
+        projects = projects.filter(company_id=company_id)
 
     project_rows = []
 
@@ -3338,7 +3343,9 @@ def project_profit_dashboard(request):
         "project_id": project_id,
         "project_type": project_type,
         "status": status,
-        "projects": projects,
+        "company_id": company_id,
+        "projects": all_active_projects,
+        "companies": Company.objects.filter(is_active=True).order_by("company_code"),
         "project_type_choices": Project.PROJECT_TYPE_CHOICES,
         "status_choices": Project.STATUS_CHOICES,
     })

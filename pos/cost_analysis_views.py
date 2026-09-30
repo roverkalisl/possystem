@@ -18,7 +18,7 @@ import csv
 
 from .models import (
     Project, ProjectBudget, ProjectBudgetLine, ProjectExpense,
-    ProjectPettyCashExpense, GRNItem, GLMaster
+    ProjectPettyCashExpense, GRNItem, GLMaster, Company
 )
 from .forms import BudgetUploadForm, ProjectBudgetForm, ProjectBudgetLineFormSet
 from .cost_analysis import ProjectCostAnalyzer
@@ -39,10 +39,16 @@ def project_cost_analysis_list(request):
         messages.error(request, 'You do not have permission to access cost analysis')
         return redirect('dashboard')
     
+    company_id = request.GET.get('company_id')
+
     projects = Project.objects.filter(is_active=True).prefetch_related('budget')
-    
+    if company_id:
+        projects = projects.filter(company_id=company_id)
+
     context = {
         'projects': projects,
+        'companies': Company.objects.filter(is_active=True).order_by('company_code'),
+        'selected_company': company_id,
         'page_title': 'Project Cost Analysis'
     }
     return render(request, 'pos/cost_analysis_list.html', context)
@@ -138,14 +144,17 @@ def cost_analysis_by_gl_group(request):
     gl_group = request.GET.get('gl_group')
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
-    
+    company_id = request.GET.get('company_id')
+
     projects = Project.objects.filter(is_active=True)
     summary_data = {}
     gl_wise_data = {}
     show_gl_wise = False
-    
+
     if project_id:
         projects = projects.filter(id=project_id)
+    if company_id:
+        projects = projects.filter(company_id=company_id)
     
     for project in projects:
         analyzer = ProjectCostAnalyzer(project)
@@ -200,6 +209,8 @@ def cost_analysis_by_gl_group(request):
         'page_title': 'GL Group Cost Analysis',
         'selected_project': project_id,
         'selected_group': gl_group,
+        'selected_company': company_id,
+        'companies': Company.objects.filter(is_active=True).order_by('company_code'),
         'show_gl_wise': show_gl_wise and gl_wise_data,
     }
     return render(request, 'pos/cost_analysis_gl_group.html', context)
