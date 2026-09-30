@@ -14,8 +14,16 @@
     </div>
 
     <form method="get" class="row g-2 mb-3">
-        <div class="col-md-10">
+        <div class="col-md-7">
             <input type="text" name="q" value="{{ query }}" class="form-control form-control-sm" placeholder="Search by GRN No, PO No, Supplier, or Delivery Note">
+        </div>
+        <div class="col-md-3">
+            <select name="company_id" class="form-select form-select-sm">
+                <option value="">All Companies</option>
+                {% for company in companies %}
+                <option value="{{ company.id }}" {% if company_id == company.id|stringformat:"s" %}selected{% endif %}>{{ company.company_code }} - {{ company.company_name }}</option>
+                {% endfor %}
+            </select>
         </div>
         <div class="col-md-2">
             <button type="submit" class="btn btn-outline-secondary btn-sm w-100">Search</button>

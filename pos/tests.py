@@ -27,6 +27,10 @@ from .models import (
     ProjectInvoicePayment,
     PurchaseOrder,
     Supplier,
+    SupplierAdvance,
+    SupplierSettlement,
+    GRN,
+    GRNItem,
     CashAdjustment,
     POSSettings,
     Sale,
@@ -1882,6 +1886,213 @@ class Phase3CompanyDashboardTests(TestCase):
     # M: no Company field exists on any child project transaction model
     def test_no_company_field_on_child_transaction_models(self):
         for model in (ProjectExpense, ProjectIncome, ProjectInvoice, ProjectCostActual):
+            self.assertFalse(hasattr(model, "company"), f"{model.__name__} must not have a company field")
+            self.assertFalse(hasattr(model, "company_id"), f"{model.__name__} must not have a company_id field")
+
+
+class Phase42APurchasingReportFilterTests(TestCase):
+    """
+    Phase 4.2-A: read-only Company filtering for Purchase Order,
+    Supplier Advance, Supplier Settlement, and GRN reports. Company is
+    derived strictly through Project (or, for GRN, through
+    PurchaseOrder -> Project) - never guessed for Project-less records.
+    None of PurchaseOrder, SupplierAdvance, SupplierSettlement, GRN,
+    GRNItem, or any other model gained a company field.
+    """
+
+    def setUp(self):
+        self.owner = User.objects.create_superuser(
+            username="phase42a_owner", email="phase42a_owner@example.com", password="12345"
+        )
+        self.comp001 = Company.objects.create(company_code="COMP001", company_name="P&I Constructions")
+        self.comp002 = Company.objects.create(company_code="COMP002", company_name="Second Business")
+
+        self.pA = Project.objects.create(
+            project_id="P42A001", project_name="Comp A Project", project_type="OT", company=self.comp001
+        )
+        self.pB = Project.objects.create(
+            project_id="P42B001", project_name="Comp B Project", project_type="OT", company=self.comp002
+        )
+
+        self.supplier = Supplier.objects.create(name="P42 Supplier Co")
+
+        # Purchase Orders: one per company-linked project, one project-less.
+        self.po_a = PurchaseOrder.objects.create(supplier=self.supplier, project=self.pA)
+        self.po_b = PurchaseOrder.objects.create(supplier=self.supplier, project=self.pB)
+        self.po_none = PurchaseOrder.objects.create(supplier=self.supplier, project=None)
+        for po in (self.po_a, self.po_b, self.po_none):
+            po.items.create(description="Item", quantity=Decimal("1"), unit_price=Decimal("1000.00"))
+
+        self.client.force_login(self.owner)
+
+    def _switch_to(self, company):
+        self.client.post(reverse("switch_active_company"), {"company_id": company.id})
+
+    # 1 & 2: Company A / Company B purchases visible under their own Company
+    def test_purchase_order_with_company_a_project_visible_under_company_a(self):
+        response = self.client.get(reverse("purchase_order_list"), {"company_id": self.comp001.id})
+        self.assertEqual(response.status_code, 200)
+        order_ids = [o.id for o in response.context["orders"]]
+        self.assertIn(self.po_a.id, order_ids)
+        self.assertNotIn(self.po_b.id, order_ids)
+
+    def test_purchase_order_with_company_b_project_visible_under_company_b(self):
+        response = self.client.get(reverse("purchase_order_list"), {"company_id": self.comp002.id})
+        order_ids = [o.id for o in response.context["orders"]]
+        self.assertIn(self.po_b.id, order_ids)
+        self.assertNotIn(self.po_a.id, order_ids)
+
+    # 3: Project-less purchase not incorrectly assigned to either company
+    def test_project_less_purchase_order_excluded_from_both_companies(self):
+        for company in (self.comp001, self.comp002):
+            response = self.client.get(reverse("purchase_order_list"), {"company_id": company.id})
+            order_ids = [o.id for o in response.context["orders"]]
+            self.assertNotIn(self.po_none.id, order_ids)
+
+        # ...but it is still visible with no Company filter at all.
+        response = self.client.get(reverse("purchase_order_list"))
+        order_ids = [o.id for o in response.context["orders"]]
+        self.assertIn(self.po_none.id, order_ids)
+
+    # 4: Supplier Advance with Project -> Company derived correctly
+    def test_supplier_advance_with_project_derives_company(self):
+        advance_a = SupplierAdvance.objects.create(
+            supplier=self.supplier, project=self.pA, amount=Decimal("500.00")
+        )
+        advance_none = SupplierAdvance.objects.create(
+            supplier=self.supplier, project=None, amount=Decimal("300.00")
+        )
+
+        response = self.client.get(reverse("supplier_advance_summary"), {"company_id": self.comp001.id})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["grand_total_advance"], Decimal("500.00"))
+        self.assertEqual(response.context["grand_advance_records"], 1)
+
+        response_b = self.client.get(reverse("supplier_advance_summary"), {"company_id": self.comp002.id})
+        self.assertEqual(response_b.context["grand_total_advance"], Decimal("0"))
+
+        response_all = self.client.get(reverse("supplier_advance_summary"))
+        self.assertEqual(response_all.context["grand_total_advance"], Decimal("800.00"))
+
+    # 5: Supplier Settlement with Project -> Company derived correctly
+    def test_supplier_settlement_with_project_derives_company(self):
+        advance_a = SupplierAdvance.objects.create(
+            supplier=self.supplier, project=self.pA, amount=Decimal("1000.00")
+        )
+        settlement_a = SupplierSettlement.objects.create(
+            advance=advance_a, supplier=self.supplier, project=self.pA,
+            description="Settle A", actual_amount=Decimal("400.00"),
+        )
+        advance_none = SupplierAdvance.objects.create(
+            supplier=self.supplier, project=None, amount=Decimal("600.00")
+        )
+        settlement_none = SupplierSettlement.objects.create(
+            advance=advance_none, supplier=self.supplier, project=None,
+            description="Settle general", actual_amount=Decimal("200.00"),
+        )
+
+        response = self.client.get(reverse("supplier_settlement_list"), {"company_id": self.comp001.id})
+        self.assertEqual(response.status_code, 200)
+        settlement_ids = [s.id for s in response.context["settlements"]]
+        self.assertIn(settlement_a.id, settlement_ids)
+        self.assertNotIn(settlement_none.id, settlement_ids)
+
+        response_b = self.client.get(reverse("supplier_settlement_list"), {"company_id": self.comp002.id})
+        settlement_ids_b = [s.id for s in response_b.context["settlements"]]
+        self.assertNotIn(settlement_a.id, settlement_ids_b)
+        self.assertNotIn(settlement_none.id, settlement_ids_b)
+
+    # 6: GRN with PO linked to Project -> Company derived correctly
+    def test_grn_with_po_linked_to_project_derives_company(self):
+        grn_a = GRN.objects.create(purchase_order=self.po_a, supplier=self.supplier)
+        grn_b = GRN.objects.create(purchase_order=self.po_b, supplier=self.supplier)
+
+        response = self.client.get(reverse("grn_list"), {"company_id": self.comp001.id})
+        self.assertEqual(response.status_code, 200)
+        grn_ids = [g.id for g in response.context["grns"]]
+        self.assertIn(grn_a.id, grn_ids)
+        self.assertNotIn(grn_b.id, grn_ids)
+
+    # 7: GRN with project-less PO -> no Company assignment
+    def test_grn_with_project_less_po_excluded_from_both_companies(self):
+        grn_none = GRN.objects.create(purchase_order=self.po_none, supplier=self.supplier)
+
+        for company in (self.comp001, self.comp002):
+            response = self.client.get(reverse("grn_list"), {"company_id": company.id})
+            grn_ids = [g.id for g in response.context["grns"]]
+            self.assertNotIn(grn_none.id, grn_ids)
+
+        response_all = self.client.get(reverse("grn_list"))
+        grn_ids_all = [g.id for g in response_all.context["grns"]]
+        self.assertIn(grn_none.id, grn_ids_all)
+
+    # 8: Company switcher changes report scope correctly (active session,
+    # no explicit company_id GET param)
+    def test_company_switcher_changes_report_scope(self):
+        self._switch_to(self.comp001)
+        response = self.client.get(reverse("purchase_order_list"))
+        order_ids = [o.id for o in response.context["orders"]]
+        self.assertIn(self.po_a.id, order_ids)
+        self.assertNotIn(self.po_b.id, order_ids)
+
+        self._switch_to(self.comp002)
+        response2 = self.client.get(reverse("purchase_order_list"))
+        order_ids2 = [o.id for o in response2.context["orders"]]
+        self.assertIn(self.po_b.id, order_ids2)
+        self.assertNotIn(self.po_a.id, order_ids2)
+
+    # 9: existing no-company-filter behaviour is unchanged (all records visible)
+    def test_no_company_filter_preserves_existing_behavior(self):
+        for url_name in ("purchase_order_list", "supplier_settlement_list", "supplier_advance_summary", "grn_list"):
+            response = self.client.get(reverse(url_name))
+            self.assertEqual(response.status_code, 200, url_name)
+
+        response = self.client.get(reverse("purchase_order_list"))
+        order_ids = [o.id for o in response.context["orders"]]
+        self.assertIn(self.po_a.id, order_ids)
+        self.assertIn(self.po_b.id, order_ids)
+        self.assertIn(self.po_none.id, order_ids)
+
+    # 10: no database records are modified by viewing/filtering these reports
+    def test_viewing_reports_does_not_modify_any_record(self):
+        advance = SupplierAdvance.objects.create(
+            supplier=self.supplier, project=self.pA, amount=Decimal("500.00")
+        )
+        settlement = SupplierSettlement.objects.create(
+            advance=advance, supplier=self.supplier, project=self.pA,
+            description="Settle", actual_amount=Decimal("100.00"),
+        )
+        grn = GRN.objects.create(purchase_order=self.po_a, supplier=self.supplier)
+
+        before = (
+            self.po_a.project_id, self.po_a.status,
+            advance.amount, advance.project_id,
+            settlement.actual_amount, settlement.project_id,
+            grn.purchase_order_id, grn.status,
+        )
+
+        self._switch_to(self.comp001)
+        self.client.get(reverse("purchase_order_list"), {"company_id": self.comp001.id})
+        self.client.get(reverse("supplier_advance_summary"), {"company_id": self.comp002.id})
+        self.client.get(reverse("supplier_settlement_list"))
+        self.client.get(reverse("grn_list"), {"company_id": self.comp001.id})
+        self._switch_to(self.comp002)
+
+        self.po_a.refresh_from_db()
+        advance.refresh_from_db()
+        settlement.refresh_from_db()
+        grn.refresh_from_db()
+        after = (
+            self.po_a.project_id, self.po_a.status,
+            advance.amount, advance.project_id,
+            settlement.actual_amount, settlement.project_id,
+            grn.purchase_order_id, grn.status,
+        )
+        self.assertEqual(before, after)
+
+    # No Company field was added to any model in this phase
+    def test_no_company_field_added_to_purchasing_models(self):
+        for model in (PurchaseOrder, SupplierAdvance, SupplierSettlement, GRN, GRNItem):
             self.assertFalse(hasattr(model, "company"), f"{model.__name__} must not have a company field")
             self.assertFalse(hasattr(model, "company_id"), f"{model.__name__} must not have a company_id field")
 

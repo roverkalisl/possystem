@@ -46,3 +46,18 @@ def set_active_company(request, company):
         request.session.pop(ACTIVE_COMPANY_SESSION_KEY, None)
     else:
         request.session[ACTIVE_COMPANY_SESSION_KEY] = company.id
+
+
+def resolve_company_filter(request):
+    """
+    Resolves the company_id filter value for a GET-based report (Phase
+    4.2-A). An explicit request.GET["company_id"] takes precedence -
+    including an explicit empty value, meaning the user chose "All
+    Companies" - otherwise falls back to the active session Company via
+    get_active_company(). Returns an int id or None. Read-only: makes no
+    session or database writes.
+    """
+    if "company_id" in request.GET:
+        return request.GET.get("company_id") or None
+    active_company = get_active_company(request)
+    return active_company.id if active_company else None

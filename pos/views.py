@@ -36,7 +36,7 @@ from .models import (
     Company,
 )
 from .backup_engine import compute_next_scheduled
-from .company_context import get_active_company, set_active_company
+from .company_context import get_active_company, set_active_company, resolve_company_filter
 
 from .forms import QuotationForm, QuotationItemFormSet
 from .barcode_services import generate_barcode_for_item, generate_missing_barcodes
@@ -5820,6 +5820,7 @@ def reject_supplier_settlement(request, settlement_id):
 def purchase_order_list(request):
     query = request.GET.get("q", "").strip()
     status_filter = request.GET.get("status", "").strip()
+    company_id = resolve_company_filter(request)
 
     orders = PurchaseOrder.objects.select_related(
         "supplier", "project", "created_by"
@@ -5837,11 +5838,19 @@ def purchase_order_list(request):
     if status_filter in ["draft", "pending", "approved", "rejected", "closed"]:
         orders = orders.filter(status=status_filter)
 
+    # Company is only derivable through Project (see resolve_company_filter).
+    # A project-less PO has no Company context and is correctly excluded
+    # here rather than guessed into the selected Company.
+    if company_id:
+        orders = orders.filter(project__company_id=company_id)
+
     return render(request, "pos/purchase_order_list.html", {
         "orders": orders,
         "query": query,
         "status_filter": status_filter,
         "is_owner": is_owner(request.user),
+        "companies": Company.objects.filter(is_active=True).order_by("company_code"),
+        "company_id": str(company_id) if company_id else "",
     })
 
 @user_passes_test(is_owner)
@@ -6244,6 +6253,7 @@ def supplier_settlement_list(request):
     query = request.GET.get("q", "").strip()
     status_filter = request.GET.get("status", "").strip()
     supplier_id = request.GET.get("supplier", "").strip()
+    company_id = resolve_company_filter(request)
 
     suppliers = Supplier.objects.filter(is_active=True).order_by("name")
 
@@ -6266,6 +6276,15 @@ def supplier_settlement_list(request):
 
     if supplier_id:
         settlements = settlements.filter(supplier_id=supplier_id)
+
+    # Company is only derivable through Project. A settlement with no
+    # Project has no Company context and is excluded here rather than
+    # guessed into the selected Company. The supplier-wise summary below
+    # is deliberately left un-scoped by Company: it is a Supplier-level
+    # (shared master data) rollup across all of that supplier's advances,
+    # many of which may be Project-less, so it is not a "Company total".
+    if company_id:
+        settlements = settlements.filter(project__company_id=company_id)
 
     summary_suppliers = suppliers
     if supplier_id:
@@ -6328,6 +6347,8 @@ def supplier_settlement_list(request):
         "status_filter": status_filter,
         "selected_supplier": supplier_id,
         "is_owner": is_owner(request.user),
+        "companies": Company.objects.filter(is_active=True).order_by("company_code"),
+        "company_id": str(company_id) if company_id else "",
         "supplier_summary": supplier_summary,
         "grand_total_advance": grand_total_advance,
         "grand_approved_applied": grand_approved_applied,
@@ -6503,6 +6524,7 @@ def supplier_advance_summary(request):
     status_filter = request.GET.get("status", "").strip()
     from_date_str = request.GET.get("from_date", "").strip()
     to_date_str = request.GET.get("to_date", "").strip()
+    company_id = resolve_company_filter(request)
 
     suppliers = Supplier.objects.filter(is_active=True).order_by("name")
     projects = Project.objects.filter(is_active=True).order_by("project_id")
@@ -6545,6 +6567,17 @@ def supplier_advance_summary(request):
 
     if status_filter in ["pending", "approved", "rejected"]:
         settlements = settlements.filter(approval_status=status_filter)
+
+    # Company is only derivable through Project. Advances/settlements
+    # with no Project have no Company context and are excluded here
+    # rather than guessed into the selected Company. Because the
+    # supplier_rows aggregation below is built entirely from these two
+    # already-filtered querysets, the Company scope flows through to the
+    # totals automatically - the same pattern this view already used for
+    # its existing Project filter.
+    if company_id:
+        advances = advances.filter(project__company_id=company_id)
+        settlements = settlements.filter(project__company_id=company_id)
 
     advance_summary = advances.values("supplier_id").annotate(
         total_advance=Sum("amount"),
@@ -6619,6 +6652,8 @@ def supplier_advance_summary(request):
         "status_filter": status_filter,
         "from_date": from_date_str,
         "to_date": to_date_str,
+        "companies": Company.objects.filter(is_active=True).order_by("company_code"),
+        "company_id": str(company_id) if company_id else "",
         "grand_total_advance": grand_total_advance,
         "grand_total_approved_settled": grand_total_approved_settled,
         "grand_total_pending_settlement": grand_total_pending_settlement,
@@ -6767,11 +6802,12 @@ def sales_return_list(request):
 @user_passes_test(can_manage_items)
 def grn_list(request):
     query = request.GET.get("q", "").strip()
-    
+    company_id = resolve_company_filter(request)
+
     grns = GRN.objects.select_related(
-        "purchase_order", "supplier", "created_by"
+        "purchase_order", "purchase_order__project", "supplier", "created_by"
     ).order_by("-grn_date", "-id")
-    
+
     if query:
         grns = grns.filter(
             Q(grn_no__icontains=query) |
@@ -6779,10 +6815,21 @@ def grn_list(request):
             Q(supplier__name__icontains=query) |
             Q(delivery_note_no__icontains=query)
         )
-    
+
+    # Company is derived only through GRN -> PurchaseOrder -> Project.
+    # A GRN whose PO has no Project has no Company context and is
+    # excluded here rather than guessed. GRNItem.allocation_project
+    # (a line-level, independent allocation) is intentionally NOT used
+    # to rewrite the parent GRN's Company - allocation-level Company
+    # reporting is not implemented in this phase.
+    if company_id:
+        grns = grns.filter(purchase_order__project__company_id=company_id)
+
     return render(request, "pos/grn_list.html", {
         "grns": grns,
         "query": query,
+        "companies": Company.objects.filter(is_active=True).order_by("company_code"),
+        "company_id": str(company_id) if company_id else "",
     })
 
 

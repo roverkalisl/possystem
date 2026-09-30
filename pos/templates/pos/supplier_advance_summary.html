@@ -53,6 +53,14 @@
             <div class="col-md-1 d-grid">
                 <button type="submit" class="btn btn-outline-primary">Filter</button>
             </div>
+            <div class="col-md-3 mt-2">
+                <select name="company_id" class="form-select">
+                    <option value="">All Companies</option>
+                    {% for company in companies %}
+                    <option value="{{ company.id }}" {% if company_id == company.id|stringformat:"s" %}selected{% endif %}>{{ company.company_code }} - {{ company.company_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
         </form>
     </div>
 </div>
