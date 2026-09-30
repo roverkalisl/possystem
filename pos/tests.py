@@ -3,7 +3,7 @@ from datetime import date
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.contrib.auth.models import User
+from django.contrib.auth.models import Group, User
 from django.test import TestCase
 from django.urls import reverse
 
@@ -23,6 +23,7 @@ from .models import (
     ProjectInvoice,
     ProjectInvoicePayment,
     CashAdjustment,
+    POSSettings,
     Sale,
     SaleRecovery,
     SalaryAdvance,
@@ -888,4 +889,100 @@ class PosChequePaymentMethodTests(TestCase):
         totals = self.client.get(reverse("payment_summary_dashboard")).context["period_totals"]
         self.assertEqual(totals["credit"], Decimal("2500.00"))
         self.assertEqual(totals["cheque"], Decimal("0"))
+
+
+class POSDefaultBankAccountTests(TestCase):
+    """
+    Default Retail Shop Bank Transfer Account: POSSettings.get_solo()
+    holds a single default BankAccount. pos_page exposes it for the POS
+    screen to auto-select; the cashier can still override it per sale.
+    """
+
+    def setUp(self):
+        self.owner = User.objects.create_superuser(
+            username="pos_settings_owner", email="pos_settings_owner@example.com", password="12345"
+        )
+        cashier_group, _ = Group.objects.get_or_create(name="Cashier")
+        self.cashier = User.objects.create_user(username="pos_settings_cashier", password="12345")
+        self.cashier.groups.add(cashier_group)
+
+        gl = GLMaster.objects.create(gl_code="POSSET-GL", gl_name="Bank GL", gl_type="asset")
+        self.account_a = BankAccount.objects.create(
+            bank_name="BOC", account_name="Current", account_number="POSSET-BOC-1",
+            opening_balance=Decimal("0"), gl_account=gl,
+        )
+        self.account_b = BankAccount.objects.create(
+            bank_name="Sampath", account_name="Current", account_number="POSSET-SMP-1",
+            opening_balance=Decimal("0"), gl_account=gl,
+        )
+
+    def test_cashier_cannot_access_pos_settings(self):
+        # Restricted to Owner/Superuser only, per spec.
+        self.client.force_login(self.cashier)
+        response = self.client.get(reverse("pos_settings"))
+        self.assertNotEqual(response.status_code, 200)
+
+    def test_owner_can_set_default_bank_account(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            reverse("pos_settings"), {"default_bank_transfer_account": self.account_a.id}
+        )
+        self.assertEqual(response.status_code, 302)
+        settings_row = POSSettings.get_solo()
+        self.assertEqual(settings_row.default_bank_transfer_account_id, self.account_a.id)
+
+    def test_owner_can_clear_default_bank_account(self):
+        POSSettings.objects.create(default_bank_transfer_account=self.account_a)
+        self.client.force_login(self.owner)
+        self.client.post(reverse("pos_settings"), {"default_bank_transfer_account": ""})
+        settings_row = POSSettings.get_solo()
+        self.assertIsNone(settings_row.default_bank_transfer_account)
+
+    def test_pos_page_exposes_default_bank_account_id(self):
+        POSSettings.objects.create(default_bank_transfer_account=self.account_a)
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("pos"))
+        self.assertEqual(response.context["default_bank_account_id"], self.account_a.id)
+
+    def test_inactive_default_account_is_not_exposed_on_pos_page(self):
+        POSSettings.objects.create(default_bank_transfer_account=self.account_a)
+        self.account_a.is_active = False
+        self.account_a.save()
+        self.client.force_login(self.owner)
+        response = self.client.get(reverse("pos"))
+        self.assertIsNone(response.context["default_bank_account_id"])
+
+    def test_get_solo_creates_and_reuses_a_single_row(self):
+        self.assertEqual(POSSettings.objects.count(), 0)
+        row1 = POSSettings.get_solo()
+        row2 = POSSettings.get_solo()
+        self.assertEqual(row1.id, row2.id)
+        self.assertEqual(POSSettings.objects.count(), 1)
+
+    def test_manual_account_selection_overrides_default_for_that_sale_only(self):
+        # Sale 3 from the spec example: default is BOC, cashier picks
+        # Sampath for this one sale - only this sale should use Sampath.
+        POSSettings.objects.create(default_bank_transfer_account=self.account_a)
+        gl = GLMaster.objects.create(gl_code="POSSET-ITEM-GL", gl_name="Retail Sales GL", gl_type="income")
+        item = Item.objects.create(
+            item_code="POSSET-ITEM", name="POS Settings Test Service",
+            selling_price=Decimal("500.00"), is_service=True, retail_gl_account=gl,
+        )
+        self.client.force_login(self.owner)
+        payload = {
+            "items": [{"id": item.id, "qty": 1, "price": "500.00", "discount": 0}],
+            "discount": 0,
+            "payment_method": "bank_transfer",
+            "bank_account_id": self.account_b.id,
+            "bank_transfer_reference": "REF-OVERRIDE-1",
+        }
+        response = self.client.post(
+            reverse("save_sale"), data=json.dumps(payload), content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        sale = Sale.objects.get(invoice_no=response.json()["invoice_no"])
+        self.assertEqual(sale.bank_account_id, self.account_b.id)
+        self.assertNotEqual(sale.bank_account_id, self.account_a.id)
+        # Default configuration itself is unchanged by a per-sale override.
+        self.assertEqual(POSSettings.get_solo().default_bank_transfer_account_id, self.account_a.id)
 

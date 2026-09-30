@@ -416,6 +416,9 @@
 		<a href="{% url 'sales_return_list' %}" class="simple-dashboard-btn">Sales Return List</a>
                 <a href="{% url 'credit_sales_list' %}" class="simple-dashboard-btn">Credit Recovery</a>
                 <a href="{% url 'project_issue_approval_list' %}" class="simple-dashboard-btn">Project Issue Approvals</a>
+                {% if is_owner_flag %}
+                <a href="{% url 'pos_settings' %}" class="simple-dashboard-btn">POS Settings</a>
+                {% endif %}
             </div>
         </div>
 

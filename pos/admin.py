@@ -26,6 +26,7 @@ from .models import (
     Attendance,
     PayrollSettings,
     BackupSettings,
+    POSSettings,
     BackupRecord,
     RestoreLog,
     BankAccount,
@@ -253,6 +254,15 @@ class BackupSettingsAdmin(admin.ModelAdmin):
     def has_add_permission(self, request):
         # Singleton: only one BackupSettings row should ever exist.
         return not BackupSettings.objects.exists()
+
+
+@admin.register(POSSettings)
+class POSSettingsAdmin(admin.ModelAdmin):
+    list_display = ['default_bank_transfer_account', 'updated_by', 'updated_at']
+
+    def has_add_permission(self, request):
+        # Singleton: only one POSSettings row should ever exist.
+        return not POSSettings.objects.exists()
 
 
 @admin.register(BackupRecord)

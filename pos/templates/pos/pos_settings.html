@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}POS Settings{% endblock %}
+{% block page_title %}POS Settings{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm">
+    <div class="card-body">
+        <h5 class="card-title mb-3">Default Bank Transfer Account</h5>
+        <p class="text-muted">
+            When a cashier selects "Bank Transfer" as the payment method in POS, this account
+            is automatically pre-selected. The cashier can still change it for an individual sale.
+        </p>
+        <form method="post">
+            {% csrf_token %}
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Default Bank Transfer Account</label>
+                    <select name="default_bank_transfer_account" class="form-select">
+                        <option value="">-- No default (cashier must choose every time) --</option>
+                        {% for account in bank_accounts %}
+                        <option value="{{ account.id }}" {% if settings_row.default_bank_transfer_account_id == account.id %}selected{% endif %}>
+                            {{ account.bank_name }} - {{ account.account_name }} ({{ account.account_number }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                    <small class="text-muted">Only active bank accounts are selectable.</small>
+                </div>
+            </div>
+
+            <div class="mt-4 d-flex gap-2">
+                <button type="submit" class="btn btn-primary">Save Settings</button>
+                <a href="{% url 'pos' %}" class="btn btn-outline-secondary">Back to POS</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

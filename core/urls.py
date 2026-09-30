@@ -41,6 +41,7 @@ urlpatterns = [
     path('', views.pos_page, name='pos'),
     path('save-sale/', views.save_sale, name='save_sale'),
     path('pos/barcode-lookup/', views.barcode_lookup, name='barcode_lookup'),
+    path('pos/settings/', views.pos_settings_view, name='pos_settings'),
     path('pos/payment-summary/', payment_summary_views.payment_summary_dashboard, name='payment_summary_dashboard'),
     path('pos/payment-report/', payment_report_views.payment_report, name='payment_report'),
     path('pos/cash-adjustment/', cash_adjustment_views.cash_adjustment_list, name='cash_adjustment_list'),

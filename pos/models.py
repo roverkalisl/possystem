@@ -142,6 +142,40 @@ class BankAccount(models.Model):
         return Decimal(str(self.opening_balance or 0)) + self.approved_transaction_total
 
 
+class POSSettings(models.Model):
+    """
+    Single settings row for POS-wide configuration.
+    Currently holds the default bank account auto-selected on the POS
+    screen when payment method = Bank Transfer. Single-row (get_solo)
+    pattern matching BackupSettings, since this system is single-company
+    today; a company FK can be added here later without breaking existing
+    rows if multi-company support is introduced.
+    """
+    default_bank_transfer_account = models.ForeignKey(
+        "BankAccount",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="default_for_pos_settings",
+    )
+    updated_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="updated_pos_settings")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "POS Settings"
+        verbose_name_plural = "POS Settings"
+
+    @classmethod
+    def get_solo(cls):
+        obj = cls.objects.first()
+        if obj is None:
+            obj = cls.objects.create()
+        return obj
+
+    def __str__(self):
+        return "POS Settings"
+
+
 class BankTransaction(models.Model):
     TRANSACTION_TYPE_CHOICES = [
         ("deposit", "Deposit"),

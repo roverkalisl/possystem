@@ -31,6 +31,7 @@ from .models import (
     EPF_EMPLOYEE_RATE,
     BackupRecord, BackupSettings,
     BankAccount, BankTransaction, BankLedgerEntry,
+    POSSettings,
 )
 from .backup_engine import compute_next_scheduled
 
@@ -1000,6 +1001,29 @@ def bank_transactions(request):
     })
 
 
+@user_passes_test(is_owner)
+def pos_settings_view(request):
+    settings_row = POSSettings.get_solo()
+    bank_accounts = BankAccount.objects.filter(is_active=True, is_deleted=False).order_by("bank_name", "account_name")
+
+    if request.method == "POST":
+        account_id = request.POST.get("default_bank_transfer_account") or None
+        if account_id:
+            account = get_object_or_404(BankAccount, id=account_id, is_active=True, is_deleted=False)
+            settings_row.default_bank_transfer_account = account
+        else:
+            settings_row.default_bank_transfer_account = None
+        settings_row.updated_by = request.user
+        settings_row.save()
+        messages.success(request, "POS settings updated.")
+        return redirect("pos_settings")
+
+    return render(request, "pos/pos_settings.html", {
+        "settings_row": settings_row,
+        "bank_accounts": bank_accounts,
+    })
+
+
 def pos_page(request):
     query = request.GET.get("q", "").strip()
 
@@ -1008,6 +1032,13 @@ def pos_page(request):
     categories = Category.objects.all().order_by("name")
     customers = Customer.objects.filter(is_active=True).order_by("name")
     bank_accounts = BankAccount.objects.filter(is_active=True, is_deleted=False).order_by("bank_name", "account_name")
+
+    default_bank_account = POSSettings.get_solo().default_bank_transfer_account
+    default_bank_account_id = (
+        default_bank_account.id
+        if default_bank_account and default_bank_account.is_active and not default_bank_account.is_deleted
+        else None
+    )
 
     if query:
         items = items.filter(
@@ -1023,6 +1054,7 @@ def pos_page(request):
         "categories": categories,
         "customers": customers,
         "bank_accounts": bank_accounts,
+        "default_bank_account_id": default_bank_account_id,
         "query": query,
         "show_items": can_manage_items(request.user),
     })

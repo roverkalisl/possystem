@@ -416,6 +416,7 @@
 <script>
 let cart = [];
 let currentCategory = "all";
+const defaultBankAccountId = "{{ default_bank_account_id|default:'' }}";
 
 function getCookie(name) {
     let cookieValue = null;
@@ -444,6 +445,13 @@ function togglePaymentFields() {
     document.getElementById("cash_fields").style.display = method === "cash" ? "flex" : "none";
     document.getElementById("card_field").style.display = method === "card" ? "block" : "none";
     document.getElementById("bank_transfer_field").style.display = method === "bank_transfer" ? "block" : "none";
+
+    if (method === "bank_transfer") {
+        const bankAccountSelect = document.getElementById("bank_account_id");
+        if (!bankAccountSelect.value && defaultBankAccountId) {
+            bankAccountSelect.value = defaultBankAccountId;
+        }
+    }
 
     const chequeNumberField = document.getElementById("cheque_number_field");
     const chequeNumberLabel = document.getElementById("cheque_number_label");
