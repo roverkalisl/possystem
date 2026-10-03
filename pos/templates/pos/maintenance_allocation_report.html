@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+{% block title %}Maintenance Allocation Report{% endblock %}
+{% block page_title %}Maintenance Allocation Report{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-2"><input type="month" name="month" class="form-control form-control-sm" value="{{ f.month }}"></div>
+        <div class="col-md-3">
+            <select name="source_project" class="form-select form-select-sm">
+                <option value="">All Maintenance Projects</option>
+                {% for p in projects %}<option value="{{ p.id }}" {% if f.source_project == p.id|stringformat:"s" %}selected{% endif %}>{{ p.project_id }} - {{ p.project_name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-md-3">
+            <select name="destination_project" class="form-select form-select-sm">
+                <option value="">All Destination Projects</option>
+                {% for p in projects %}<option value="{{ p.id }}" {% if f.destination_project == p.id|stringformat:"s" %}selected{% endif %}>{{ p.project_id }} - {{ p.project_name }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2">
+            <select name="status" class="form-select form-select-sm">
+                <option value="">All Statuses</option>
+                {% for value, label in status_choices %}<option value="{{ value }}" {% if f.status == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2"><input name="reference" class="form-control form-control-sm" placeholder="Reference" value="{{ f.reference }}"></div>
+        <div class="col-md-2"><button class="btn btn-dark btn-sm w-100">Filter</button></div>
+    </form>
+
+    <div class="row text-center mb-3">
+        <div class="col-md-4"><div class="border rounded p-2">Total Available (posted)<br><strong>{{ total_available|money }}</strong></div></div>
+        <div class="col-md-4"><div class="border rounded p-2">Total Allocated (posted)<br><strong>{{ total_allocated|money }}</strong></div></div>
+        <div class="col-md-4"><div class="border rounded p-2">Live Closing Balance<br><strong>{{ closing_balance|money }}</strong></div></div>
+    </div>
+
+    <div class="table-responsive">
+        {% for v in late_variances %}
+        <div class="alert alert-warning">
+            {{ v.allocation.reference }} ({{ v.allocation.month|date:"M Y" }}): cost entered after posting leaves a balance of {{ v.balance|money }}.
+            Reverse and re-allocate this month to bring it back to Rs. 0.00.
+        </div>
+        {% endfor %}
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr><th>Reference</th><th>Month</th><th>Maintenance Project</th><th>Destination</th><th>Percent</th><th>Amount</th><th>Status</th><th>Created By</th><th>Approved By</th></tr>
+            </thead>
+            <tbody>
+                {% for l in lines %}
+                <tr>
+                    <td><a href="{% url 'maintenance_allocation_detail' l.allocation_id %}">{{ l.allocation.reference }}</a></td>
+                    <td>{{ l.allocation.month|date:"Y-m" }}</td>
+                    <td>{{ l.allocation.source_project.project_id }}</td>
+                    <td>{{ l.project.project_id }} - {{ l.project.project_name }}</td>
+                    <td>{{ l.percent }}%</td>
+                    <td class="text-money">{{ l.amount|money }}</td>
+                    <td>{{ l.allocation.get_status_display }}</td>
+                    <td>{{ l.allocation.created_by.username|default:"-" }}</td>
+                    <td>{{ l.allocation.approved_by.username|default:"-" }}</td>
+                </tr>
+                {% empty %}<tr><td colspan="9" class="text-center">No allocations found.</td></tr>{% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

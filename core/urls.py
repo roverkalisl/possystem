@@ -6,6 +6,7 @@ from pos import backup_views
 from pos import payment_summary_views
 from pos import payment_report_views
 from pos import cash_adjustment_views
+from pos import maintenance_allocation_views as mca_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
@@ -153,6 +154,17 @@ urlpatterns = [
     path('project-income/add/', views.add_project_income, name='add_project_income'),
     path('project-transfers/', views.project_transfer_list, name='project_transfer_list'),
     path('project-transfers/add/', views.add_project_transfer, name='add_project_transfer'),
+    path('maintenance-allocations/', mca_views.maintenance_allocation_list, name='maintenance_allocation_list'),
+    path('maintenance-allocations/add/', mca_views.maintenance_allocation_create, name='maintenance_allocation_create'),
+    path('maintenance-allocations/report/', mca_views.maintenance_allocation_report, name='maintenance_allocation_report'),
+    path('maintenance-allocations/available/', mca_views.maintenance_allocation_available, name='maintenance_allocation_available'),
+    path('maintenance-allocations/<int:pk>/', mca_views.maintenance_allocation_detail, name='maintenance_allocation_detail'),
+    path('maintenance-allocations/<int:pk>/edit/', mca_views.maintenance_allocation_edit, name='maintenance_allocation_edit'),
+    path('maintenance-allocations/<int:pk>/submit/', mca_views.maintenance_allocation_submit, name='maintenance_allocation_submit'),
+    path('maintenance-allocations/<int:pk>/approve/', mca_views.maintenance_allocation_approve, name='maintenance_allocation_approve'),
+    path('maintenance-allocations/<int:pk>/reject/', mca_views.maintenance_allocation_reject, name='maintenance_allocation_reject'),
+    path('maintenance-allocations/<int:pk>/post/', mca_views.maintenance_allocation_post, name='maintenance_allocation_post'),
+    path('maintenance-allocations/<int:pk>/reverse/', mca_views.maintenance_allocation_reverse, name='maintenance_allocation_reverse'),
 
     # =========================
     # PROJECT PROFIT

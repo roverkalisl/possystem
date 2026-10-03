@@ -1,4 +1,4 @@
-import json
+﻿import json
 from datetime import date
 from decimal import Decimal
 
@@ -2360,3 +2360,397 @@ class ProjectTransferTests(TestCase):
         r = self.client.get(self.url, {"type": "expense", "source_project": legacy.id})
         self.assertEqual([x["id"] for x in r.context["entry_rows"]], [own.id])
         self.assertNotIn(legacy.id, [p.id for p in r.context["destination_projects"]])
+
+
+class MaintenanceAllocationTests(TestCase):
+    MONTH = date(2026, 6, 1)
+
+    def setUp(self):
+        from .models import MaintenanceAllocation, MaintenanceAllocationLine  # noqa: F401
+        self.owner = User.objects.create_user("owner_mca", password="x", is_superuser=True)
+        self.clerk = User.objects.create_user("clerk_mca", password="x")
+        self.clerk.groups.add(Group.objects.create(name="Clerk"))
+        self.manager = User.objects.create_user("mgr_mca", password="x")
+        self.manager.groups.add(Group.objects.create(name="Manager"))
+        self.cashier = User.objects.create_user("cash_mca", password="x")
+        self.cashier.groups.add(Group.objects.create(name="Cashier"))
+        self.m = Project.objects.create(project_id="MAINT", project_name="Maintenance Main", project_type="OT")
+        self.b = Project.objects.create(project_id="PB", project_name="B", project_type="OT")
+        self.c = Project.objects.create(project_id="PC", project_name="C", project_type="OT")
+        self.closed = Project.objects.create(project_id="PX", project_name="X", project_type="OT", status="completed")
+        self.gl = GLMaster.objects.create(gl_code="6001", gl_name="Maint GL", gl_type="expense")
+        self.exp = ProjectExpense.objects.create(
+            expense_no="910001", project=self.m, expense_type="direct", description="Generator repair",
+            qty=1, unit_price=6000, amount=6000, expense_date=date(2026, 6, 10),
+        )
+        self.exp2 = ProjectExpense.objects.create(
+            expense_no="910002", project=self.m, expense_type="direct", description="Vehicle service",
+            qty=1, unit_price=4000, amount=4000, expense_date=date(2026, 6, 20),
+        )
+        # outside the month, must be ignored
+        ProjectExpense.objects.create(
+            expense_no="910003", project=self.m, expense_type="direct", description="July",
+            qty=1, unit_price=999, amount=999, expense_date=date(2026, 7, 2),
+        )
+        self.add_url = reverse("maintenance_allocation_create")
+
+    # helpers
+    def make(self, rows=None, method="amount", status="draft"):
+        from .models import MaintenanceAllocation, MaintenanceAllocationLine
+        from .maintenance_allocation_views import available_cost
+        a = MaintenanceAllocation.objects.create(
+            month=self.MONTH, source_project=self.m, method=method,
+            available_amount=available_cost(self.m, self.MONTH), status=status, created_by=self.owner,
+        )
+        for proj, amt in (rows or [(self.b, "6000"), (self.c, "4000")]):
+            MaintenanceAllocationLine.objects.create(
+                allocation=a, project=proj, amount=Decimal(amt), percent=Decimal("0"), gl_account=self.gl,
+            )
+        return a
+
+    def action(self, name, alloc, user=None, **data):
+        self.client.force_login(user or self.owner)
+        return self.client.post(reverse(f"maintenance_allocation_{name}", args=[alloc.pk]), data)
+
+    def post_full(self, alloc):
+        from .maintenance_allocation_views import submit_allocation, approve_allocation, post_allocation
+        submit_allocation(self.owner, alloc.pk)
+        approve_allocation(self.owner, alloc.pk)
+        post_allocation(self.owner, alloc.pk)
+        alloc.refresh_from_db()
+
+    def net(self, project):
+        from .maintenance_allocation_views import closing_balance
+        return closing_balance(project, self.MONTH)
+
+    def form_data(self, rows, method="amount", action="save", source=None):
+        d = {"month": "2026-06", "source_project": (source or self.m).id, "method": method,
+             "action": action, "remarks": "", "line_project": [r[0].id for r in rows],
+             "line_value": [str(r[1]) for r in rows], "line_gl": [self.gl.id] * len(rows),
+             "line_remarks": [""] * len(rows)}
+        return d
+
+    # tests
+    def test_available_cost_month_only(self):
+        from .maintenance_allocation_views import available_cost
+        self.assertEqual(available_cost(self.m, self.MONTH), Decimal("10000.00"))
+
+    def test_available_cost_includes_petty_cash_and_returns(self):
+        from .maintenance_allocation_views import available_cost
+        from .models import ProjectPettyCash, ProjectPettyCashExpense
+        pc = ProjectPettyCash.objects.create(amount_issued=Decimal('5000'))
+        ProjectPettyCashExpense.objects.create(
+            petty_cash=pc, project=self.m, expense_date=date(2026, 6, 5), amount=Decimal("500"), approval_status="approved",
+        )
+        ProjectPettyCashExpense.objects.create(
+            petty_cash=pc, project=self.m, expense_date=date(2026, 6, 6), amount=Decimal("300"), approval_status="pending",
+        )
+        ProjectExpense.objects.create(
+            expense_no="910010", project=self.m, expense_type="inventory", description="Return",
+            qty=1, unit_price=-200, amount=-200, expense_date=date(2026, 6, 7),
+        )
+        self.assertEqual(available_cost(self.m, self.MONTH), Decimal("10300.00"))
+
+    def test_create_draft_and_reference_format(self):
+        self.client.force_login(self.owner)
+        r = self.client.post(self.add_url, self.form_data([(self.b, "6000"), (self.c, "4000")]))
+        self.assertEqual(r.status_code, 302)
+        from .models import MaintenanceAllocation
+        a = MaintenanceAllocation.objects.get()
+        self.assertEqual(a.reference, "MCA-202606-0001")
+        self.assertEqual(a.status, "draft")
+        self.assertEqual(a.lines.count(), 2)
+        self.assertEqual(a.month, self.MONTH)
+
+    def test_reference_increments(self):
+        a1, a2 = self.make(), self.make()
+        self.assertEqual((a1.reference, a2.reference), ("MCA-202606-0001", "MCA-202606-0002"))
+
+    def test_percent_method_rounding_absorbed_by_last_line(self):
+        self.client.force_login(self.owner)
+        self.client.post(self.add_url, self.form_data(
+            [(self.b, "33.3333"), (self.c, "66.6667")], method="percent"))
+        from .models import MaintenanceAllocation
+        a = MaintenanceAllocation.objects.get()
+        total = sum(l.amount for l in a.lines.all())
+        self.assertEqual(total, Decimal("10000.00"))
+
+    def test_draft_over_allocation_rejected(self):
+        self.client.force_login(self.owner)
+        self.client.post(self.add_url, self.form_data([(self.b, "10000.01")]))
+        from .models import MaintenanceAllocation
+        self.assertEqual(MaintenanceAllocation.objects.count(), 0)
+
+    def test_duplicate_destination_rejected(self):
+        self.client.force_login(self.owner)
+        self.client.post(self.add_url, self.form_data([(self.b, "5000"), (self.b, "5000")]))
+        from .models import MaintenanceAllocation
+        self.assertEqual(MaintenanceAllocation.objects.count(), 0)
+
+    def test_maintenance_project_cannot_be_destination(self):
+        self.client.force_login(self.owner)
+        self.client.post(self.add_url, self.form_data([(self.m, "10000")]))
+        from .models import MaintenanceAllocation
+        self.assertEqual(MaintenanceAllocation.objects.count(), 0)
+
+    def test_closed_project_cannot_be_destination(self):
+        self.client.force_login(self.owner)
+        self.client.post(self.add_url, self.form_data([(self.closed, "10000")]))
+        from .models import MaintenanceAllocation
+        self.assertEqual(MaintenanceAllocation.objects.count(), 0)
+
+    def test_non_owner_cannot_approve_post_reverse(self):
+        a = self.make(status="pending")
+        for user in (self.clerk, self.manager, self.cashier):
+            for name in ("approve", "post", "reject", "reverse"):
+                r = self.action(name, a, user=user, reason="x")
+                self.assertEqual(r.status_code, 403, f"{user.username} {name}")
+        a.refresh_from_db()
+        self.assertEqual(a.status, "pending")
+        self.assertEqual(ProjectExpense.objects.filter(maintenance_allocation=a).count(), 0)
+
+    def test_owner_workflow_end_to_end(self):
+        a = self.make()
+        self.assertEqual(self.action("submit", a, user=self.clerk).status_code, 302)
+        a.refresh_from_db(); self.assertEqual(a.status, "pending")
+        self.action("approve", a)
+        a.refresh_from_db(); self.assertEqual(a.status, "approved")
+        self.assertEqual(a.approved_by, self.owner)
+        self.action("post", a)
+        a.refresh_from_db(); self.assertEqual(a.status, "posted")
+        self.assertEqual(a.posted_by, self.owner)
+        self.assertIsNotNone(a.posted_at)
+
+    def test_non_owner_cannot_post_via_direct_get_or_post_and_get_not_allowed(self):
+        a = self.make(status="approved")
+        self.client.force_login(self.owner)
+        r = self.client.get(reverse("maintenance_allocation_post", args=[a.pk]))
+        self.assertEqual(r.status_code, 405)
+
+    def test_approval_blocked_when_remaining_positive(self):
+        a = self.make(rows=[(self.b, "6000"), (self.c, "3999.99")], status="pending")
+        self.action("approve", a)
+        a.refresh_from_db(); self.assertEqual(a.status, "pending")
+
+    def test_approval_blocked_when_over_allocated(self):
+        a = self.make(rows=[(self.b, "6000"), (self.c, "4000.01")], status="pending")
+        self.action("approve", a)
+        a.refresh_from_db(); self.assertEqual(a.status, "pending")
+
+    def test_posting_blocked_when_cost_changed_after_approval(self):
+        a = self.make(status="approved")
+        ProjectExpense.objects.create(
+            expense_no="910020", project=self.m, expense_type="direct", description="Late bill",
+            qty=1, unit_price=100, amount=100, expense_date=date(2026, 6, 25),
+        )
+        self.action("post", a)
+        a.refresh_from_db(); self.assertEqual(a.status, "approved")
+        self.assertEqual(ProjectExpense.objects.filter(maintenance_allocation=a).count(), 0)
+
+    def test_nothing_changes_before_posting(self):
+        a = self.make(status="pending")
+        before = ProjectExpense.objects.count()
+        self.action("approve", a)
+        self.assertEqual(ProjectExpense.objects.count(), before)
+        self.assertEqual(self.net(self.m), Decimal("10000.00"))
+        self.assertEqual(self.net(self.b), Decimal("0.00"))
+
+    def test_posting_zeroes_maintenance_and_charges_destinations(self):
+        a = self.make()
+        self.post_full(a)
+        self.assertEqual(self.net(self.m), Decimal("0.00"))
+        self.assertEqual(self.net(self.b), Decimal("6000.00"))
+        self.assertEqual(self.net(self.c), Decimal("4000.00"))
+        rows = ProjectExpense.objects.filter(maintenance_allocation=a)
+        self.assertEqual(rows.count(), 4)
+        self.assertTrue(all(r.maintenance_allocation_line_id for r in rows))
+        self.assertTrue(all(r.gl_account_id == self.gl.id for r in rows))
+        self.assertTrue(all(r.expense_date == date(2026, 6, 30) for r in rows))
+        self.assertEqual(sum(r.amount for r in rows), Decimal("0.00"))
+
+    def test_project_profit_after_posting(self):
+        from .views import compute_project_profit_rows
+        a = self.make()
+        self.post_full(a)
+        rows, _ = compute_project_profit_rows(Project.objects.filter(id__in=[self.m.id, self.b.id, self.c.id]))
+        by = {r["project"].id: r for r in rows}
+        self.assertEqual(by[self.m.id]["net_expense"], Decimal("999.00") + Decimal("0"))
+        self.assertEqual(by[self.b.id]["net_expense"], Decimal("6000"))
+        self.assertEqual(by[self.c.id]["net_expense"], Decimal("4000"))
+
+    def test_original_rows_unchanged(self):
+        a = self.make()
+        self.post_full(a)
+        for e, amt in ((self.exp, 6000), (self.exp2, 4000)):
+            e.refresh_from_db()
+            self.assertEqual(e.project_id, self.m.id)
+            self.assertEqual(e.amount, Decimal(amt))
+            self.assertIsNone(e.maintenance_allocation_id)
+            self.assertTrue(e.is_active)
+
+    def test_duplicate_posting_blocked(self):
+        from .maintenance_allocation_views import post_allocation, AllocationError
+        a = self.make()
+        self.post_full(a)
+        with self.assertRaises(AllocationError):
+            post_allocation(self.owner, a.pk)
+        self.assertEqual(ProjectExpense.objects.filter(maintenance_allocation=a).count(), 4)
+
+    def test_second_allocation_same_month_cannot_post(self):
+        from .maintenance_allocation_views import approve_allocation, post_allocation, AllocationError, submit_allocation
+        a = self.make()
+        self.post_full(a)
+        b = self.make(status="approved")
+        with self.assertRaises(AllocationError):
+            post_allocation(self.owner, b.pk)
+
+    def test_allocation_repost_rows_not_transferable_via_project_transfer(self):
+        from .models import ProjectTransfer
+        a = self.make()
+        self.post_full(a)
+        repost = ProjectExpense.objects.get(maintenance_allocation=a, project=self.b)
+        reversal = ProjectExpense.objects.get(maintenance_allocation=a, project=self.m, amount=-6000)
+        url = reverse("add_project_transfer")
+        self.client.force_login(self.owner)
+        r = self.client.get(url, {"type": "expense", "source_project": self.b.id})
+        self.assertEqual(r.context["entry_rows"], [])
+        before = ProjectExpense.objects.count()
+        for row, src in ((repost, self.b), (reversal, self.m)):
+            self.client.post(url, {
+                "transfer_type": "expense", "source_project": src.id, "to_project": self.c.id,
+                "selected_entries": [row.id], f"transfer_amount_{row.id}": "1", "reason": "x",
+            })
+        self.assertEqual(ProjectTransfer.objects.count(), 0)
+        self.assertEqual(ProjectExpense.objects.count(), before)
+
+    def test_normal_expense_still_transferable_on_project_with_allocation(self):
+        a = self.make()
+        self.post_full(a)
+        self.client.force_login(self.owner)
+        r = self.client.get(reverse("add_project_transfer"), {"type": "expense", "source_project": self.m.id})
+        ids = [x["id"] for x in r.context["entry_rows"]]
+        self.assertIn(self.exp.id, ids)
+        self.assertIn(self.exp2.id, ids)
+
+    def test_second_allocation_blocked_at_draft_submit_and_approve(self):
+        from .maintenance_allocation_views import submit_allocation, approve_allocation, AllocationError
+        a = self.make()
+        self.post_full(a)
+        self.client.force_login(self.owner)
+        self.client.post(self.add_url, self.form_data([(self.b, "10000")]))
+        from .models import MaintenanceAllocation
+        self.assertEqual(MaintenanceAllocation.objects.count(), 1)
+        d = self.make()
+        with self.assertRaises(AllocationError):
+            submit_allocation(self.owner, d.pk)
+        p = self.make(status="pending")
+        with self.assertRaises(AllocationError):
+            approve_allocation(self.owner, p.pk)
+
+    def test_late_old_dated_expense_is_reported_not_redistributed(self):
+        from .maintenance_allocation_views import closing_balance
+        a = self.make()
+        self.post_full(a)
+        ProjectExpense.objects.create(
+            expense_no="910050", project=self.m, expense_type="direct", description="Late bill",
+            qty=1, unit_price=700, amount=700, expense_date=date(2026, 6, 15),
+        )
+        self.assertEqual(closing_balance(self.m, self.MONTH), Decimal("700.00"))
+        self.assertEqual(ProjectExpense.objects.filter(maintenance_allocation=a).count(), 4)
+        self.client.force_login(self.owner)
+        r = self.client.get(reverse("maintenance_allocation_report"))
+        self.assertEqual(r.context["closing_balance"], Decimal("700.00"))
+        self.assertEqual(len(r.context["late_variances"]), 1)
+        d = self.make(rows=[(self.b, "10700")])
+        from .maintenance_allocation_views import submit_allocation, AllocationError
+        with self.assertRaises(AllocationError):
+            submit_allocation(self.owner, d.pk)
+
+    def test_posted_allocation_cannot_be_edited(self):
+        a = self.make()
+        self.post_full(a)
+        self.client.force_login(self.owner)
+        r = self.client.post(reverse("maintenance_allocation_edit", args=[a.pk]),
+                             self.form_data([(self.b, "10000")]))
+        self.assertEqual(r.status_code, 302)
+        a.refresh_from_db()
+        self.assertEqual(a.lines.count(), 2)
+
+    def test_posting_is_atomic(self):
+        from unittest import mock
+        from .maintenance_allocation_views import post_allocation
+        a = self.make(status="approved")
+        real = ProjectExpense.objects.create
+        calls = {"n": 0}
+
+        def flaky(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 3:
+                raise RuntimeError("boom")
+            return real(*args, **kwargs)
+
+        with mock.patch.object(ProjectExpense.objects, "create", side_effect=flaky):
+            with self.assertRaises(RuntimeError):
+                post_allocation(self.owner, a.pk)
+        a.refresh_from_db()
+        self.assertEqual(a.status, "approved")
+        self.assertEqual(ProjectExpense.objects.filter(maintenance_allocation=a).count(), 0)
+
+    def test_long_description_limited(self):
+        long_proj = Project.objects.create(project_id="P" * 40, project_name="L", project_type="OT")
+        a = self.make(rows=[(long_proj, "10000")])
+        self.post_full(a)
+        for r in ProjectExpense.objects.filter(maintenance_allocation=a):
+            self.assertLessEqual(len(r.description), 255)
+
+    def test_reversal_is_traceable_and_restores_balance(self):
+        a = self.make()
+        self.post_full(a)
+        r = self.action("reverse", a, reason="Posted in error")
+        a.refresh_from_db()
+        self.assertEqual(a.status, "reversed")
+        self.assertEqual(a.reversal_reason, "Posted in error")
+        self.assertEqual(a.reversed_by, self.owner)
+        rows = ProjectExpense.objects.filter(maintenance_allocation=a)
+        self.assertEqual(rows.count(), 8)
+        self.assertEqual(rows.filter(original_expense__isnull=False).count(), 4)
+        self.assertEqual(sum(x.amount for x in rows), Decimal("0.00"))
+        self.assertEqual(self.net(self.m), Decimal("10000.00"))
+        self.assertEqual(self.net(self.b), Decimal("0.00"))
+
+    def test_reversal_requires_reason_and_posted_status(self):
+        a = self.make()
+        self.post_full(a)
+        self.action("reverse", a, reason="")
+        a.refresh_from_db(); self.assertEqual(a.status, "posted")
+
+    def test_reposting_allowed_after_reversal(self):
+        a = self.make()
+        self.post_full(a)
+        self.action("reverse", a, reason="redo")
+        b = self.make()
+        self.post_full(b)
+        self.assertEqual(self.net(self.m), Decimal("0.00"))
+
+    def test_project_transfer_not_involved(self):
+        from .models import ProjectTransfer
+        a = self.make()
+        self.post_full(a)
+        self.assertEqual(ProjectTransfer.objects.count(), 0)
+        self.assertEqual(ProjectExpense.objects.filter(transfer__isnull=False).count(), 0)
+
+    def test_report_and_list_accessible(self):
+        a = self.make()
+        self.post_full(a)
+        self.client.force_login(self.clerk)
+        self.assertEqual(self.client.get(reverse("maintenance_allocation_list")).status_code, 200)
+        r = self.client.get(reverse("maintenance_allocation_report"), {"month": "2026-06"})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.context["closing_balance"], Decimal("0.00"))
+        self.assertEqual(r.context["total_allocated"], Decimal("10000.00"))
+        self.assertEqual(self.client.get(reverse("maintenance_allocation_detail", args=[a.pk])).status_code, 200)
+
+    def test_anonymous_redirected(self):
+        self.assertEqual(self.client.get(reverse("maintenance_allocation_list")).status_code, 302)
+
+

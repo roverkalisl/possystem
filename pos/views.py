@@ -1,4 +1,4 @@
-import json
+﻿import json
 import re
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta
@@ -268,7 +268,7 @@ def can_view_salary(user):
 def can_override_payroll_defaults(user):
     # Only Owner/Finance Manager may override auto-loaded Supervisor, OT Hours,
     # or GL accounts on the payroll entry screen. Enforced server-side in
-    # payroll_form — not just by disabling inputs client-side.
+    # payroll_form â€” not just by disabling inputs client-side.
     return can_approve_payroll(user)
 
 
@@ -3232,6 +3232,7 @@ def get_transferable_entries(transfer_type, project_id):
         qs = ProjectExpense.objects.filter(
             project_id=project_id, is_active=True, amount__gt=0,
             original_expense__isnull=True, transfer__isnull=True,
+            maintenance_allocation__isnull=True,
         ).select_related("project", "gl_account", "item").order_by("-expense_date", "-id")
         transferred_field = "original_project_expense"
     else:
@@ -3477,8 +3478,13 @@ def compute_project_profit_rows(projects, from_date=None, to_date=None):
 
     for project in projects:
         direct_expense_qs = project.expenses.filter(is_active=True, amount__gt=0)
-        returns_credit_qs = project.expenses.filter(is_active=True, amount__lt=0, expense_type="inventory", transfer__isnull=True)
-        transfer_reversal_qs = project.expenses.filter(is_active=True, amount__lt=0, transfer__isnull=False)
+        returns_credit_qs = project.expenses.filter(
+            is_active=True, amount__lt=0, expense_type="inventory",
+            transfer__isnull=True, maintenance_allocation__isnull=True,
+        )
+        transfer_reversal_qs = project.expenses.filter(is_active=True, amount__lt=0).filter(
+            Q(transfer__isnull=False) | Q(maintenance_allocation__isnull=False)
+        )
         petty_cash_qs = ProjectPettyCashExpense.objects.filter(project=project, is_active=True, approval_status="approved")
         total_income_qs = ProjectInvoicePayment.objects.filter(
             invoice__project=project,
@@ -4260,7 +4266,7 @@ def payroll_form(request, payroll_id=None):
         payroll.employee = employee
         payroll.project_id = project_id
         payroll.supervisor_id = supervisor_id
-        # Department/Designation/Category are never taken from POST — always the
+        # Department/Designation/Category are never taken from POST â€” always the
         # Employee Master's current values (no duplicate manual entry).
         payroll.department = employee.department
         payroll.employee_category = employee.employee_category
@@ -4363,7 +4369,7 @@ def payroll_process(request, payroll_id):
 
     messages.success(
         request,
-        f"Payroll processed — working days: {payroll.working_days}, OT: {payroll.ot_hours} hrs, gross: {gross}. "
+        f"Payroll processed â€” working days: {payroll.working_days}, OT: {payroll.ot_hours} hrs, gross: {gross}. "
         "Review deductions, then approve.",
     )
     return redirect("payroll_edit", payroll_id=payroll.id)

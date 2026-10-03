@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% load currency_filters %}
+{% block title %}Maintenance Cost Allocation{% endblock %}
+{% block page_title %}Maintenance Cost Allocation{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h4>Month-End Maintenance Cost Allocation</h4>
+        <div>
+            <a href="{% url 'maintenance_allocation_report' %}" class="btn btn-outline-dark btn-sm">Report</a>
+            <a href="{% url 'maintenance_allocation_create' %}" class="btn btn-primary btn-sm">+ New Allocation</a>
+        </div>
+    </div>
+
+    <form method="get" class="row g-2 mb-3">
+        <div class="col-md-4">
+            <select name="status" class="form-select form-select-sm">
+                <option value="">All Statuses</option>
+                {% for value, label in status_choices %}
+                    <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-2"><button class="btn btn-dark btn-sm w-100">Filter</button></div>
+    </form>
+
+    <div class="table-responsive">
+        <table class="table table-bordered table-striped bg-white align-middle">
+            <thead class="table-dark">
+                <tr>
+                    <th>Reference</th><th>Month</th><th>Maintenance Project</th>
+                    <th>Available Cost</th><th>Status</th><th>Created By</th><th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in allocations %}
+                <tr>
+                    <td>{{ a.reference }}</td>
+                    <td>{{ a.month|date:"Y-m" }}</td>
+                    <td>{{ a.source_project.project_id }} - {{ a.source_project.project_name }}</td>
+                    <td class="text-money">{{ a.available_amount|money }}</td>
+                    <td>{{ a.get_status_display }}</td>
+                    <td>{{ a.created_by.username|default:"-" }}</td>
+                    <td><a href="{% url 'maintenance_allocation_detail' a.pk %}" class="btn btn-sm btn-outline-primary">Open</a></td>
+                </tr>
+                {% empty %}
+                <tr><td colspan="7" class="text-center">No allocations found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

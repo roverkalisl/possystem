@@ -1748,6 +1748,20 @@ class ProjectExpense(models.Model):
         blank=True,
         related_name="transfer_adjustments"
     )
+    maintenance_allocation = models.ForeignKey(
+        "MaintenanceAllocation",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="project_expense_entries"
+    )
+    maintenance_allocation_line = models.ForeignKey(
+        "MaintenanceAllocationLine",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="project_expense_entries"
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -1855,6 +1869,93 @@ class ProjectTransfer(models.Model):
 
     def __str__(self):
         return self.transfer_no or f"Transfer {self.id}"
+
+
+class MaintenanceAllocation(models.Model):
+    """Month-end allocation of a Maintenance Main Project's cost to operational projects."""
+
+    STATUS_CHOICES = [
+        ("draft", "Draft"),
+        ("pending", "Pending Approval"),
+        ("approved", "Approved"),
+        ("posted", "Posted"),
+        ("rejected", "Rejected"),
+        ("reversed", "Reversed"),
+    ]
+    METHOD_CHOICES = [
+        ("amount", "By Amount"),
+        ("percent", "By Percentage"),
+    ]
+
+    reference = models.CharField(max_length=20, unique=True, blank=True, null=True)
+    month = models.DateField(help_text="First day of the accounting month")
+    source_project = models.ForeignKey(
+        Project, on_delete=models.PROTECT, related_name="maintenance_allocations_out"
+    )
+    method = models.CharField(max_length=10, choices=METHOD_CHOICES, default="amount")
+    available_amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="draft")
+    remarks = models.TextField(blank=True, null=True)
+
+    created_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    submitted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    submitted_at = models.DateTimeField(null=True, blank=True)
+    approved_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    approved_at = models.DateTimeField(null=True, blank=True)
+    rejected_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    rejection_reason = models.TextField(blank=True, null=True)
+    posted_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    posted_at = models.DateTimeField(null=True, blank=True)
+    reversed_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    reversed_at = models.DateTimeField(null=True, blank=True)
+    reversal_reason = models.TextField(blank=True, null=True)
+
+    class Meta:
+        ordering = ["-month", "-id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_project", "month"],
+                condition=models.Q(status="posted"),
+                name="uniq_posted_maintenance_alloc_per_project_month",
+            )
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.reference:
+            prefix = f"MCA-{self.month:%Y%m}-"
+            last = (
+                MaintenanceAllocation.objects.filter(reference__startswith=prefix)
+                .order_by("-reference")
+                .first()
+            )
+            seq = int(last.reference.rsplit("-", 1)[1]) + 1 if last else 1
+            self.reference = f"{prefix}{seq:04d}"
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.reference or f"Maintenance Allocation {self.id}"
+
+
+class MaintenanceAllocationLine(models.Model):
+    allocation = models.ForeignKey(MaintenanceAllocation, on_delete=models.CASCADE, related_name="lines")
+    project = models.ForeignKey(Project, on_delete=models.PROTECT, related_name="maintenance_allocation_lines")
+    percent = models.DecimalField(max_digits=9, decimal_places=4, default=0)
+    amount = models.DecimalField(max_digits=14, decimal_places=2, default=0)
+    gl_account = models.ForeignKey(GLMaster, on_delete=models.SET_NULL, null=True, blank=True)
+    remarks = models.CharField(max_length=255, blank=True, null=True)
+
+    class Meta:
+        ordering = ["id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["allocation", "project"], name="uniq_maintenance_alloc_line_project"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.allocation} -> {self.project.project_id}: {self.amount}"
 
 
 def get_p_and_i_gl_account():
