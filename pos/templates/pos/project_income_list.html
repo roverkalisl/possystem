@@ -11,7 +11,7 @@
         <h4>Project Income</h4>
         <div>
             <a href="{% url 'add_project_income' %}" class="btn btn-primary btn-sm">+ Add Income</a>
-            <a href="{% url 'add_project_transfer' %}" class="btn btn-outline-secondary btn-sm">+ Transfer</a>
+            {% if is_owner %}<a href="{% url 'add_project_transfer' %}" class="btn btn-outline-secondary btn-sm">+ Transfer</a>{% endif %}
         </div>
     </div>
 
@@ -83,7 +83,7 @@
                     <td>{% if income.gl_account %}{{ income.gl_account.gl_code }} - {{ income.gl_account.gl_name }}{% else %}-{% endif %}</td>
                     <td>{% if income.created_by %}{{ income.created_by.username }}{% else %}-{% endif %}</td>
                     <td>
-                        {% if income.source == "income" %}
+                        {% if income.source == "income" and is_owner %}
                             <a href="{% url 'add_project_transfer' %}?type=income&original_id={{ income.id }}" class="btn btn-sm btn-outline-primary">Transfer</a>
                         {% else %}
                             <span class="text-muted">-</span>

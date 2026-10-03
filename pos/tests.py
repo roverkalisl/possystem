@@ -2096,3 +2096,243 @@ class Phase42APurchasingReportFilterTests(TestCase):
             self.assertFalse(hasattr(model, "company"), f"{model.__name__} must not have a company field")
             self.assertFalse(hasattr(model, "company_id"), f"{model.__name__} must not have a company_id field")
 
+
+
+class ProjectTransferTests(TestCase):
+    def setUp(self):
+        from .models import ProjectTransfer  # noqa: F401
+        self.owner = User.objects.create_user("owner_pt", password="p", is_superuser=True)
+        self.clerk = User.objects.create_user("clerk_pt", password="p")
+        self.clerk.groups.add(Group.objects.create(name="Clerk"))
+        self.a = Project.objects.create(project_id="PA", project_name="A", project_type="OT")
+        self.b = Project.objects.create(project_id="PB", project_name="B", project_type="OT")
+        self.closed = Project.objects.create(project_id="PC", project_name="C", project_type="OT", status="completed")
+        self.gl = GLMaster.objects.create(gl_code="5001", gl_name="Cost GL") if hasattr(GLMaster, "gl_code") else None
+        self.exp = ProjectExpense.objects.create(
+            expense_no="900001", project=self.a, expense_type="direct", description="Cement",
+            qty=1, unit_price=5000, amount=5000, gl_account=self.gl,
+        )
+        self.exp2 = ProjectExpense.objects.create(
+            expense_no="900002", project=self.a, expense_type="direct", description="Sand",
+            qty=1, unit_price=2000, amount=2000, gl_account=self.gl,
+        )
+        self.url = reverse("add_project_transfer")
+
+    def login(self, user):
+        self.client.force_login(user)
+
+    def post(self, entries, amounts=None, dest=None, user=None, reason="Wrong project", ttype="expense"):
+        self.login(user or self.owner)
+        data = {
+            "transfer_type": ttype,
+            "source_project": self.a.id,
+            "to_project": (dest or self.b).id,
+            "selected_entries": [e.id for e in entries],
+            "reason": reason,
+        }
+        for e in entries:
+            data[f"transfer_amount_{e.id}"] = str((amounts or {}).get(e.id, e.amount))
+        return self.client.post(self.url, data)
+
+    def net(self, project):
+        from django.db.models import Sum
+        return project.expenses.filter(is_active=True).aggregate(t=Sum("amount"))["t"] or Decimal("0")
+
+    def test_owner_can_open_page_and_sees_entries(self):
+        self.login(self.owner)
+        r = self.client.get(self.url, {"type": "expense", "source_project": self.a.id})
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual({row["id"] for row in r.context["entry_rows"]}, {self.exp.id, self.exp2.id})
+
+    def test_non_owner_cannot_open_or_post(self):
+        self.login(self.clerk)
+        self.assertEqual(self.client.get(self.url).status_code, 302)
+        self.post([self.exp], user=self.clerk)
+        from .models import ProjectTransfer
+        self.assertEqual(ProjectTransfer.objects.count(), 0)
+        self.assertEqual(ProjectExpense.objects.count(), 2)
+
+    def test_full_transfer_nets_source_and_posts_destination_and_profit(self):
+        from .models import ProjectTransfer
+        from .views import compute_project_profit_rows
+        self.post([self.exp])
+        self.assertEqual(ProjectTransfer.objects.count(), 1)
+        self.assertEqual(self.net(self.a), Decimal("2000"))
+        self.assertEqual(self.net(self.b), Decimal("5000"))
+        rows, _ = compute_project_profit_rows(Project.objects.filter(id__in=[self.a.id, self.b.id]).order_by("id"))
+        by_id = {r["project"].id: r for r in rows}
+        self.assertEqual(by_id[self.a.id]["net_expense"], Decimal("2000"))
+        self.assertEqual(by_id[self.b.id]["net_expense"], Decimal("5000"))
+
+    def test_profit_single_entry_transfer_is_zero_on_source(self):
+        from .views import compute_project_profit_rows
+        self.exp2.delete()
+        self.post([self.exp])
+        rows, _ = compute_project_profit_rows(Project.objects.filter(id__in=[self.a.id, self.b.id]).order_by("id"))
+        by_id = {r["project"].id: r for r in rows}
+        self.assertEqual(by_id[self.a.id]["net_expense"], Decimal("0"))
+        self.assertEqual(by_id[self.b.id]["net_expense"], Decimal("5000"))
+
+    def test_traceability_and_original_unchanged(self):
+        from .models import ProjectTransfer
+        self.post([self.exp])
+        self.exp.refresh_from_db()
+        self.assertEqual(self.exp.project_id, self.a.id)
+        self.assertEqual(self.exp.amount, Decimal("5000"))
+        self.assertTrue(self.exp.is_active)
+        transfer = ProjectTransfer.objects.get()
+        self.assertEqual(transfer.original_project_expense_id, self.exp.id)
+        reverse_row = ProjectExpense.objects.get(transfer=transfer, project=self.a)
+        repost_row = ProjectExpense.objects.get(transfer=transfer, project=self.b)
+        self.assertEqual(reverse_row.amount, Decimal("-5000"))
+        self.assertEqual(repost_row.amount, Decimal("5000"))
+        self.assertEqual(reverse_row.original_expense_id, self.exp.id)
+        self.assertEqual(repost_row.original_expense_id, self.exp.id)
+        self.assertEqual(reverse_row.gl_account_id, self.exp.gl_account_id)
+        self.assertEqual(repost_row.gl_account_id, self.exp.gl_account_id)
+        self.assertEqual(ProjectExpense.objects.count(), 4)
+
+    def test_same_transaction_cannot_be_transferred_twice(self):
+        from .models import ProjectTransfer
+        self.post([self.exp])
+        self.post([self.exp])
+        self.assertEqual(ProjectTransfer.objects.count(), 1)
+        self.assertEqual(ProjectExpense.objects.count(), 4)
+
+    def test_partial_transfer_limited_to_remaining(self):
+        from .models import ProjectTransfer
+        self.post([self.exp], amounts={self.exp.id: "3000"})
+        self.assertEqual(ProjectTransfer.objects.count(), 1)
+        self.post([self.exp], amounts={self.exp.id: "2500"})
+        self.assertEqual(ProjectTransfer.objects.count(), 1)
+        self.post([self.exp], amounts={self.exp.id: "2000"})
+        self.assertEqual(ProjectTransfer.objects.count(), 2)
+        self.post([self.exp], amounts={self.exp.id: "1"})
+        self.assertEqual(ProjectTransfer.objects.count(), 2)
+
+    def test_reversal_and_repost_rows_not_selectable_or_transferable(self):
+        from .models import ProjectTransfer
+        self.post([self.exp])
+        transfer = ProjectTransfer.objects.get()
+        reverse_row = ProjectExpense.objects.get(transfer=transfer, project=self.a)
+        repost_row = ProjectExpense.objects.get(transfer=transfer, project=self.b)
+
+        self.login(self.owner)
+        r = self.client.get(self.url, {"type": "expense", "source_project": self.a.id})
+        self.assertNotIn(reverse_row.id, [x["id"] for x in r.context["entry_rows"]])
+        self.assertNotIn(self.exp.id, [x["id"] for x in r.context["entry_rows"]])
+        r = self.client.get(self.url, {"type": "expense", "source_project": self.b.id})
+        self.assertEqual(r.context["entry_rows"], [])
+
+        self.client.post(self.url, {
+            "transfer_type": "expense", "source_project": self.b.id, "to_project": self.a.id,
+            "selected_entries": [repost_row.id], f"transfer_amount_{repost_row.id}": "5000", "reason": "x",
+        })
+        self.client.post(self.url, {
+            "transfer_type": "expense", "source_project": self.a.id, "to_project": self.b.id,
+            "selected_entries": [reverse_row.id], f"transfer_amount_{reverse_row.id}": "1", "reason": "x",
+        })
+        self.assertEqual(ProjectTransfer.objects.count(), 1)
+
+    def test_multi_entry_transfer_is_atomic(self):
+        from .models import ProjectTransfer
+        self.post([self.exp, self.exp2], amounts={self.exp.id: "5000", self.exp2.id: "9999"})
+        self.assertEqual(ProjectTransfer.objects.count(), 0)
+        self.assertEqual(ProjectExpense.objects.count(), 2)
+
+    def test_multi_entry_transfer_success(self):
+        from .models import ProjectTransfer
+        self.post([self.exp, self.exp2])
+        self.assertEqual(ProjectTransfer.objects.count(), 2)
+        self.assertEqual(self.net(self.a), Decimal("0"))
+        self.assertEqual(self.net(self.b), Decimal("7000"))
+
+    def test_long_reason_description_within_255(self):
+        self.post([self.exp], reason="R" * 3000)
+        self.assertEqual(ProjectExpense.objects.count(), 4)
+        for row in ProjectExpense.objects.filter(transfer__isnull=False):
+            self.assertLessEqual(len(row.description), 255)
+
+    def test_source_not_in_destination_options_and_same_project_rejected(self):
+        from .models import ProjectTransfer
+        self.login(self.owner)
+        r = self.client.get(self.url, {"type": "expense", "source_project": self.a.id})
+        dest_ids = [p.id for p in r.context["destination_projects"]]
+        self.assertNotIn(self.a.id, dest_ids)
+        self.assertNotIn(self.closed.id, dest_ids)
+        self.post([self.exp], dest=self.a)
+        self.assertEqual(ProjectTransfer.objects.count(), 0)
+
+    def test_closed_destination_rejected(self):
+        from .models import ProjectTransfer
+        self.post([self.exp], dest=self.closed)
+        self.assertEqual(ProjectTransfer.objects.count(), 0)
+
+    def test_income_transfer_and_eligibility(self):
+        from .models import ProjectTransfer
+        inc = ProjectIncome.objects.create(project=self.a, amount=Decimal("1000"), description="Adv", gl_account=self.gl)
+        self.post([inc], ttype="income")
+        self.assertEqual(ProjectTransfer.objects.count(), 1)
+        inc.refresh_from_db()
+        self.assertEqual(inc.project_id, self.a.id)
+        self.assertEqual(ProjectIncome.objects.filter(project=self.b, amount=1000).count(), 1)
+        self.assertEqual(ProjectIncome.objects.filter(project=self.a, amount=-1000).count(), 1)
+        self.post([inc], ttype="income")
+        self.assertEqual(ProjectTransfer.objects.count(), 1)
+
+    def test_historical_transfer_records_remain_readable(self):
+        from .models import ProjectTransfer
+        ProjectTransfer.objects.create(
+            transfer_type="expense", from_project=self.a, to_project=self.b,
+            original_project_expense=self.exp, transfer_amount=Decimal("100"), reason="legacy",
+        )
+        ProjectTransfer.objects.create(
+            transfer_type="income", from_project=self.a, to_project=self.b, transfer_amount=Decimal("50"),
+        )
+        self.login(self.owner)
+        self.assertEqual(self.client.get(reverse("project_transfer_list")).status_code, 200)
+        self.login(self.clerk)
+        self.assertEqual(self.client.get(reverse("project_transfer_list")).status_code, 200)
+        self.login(self.owner)
+        r = self.client.get(self.url, {"type": "expense", "source_project": self.a.id})
+        row = next(x for x in r.context["entry_rows"] if x["id"] == self.exp.id)
+        self.assertEqual(row["remaining"], Decimal("4900"))
+    def test_partial_5000_scenario_3000_2000_then_rejected(self):
+        from django.db.models import Sum
+        from .models import ProjectTransfer
+        self.post([self.exp], amounts={self.exp.id: "3000"})
+        self.post([self.exp], amounts={self.exp.id: "2000"})
+        self.assertEqual(ProjectTransfer.objects.count(), 2)
+        self.post([self.exp], amounts={self.exp.id: "2000"})
+        self.post([self.exp], amounts={self.exp.id: "0.01"})
+        self.assertEqual(ProjectTransfer.objects.count(), 2)
+        total = ProjectTransfer.objects.aggregate(t=Sum("transfer_amount"))["t"]
+        self.assertEqual(total, Decimal("5000"))
+        self.login(self.owner)
+        r = self.client.get(self.url, {"type": "expense", "source_project": self.a.id})
+        self.assertNotIn(self.exp.id, [x["id"] for x in r.context["entry_rows"]])
+
+    def test_manager_and_cashier_cannot_transfer_but_can_read_list(self):
+        from .models import ProjectTransfer
+        for name in ("Manager", "Cashier"):
+            u = User.objects.create_user(f"{name.lower()}_pt", "pw-test-123")
+            u.groups.add(Group.objects.get_or_create(name=name)[0])
+            self.login(u)
+            self.assertEqual(self.client.get(self.url).status_code, 302)
+            self.post([self.exp], user=u)
+        self.assertEqual(ProjectTransfer.objects.count(), 0)
+        self.assertEqual(ProjectExpense.objects.count(), 2)
+
+    def test_inventory_returns_unaffected_by_transfer(self):
+        from .views import compute_project_profit_rows
+        ProjectExpense.objects.create(
+            expense_no="900003", project=self.a, expense_type="inventory", description="Return",
+            qty=1, unit_price=-1000, amount=-1000, gl_account=self.gl,
+        )
+        qs = Project.objects.filter(id=self.a.id)
+        before = compute_project_profit_rows(qs)[0][0]
+        self.post([self.exp])
+        after = compute_project_profit_rows(qs)[0][0]
+        self.assertEqual(before["returns_credit"], Decimal("1000"))
+        self.assertEqual(after["returns_credit"], Decimal("1000"))
+        self.assertEqual(before["net_expense"] - after["net_expense"], Decimal("5000"))

@@ -9,6 +9,7 @@ from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.models import User, Group
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.utils.dateparse import parse_date
 from django.urls import reverse
 from django.db.models import Q, Sum, F, Count, Max
 from django.http import JsonResponse
@@ -3184,162 +3185,259 @@ def project_transfer_list(request):
         "projects": projects,
         "selected_project": project_id,
         "selected_transfer_type": transfer_type,
+        "is_owner": is_owner(request.user),
     })
 
 
-@user_passes_test(can_use_project)
-def add_project_transfer(request):
-    projects = Project.objects.order_by("project_id", "project_name")
-    expense_entries = ProjectExpense.objects.filter(is_active=True).select_related("project").order_by("-expense_date", "-id")
-    income_entries = ProjectIncome.objects.select_related("project").order_by("-income_date", "-id")
-    if is_owner(request.user):
-        users = User.objects.filter(id=request.user.id)
-    else:
-        users = User.objects.none()
+TRANSFER_DESCRIPTION_MAX = 255
 
-    selected_transfer_type = request.GET.get("type", "expense")
-    selected_source_project = request.GET.get("source_project")
-    selected_entry_ids = request.GET.getlist("selected_entries")
-    selected_approved_by = request.GET.get("approved_by") if is_owner(request.user) else None
-    if request.method != "POST" and is_owner(request.user):
-        selected_approved_by = str(request.user.id)
+
+class ProjectTransferError(Exception):
+    pass
+
+
+def _limit_text(text, max_length=TRANSFER_DESCRIPTION_MAX):
+    text = text or ""
+    return text if len(text) <= max_length else text[: max_length - 3] + "..."
+
+
+def _transfer_description(prefix, amount, ref, reason):
+    base = f"{prefix} transfer of {amount} from {ref}."
+    reason = (reason or "").strip()
+    return _limit_text(f"{base} {reason}" if reason else base)
+
+
+def get_transferable_entries(transfer_type, project_id):
+    """
+    Eligible original entries of a project with their remaining transferable
+    amount. Reversal/repost rows (those linked to a transfer or an original
+    entry), inactive rows and non-positive rows are never eligible.
+    """
+    if not project_id:
+        return []
+
+    if transfer_type == "expense":
+        qs = ProjectExpense.objects.filter(
+            project_id=project_id, is_active=True, amount__gt=0,
+            original_expense__isnull=True, transfer__isnull=True,
+        ).select_related("project", "gl_account", "item").order_by("-expense_date", "-id")
+        transferred_field = "original_project_expense"
+    else:
+        qs = ProjectIncome.objects.filter(
+            project_id=project_id, amount__gt=0,
+            original_income__isnull=True, transfer__isnull=True,
+        ).select_related("project", "gl_account").order_by("-income_date", "-id")
+        transferred_field = "original_project_income"
+
+    entries = list(qs)
+    totals = {
+        row[transferred_field]: row["total"]
+        for row in ProjectTransfer.objects.filter(
+            **{f"{transferred_field}__in": [e.id for e in entries]}
+        ).values(transferred_field).annotate(total=Sum("transfer_amount"))
+    }
+
+    rows = []
+    for entry in entries:
+        transferred = Decimal(str(totals.get(entry.id) or 0))
+        remaining = Decimal(str(entry.amount)) - transferred
+        if remaining <= 0:
+            continue
+        if transfer_type == "expense":
+            rows.append({
+                "id": entry.id,
+                "date": entry.expense_date,
+                "reference": f"EXP {entry.expense_no}" if entry.expense_no else f"EXP #{entry.id}",
+                "description": entry.description or (entry.item.name if entry.item else "Expense Entry"),
+                "gl": entry.gl_account,
+                "type_label": entry.get_expense_type_display(),
+                "amount": entry.amount,
+                "transferred": transferred,
+                "remaining": remaining,
+            })
+        else:
+            rows.append({
+                "id": entry.id,
+                "date": entry.income_date,
+                "reference": f"INC #{entry.id}",
+                "description": entry.description or "Income Entry",
+                "gl": entry.gl_account,
+                "type_label": "Income",
+                "amount": entry.amount,
+                "transferred": transferred,
+                "remaining": remaining,
+            })
+    return rows
+
+
+def _execute_project_transfer(user, transfer_type, source_project, to_project, entry_ids,
+                              amounts, transfer_date, reason, approved_by, notes):
+    """All-or-nothing: any ProjectTransferError rolls back every write."""
+    with transaction.atomic():
+        model = ProjectExpense if transfer_type == "expense" else ProjectIncome
+        originals = {
+            e.id: e for e in model.objects.select_for_update().select_related("project").filter(
+                id__in=entry_ids, project_id=source_project.id
+            )
+        }
+        eligible = {r["id"]: r for r in get_transferable_entries(transfer_type, source_project.id)}
+
+        count = 0
+        for entry_id in entry_ids:
+            original = originals.get(entry_id)
+            row = eligible.get(entry_id)
+            if original is None or row is None:
+                raise ProjectTransferError(
+                    "One or more selected entries are invalid, already fully transferred, "
+                    "or are transfer-generated entries."
+                )
+            amount = amounts[entry_id]
+            if amount <= 0:
+                raise ProjectTransferError("Transfer amount must be greater than zero for each selected entry.")
+            if amount > row["remaining"]:
+                raise ProjectTransferError(
+                    f"Transfer amount for {row['reference']} cannot exceed the remaining "
+                    f"transferable amount ({row['remaining']})."
+                )
+
+            transfer = ProjectTransfer.objects.create(
+                transfer_type=transfer_type,
+                from_project=source_project,
+                to_project=to_project,
+                original_project_expense=original if transfer_type == "expense" else None,
+                original_project_income=original if transfer_type == "income" else None,
+                transfer_amount=amount,
+                transfer_date=transfer_date,
+                reason=reason,
+                created_by=user,
+                approved_by=approved_by,
+                notes=notes,
+                approved_at=timezone.now() if approved_by else None,
+            )
+
+            if transfer_type == "expense":
+                for project, sign, prefix in ((source_project, -1, "Reverse"), (to_project, 1, "Repost")):
+                    ProjectExpense.objects.create(
+                        expense_no=generate_project_expense_no(),
+                        project=project,
+                        expense_type=original.expense_type,
+                        expense_date=transfer_date,
+                        item=original.item,
+                        description=_transfer_description(prefix, amount, original.expense_no, reason),
+                        qty=0,
+                        unit_price=0,
+                        amount=sign * amount,
+                        gl_account=original.gl_account,
+                        original_expense=original,
+                        transfer=transfer,
+                        created_by=user,
+                    )
+            else:
+                for project, sign, prefix in ((source_project, -1, "Reverse"), (to_project, 1, "Repost")):
+                    ProjectIncome.objects.create(
+                        project=project,
+                        income_date=transfer_date,
+                        description=_transfer_description(prefix, amount, "original income entry", reason),
+                        amount=sign * amount,
+                        gl_account=original.gl_account,
+                        original_income=original,
+                        transfer=transfer,
+                        created_by=user,
+                    )
+            count += 1
+        return count
+
+
+@user_passes_test(is_owner)
+def add_project_transfer(request):
+    all_projects = Project.objects.order_by("project_id", "project_name")
+    users = User.objects.filter(id=request.user.id)
+
+    data = request.POST if request.method == "POST" else request.GET
+    selected_transfer_type = data.get("transfer_type") or data.get("type") or "expense"
+    if selected_transfer_type not in ("expense", "income"):
+        selected_transfer_type = "expense"
+    selected_source_project = data.get("source_project") or None
+    selected_entry_ids = data.getlist("selected_entries")
+    selected_approved_by = data.get("approved_by") if request.method == "POST" else str(request.user.id)
+
+    # Deep link from expense/income list: ?type=...&original_id=...
+    original_id = request.GET.get("original_id") if request.method != "POST" else None
+    if original_id and not selected_source_project:
+        model = ProjectExpense if selected_transfer_type == "expense" else ProjectIncome
+        original = model.objects.filter(id=original_id).first()
+        if original:
+            selected_source_project = str(original.project_id)
+            selected_entry_ids = [str(original.id)]
 
     if request.method == "POST":
-        transfer_type = request.POST.get("transfer_type") or "expense"
-        selected_source_project = request.POST.get("source_project") or None
-        selected_entry_ids = request.POST.getlist("selected_entries")
         to_project_id = request.POST.get("to_project") or None
-        transfer_date = request.POST.get("transfer_date") or timezone.now().date()
+        raw_date = request.POST.get("transfer_date")
+        transfer_date = parse_date(raw_date) if raw_date else timezone.now().date()
         reason = (request.POST.get("reason") or "").strip()
-        approved_by_id = request.POST.get("approved_by") or None
         notes = (request.POST.get("notes") or "").strip()
+        approved_by = users.filter(id=selected_approved_by).first() if selected_approved_by else None
 
-        selected_transfer_type = transfer_type
-        selected_approved_by = approved_by_id if is_owner(request.user) else None
-
-        if transfer_type not in ["expense", "income"]:
-            messages.error(request, "Invalid transfer type.")
-        elif not selected_source_project:
-            messages.error(request, "Source project is required.")
+        error = None
+        source_project = to_project = None
+        if not selected_source_project:
+            error = "Source project is required."
         elif not selected_entry_ids:
-            messages.error(request, "At least one original entry must be selected.")
+            error = "At least one original entry must be selected."
         elif not to_project_id:
-            messages.error(request, "Destination project is required.")
+            error = "Destination project is required."
+        elif not transfer_date:
+            error = "Invalid transfer date."
+        elif not reason:
+            error = "Reason for transfer is required."
         else:
-            source_project = get_object_or_404(Project, id=selected_source_project)
-            if not source_project.is_active or source_project.status != "ongoing":
-                messages.error(request, "Transfers are not allowed from closed or inactive source projects.")
+            source_project = Project.objects.filter(id=selected_source_project).first()
+            to_project = Project.objects.filter(id=to_project_id).first()
+            if not source_project or not to_project:
+                error = "Invalid source or destination project."
+            elif not source_project.is_active or source_project.status != "ongoing":
+                error = "Transfers are not allowed from closed or inactive source projects."
+            elif not to_project.is_active or to_project.status != "ongoing":
+                error = "Transfers are not allowed to closed or inactive destination projects."
+            elif to_project.id == source_project.id:
+                error = "Destination project must be different from source project."
+
+        if not error:
+            try:
+                entry_ids = []
+                for raw in selected_entry_ids:
+                    entry_id = int(raw)
+                    if entry_id not in entry_ids:
+                        entry_ids.append(entry_id)
+                amounts = {}
+                for entry_id in entry_ids:
+                    amounts[entry_id] = Decimal(request.POST.get(f"transfer_amount_{entry_id}") or 0)
+            except (ValueError, InvalidOperation):
+                error = "Invalid entry or transfer amount."
+
+        if not error:
+            try:
+                count = _execute_project_transfer(
+                    request.user, selected_transfer_type, source_project, to_project,
+                    entry_ids, amounts, transfer_date, reason, approved_by, notes,
+                )
+            except ProjectTransferError as exc:
+                error = str(exc)
             else:
-                to_project = get_object_or_404(Project, id=to_project_id)
-                if not to_project.is_active or to_project.status != "ongoing":
-                    messages.error(request, "Transfers are not allowed to closed or inactive destination projects.")
-                elif to_project.id == source_project.id:
-                    messages.error(request, "Destination project must be different from source project.")
-                else:
-                    approved_by = User.objects.filter(id=approved_by_id).first() if approved_by_id else None
-                    transfer_count = 0
-                    for entry_id in selected_entry_ids:
-                        try:
-                            if transfer_type == "expense":
-                                original_entry = ProjectExpense.objects.select_related("project").get(id=entry_id, project_id=source_project.id)
-                            else:
-                                original_entry = ProjectIncome.objects.select_related("project").get(id=entry_id, project_id=source_project.id)
-                        except (ProjectExpense.DoesNotExist, ProjectIncome.DoesNotExist):
-                            messages.error(request, "One or more selected entries are invalid for the selected source project.")
-                            transfer_count = 0
-                            break
+                messages.success(request, f"Created {count} transfer(s) successfully.")
+                return redirect("project_transfer_list")
 
-                        transfer_amount = Decimal(request.POST.get(f"transfer_amount_{entry_id}") or 0)
-                        if transfer_amount <= 0:
-                            messages.error(request, "Transfer amount must be greater than zero for each selected entry.")
-                            transfer_count = 0
-                            break
-                        if transfer_amount > Decimal(str(original_entry.amount or 0)):
-                            messages.error(request, "Transfer amount cannot exceed the original entry amount.")
-                            transfer_count = 0
-                            break
+        messages.error(request, error)
 
-                        transfer = ProjectTransfer.objects.create(
-                            transfer_type=transfer_type,
-                            from_project=source_project,
-                            to_project=to_project,
-                            original_project_expense=original_entry if transfer_type == "expense" else None,
-                            original_project_income=original_entry if transfer_type == "income" else None,
-                            transfer_amount=transfer_amount,
-                            transfer_date=transfer_date,
-                            reason=reason,
-                            created_by=request.user,
-                            approved_by=approved_by,
-                            notes=notes,
-                            approved_at=timezone.now() if approved_by else None,
-                        )
-
-                        if transfer_type == "expense":
-                            ProjectExpense.objects.create(
-                                expense_no=generate_project_expense_no(),
-                                project=source_project,
-                                expense_type=original_entry.expense_type,
-                                expense_date=transfer_date,
-                                item=original_entry.item,
-                                description=f"Reverse transfer of {transfer_amount} from {original_entry.expense_no}. {reason}",
-                                qty=0,
-                                unit_price=0,
-                                amount=-transfer_amount,
-                                gl_account=original_entry.gl_account,
-                                original_expense=original_entry,
-                                transfer=transfer,
-                                created_by=request.user,
-                            )
-                            ProjectExpense.objects.create(
-                                expense_no=generate_project_expense_no(),
-                                project=to_project,
-                                expense_type=original_entry.expense_type,
-                                expense_date=transfer_date,
-                                item=original_entry.item,
-                                description=f"Repost transfer of {transfer_amount} from {original_entry.expense_no}. {reason}",
-                                qty=0,
-                                unit_price=0,
-                                amount=transfer_amount,
-                                gl_account=original_entry.gl_account,
-                                original_expense=original_entry,
-                                transfer=transfer,
-                                created_by=request.user,
-                            )
-                        else:
-                            ProjectIncome.objects.create(
-                                project=source_project,
-                                income_date=transfer_date,
-                                description=f"Reverse transfer of {transfer_amount} from original income entry. {reason}",
-                                amount=-transfer_amount,
-                                gl_account=original_entry.gl_account,
-                                original_income=original_entry,
-                                transfer=transfer,
-                                created_by=request.user,
-                            )
-                            ProjectIncome.objects.create(
-                                project=to_project,
-                                income_date=transfer_date,
-                                description=f"Repost transfer of {transfer_amount} from original income entry. {reason}",
-                                amount=transfer_amount,
-                                gl_account=original_entry.gl_account,
-                                original_income=original_entry,
-                                transfer=transfer,
-                                created_by=request.user,
-                            )
-                        transfer_count += 1
-
-                    if transfer_count > 0:
-                        messages.success(request, f"Created {transfer_count} transfer(s) successfully.")
-                        return redirect("project_transfer_list")
-
+    entry_rows = get_transferable_entries(selected_transfer_type, selected_source_project)
+    destination_projects = all_projects.filter(is_active=True, status="ongoing")
     if selected_source_project:
-        expense_entries = expense_entries.filter(project_id=selected_source_project)
-        income_entries = income_entries.filter(project_id=selected_source_project)
+        destination_projects = destination_projects.exclude(id=selected_source_project)
 
     return render(request, "pos/add_project_transfer.html", {
-        "projects": projects,
-        "expense_entries": expense_entries,
-        "income_entries": income_entries,
+        "projects": all_projects.filter(is_active=True, status="ongoing"),
+        "destination_projects": destination_projects,
+        "entry_rows": entry_rows,
         "users": users,
         "selected_transfer_type": selected_transfer_type,
         "selected_source_project": selected_source_project,
@@ -3347,6 +3445,7 @@ def add_project_transfer(request):
         "selected_approved_by": selected_approved_by,
         "today": timezone.now().date(),
     })
+
 # =========================
 # PROJECT PROFIT
 # =========================
@@ -3365,32 +3464,33 @@ def compute_project_profit_rows(projects, from_date=None, to_date=None):
 
     for project in projects:
         direct_expense_qs = project.expenses.filter(is_active=True, amount__gt=0)
-        returns_credit_qs = project.expenses.filter(is_active=True, amount__lt=0, expense_type="inventory")
+        returns_credit_qs = project.expenses.filter(is_active=True, amount__lt=0, expense_type="inventory", transfer__isnull=True)
+        transfer_reversal_qs = project.expenses.filter(is_active=True, amount__lt=0, transfer__isnull=False)
         petty_cash_qs = ProjectPettyCashExpense.objects.filter(project=project, is_active=True, approval_status="approved")
         total_income_qs = ProjectInvoicePayment.objects.filter(
             invoice__project=project,
             invoice__is_active=True,
             is_active=True,
         )
-        transfer_qs = ProjectTransfer.objects.filter(from_project=project, transfer_type="expense")
 
         if from_date:
             direct_expense_qs = direct_expense_qs.filter(expense_date__gte=from_date)
             returns_credit_qs = returns_credit_qs.filter(expense_date__gte=from_date)
             petty_cash_qs = petty_cash_qs.filter(expense_date__gte=from_date)
             total_income_qs = total_income_qs.filter(payment_date__gte=from_date)
-            transfer_qs = transfer_qs.filter(transfer_date__gte=from_date)
+            transfer_reversal_qs = transfer_reversal_qs.filter(expense_date__gte=from_date)
         if to_date:
             direct_expense_qs = direct_expense_qs.filter(expense_date__lte=to_date)
             returns_credit_qs = returns_credit_qs.filter(expense_date__lte=to_date)
             petty_cash_qs = petty_cash_qs.filter(expense_date__lte=to_date)
             total_income_qs = total_income_qs.filter(payment_date__lte=to_date)
-            transfer_qs = transfer_qs.filter(transfer_date__lte=to_date)
+            transfer_reversal_qs = transfer_reversal_qs.filter(expense_date__lte=to_date)
 
         direct_expense = direct_expense_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
         returns_credit = abs(returns_credit_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0"))
         petty_cash_expense = petty_cash_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
-        special_cost_transfer = transfer_qs.aggregate(total=Sum("transfer_amount"))["total"] or Decimal("0")
+        # Reversal rows are negative; the matching repost is a normal positive row in the destination project.
+        special_cost_transfer = transfer_reversal_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
         total_income = total_income_qs.aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
         net_expense = Decimal(str(direct_expense)) + Decimal(str(petty_cash_expense)) + Decimal(str(special_cost_transfer)) - Decimal(str(returns_credit))
