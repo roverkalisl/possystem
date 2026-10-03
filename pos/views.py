@@ -3192,6 +3192,18 @@ def project_transfer_list(request):
 TRANSFER_DESCRIPTION_MAX = 255
 
 
+CLOSED_PROJECT_STATUSES = ("completed", "cancelled")
+
+
+def _transfer_eligible_projects(queryset):
+    # is_active drives the Active/Closed badge on the Project List; status is only the stage.
+    return queryset.filter(is_active=True).exclude(status__in=CLOSED_PROJECT_STATUSES)
+
+
+def _is_transfer_eligible_project(project):
+    return project.is_active and project.status not in CLOSED_PROJECT_STATUSES
+
+
 class ProjectTransferError(Exception):
     pass
 
@@ -3395,9 +3407,9 @@ def add_project_transfer(request):
             to_project = Project.objects.filter(id=to_project_id).first()
             if not source_project or not to_project:
                 error = "Invalid source or destination project."
-            elif not source_project.is_active or source_project.status != "ongoing":
+            elif not _is_transfer_eligible_project(source_project):
                 error = "Transfers are not allowed from closed or inactive source projects."
-            elif not to_project.is_active or to_project.status != "ongoing":
+            elif not _is_transfer_eligible_project(to_project):
                 error = "Transfers are not allowed to closed or inactive destination projects."
             elif to_project.id == source_project.id:
                 error = "Destination project must be different from source project."
@@ -3430,12 +3442,13 @@ def add_project_transfer(request):
         messages.error(request, error)
 
     entry_rows = get_transferable_entries(selected_transfer_type, selected_source_project)
-    destination_projects = all_projects.filter(is_active=True, status="ongoing")
+    eligible_projects = _transfer_eligible_projects(all_projects)
+    destination_projects = eligible_projects
     if selected_source_project:
         destination_projects = destination_projects.exclude(id=selected_source_project)
 
     return render(request, "pos/add_project_transfer.html", {
-        "projects": all_projects.filter(is_active=True, status="ongoing"),
+        "projects": eligible_projects,
         "destination_projects": destination_projects,
         "entry_rows": entry_rows,
         "users": users,

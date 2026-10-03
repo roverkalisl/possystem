@@ -2336,3 +2336,27 @@ class ProjectTransferTests(TestCase):
         self.assertEqual(before["returns_credit"], Decimal("1000"))
         self.assertEqual(after["returns_credit"], Decimal("1000"))
         self.assertEqual(before["net_expense"] - after["net_expense"], Decimal("5000"))
+
+    def test_active_ongoing_and_active_stage_projects_both_selectable(self):
+        from .models import ProjectTransfer
+        legacy = Project.objects.create(project_id="PL", project_name="Legacy", project_type="OT", status="active")
+        inactive = Project.objects.create(project_id="PI", project_name="Inactive", project_type="OT", is_active=False)
+        cancelled = Project.objects.create(project_id="PX", project_name="Cancelled", project_type="OT", status="cancelled")
+        self.login(self.owner)
+        r = self.client.get(self.url, {"type": "expense", "source_project": self.a.id})
+        source_ids = {p.id for p in r.context["projects"]}
+        self.assertTrue({self.a.id, self.b.id, legacy.id} <= source_ids)
+        self.assertFalse({self.closed.id, inactive.id, cancelled.id} & source_ids)
+        dest_ids = {p.id for p in r.context["destination_projects"]}
+        self.assertEqual(dest_ids, {self.b.id, legacy.id})
+        # a project whose stage is "Active" can be a source and a destination
+        self.post([self.exp], dest=legacy)
+        self.assertEqual(ProjectTransfer.objects.filter(to_project=legacy).count(), 1)
+        own = ProjectExpense.objects.create(
+            expense_no="900010", project=legacy, expense_type="direct", description="Own",
+            qty=1, unit_price=700, amount=700, gl_account=self.gl,
+        )
+        self.login(self.owner)
+        r = self.client.get(self.url, {"type": "expense", "source_project": legacy.id})
+        self.assertEqual([x["id"] for x in r.context["entry_rows"]], [own.id])
+        self.assertNotIn(legacy.id, [p.id for p in r.context["destination_projects"]])
