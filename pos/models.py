@@ -1872,7 +1872,7 @@ class ProjectTransfer(models.Model):
 
 
 class MaintenanceAllocation(models.Model):
-    """Month-end allocation of a Maintenance Main Project's cost to operational projects."""
+    """Month-end allocation of eligible Main/P&I common costs to projects."""
 
     STATUS_CHOICES = [
         ("draft", "Draft"),
@@ -1935,7 +1935,7 @@ class MaintenanceAllocation(models.Model):
         super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.reference or f"Maintenance Allocation {self.id}"
+        return self.reference or f"Month-End Allocation {self.id}"
 
 
 class MaintenanceAllocationLine(models.Model):

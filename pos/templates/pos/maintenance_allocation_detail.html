@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% load currency_filters %}
-{% block title %}{{ allocation.reference }}{% endblock %}
-{% block page_title %}Maintenance Allocation {{ allocation.reference }}{% endblock %}
+{% block title %}Month-End Allocation {{ allocation.reference }}{% endblock %}
+{% block page_title %}Month-End Allocation {{ allocation.reference }}{% endblock %}
 
 {% block content %}
 <div class="card p-3 p-md-4 mb-3">
@@ -9,17 +9,17 @@
         <div>
             <h4>{{ allocation.reference }} <span class="badge bg-secondary">{{ allocation.get_status_display }}</span></h4>
             <div>Month: <strong>{{ allocation.month|date:"F Y" }}</strong></div>
-            <div>Maintenance Main Project: <strong>{{ allocation.source_project.project_id }} - {{ allocation.source_project.project_name }}</strong></div>
+            <div>Main/P&amp;I Source Project: <strong>{{ allocation.source_project.project_id }} - {{ allocation.source_project.project_name }}</strong></div>
             <div>Method: {{ allocation.get_method_display }}</div>
             {% if allocation.remarks %}<div>Remarks: {{ allocation.remarks }}</div>{% endif %}
         </div>
-        <a href="{% url 'maintenance_allocation_list' %}" class="btn btn-light btn-sm">Back</a>
+        <a href="{% url 'month_end_allocation_list' %}" class="btn btn-light btn-sm">Back to Month-End Allocations</a>
     </div>
 
     <div class="row text-center mb-3">
-        <div class="col-md-3"><div class="border rounded p-2">Available Cost<br><strong>{{ available|money }}</strong></div></div>
+        <div class="col-md-3"><div class="border rounded p-2">Total Available<br><strong>{{ available|money }}</strong></div></div>
         <div class="col-md-3"><div class="border rounded p-2">Total Allocated<br><strong>{{ allocated|money }}</strong></div></div>
-        <div class="col-md-3"><div class="border rounded p-2 {% if balanced %}border-success{% else %}border-danger{% endif %}">Remaining<br><strong>{{ remaining|money }}</strong></div></div>
+        <div class="col-md-3"><div class="border rounded p-2 {% if balanced %}border-success{% else %}border-danger{% endif %}">Remaining Balance<br><strong>{{ remaining|money }}</strong></div></div>
         <div class="col-md-3"><div class="border rounded p-2">Month Closing Balance<br><strong>{{ month_closing|money }}</strong></div></div>
     </div>
 
@@ -43,23 +43,23 @@
     </table>
 
     <div class="d-flex flex-wrap gap-2">
-        {% if can_edit %}<a href="{% url 'maintenance_allocation_edit' allocation.pk %}" class="btn btn-outline-primary">Edit</a>{% endif %}
+        {% if can_edit %}<a href="{% url 'month_end_allocation_edit' allocation.pk %}" class="btn btn-outline-primary">Edit Month-End Allocation</a>{% endif %}
         {% if can_submit %}
-        <form method="post" action="{% url 'maintenance_allocation_submit' allocation.pk %}">{% csrf_token %}<button class="btn btn-success">Submit for Approval</button></form>
+        <form method="post" action="{% url 'month_end_allocation_submit' allocation.pk %}">{% csrf_token %}<button class="btn btn-success">Submit Month-End Allocation for Approval</button></form>
         {% endif %}
         {% if can_approve %}
-        <form method="post" action="{% url 'maintenance_allocation_approve' allocation.pk %}">{% csrf_token %}<button class="btn btn-success" {% if not balanced %}disabled{% endif %}>Approve (Super User)</button></form>
+        <form method="post" action="{% url 'month_end_allocation_approve' allocation.pk %}">{% csrf_token %}<button class="btn btn-success" {% if not balanced %}disabled{% endif %}>Approve Month-End Allocation</button></form>
         {% endif %}
         {% if can_post %}
-        <form method="post" action="{% url 'maintenance_allocation_post' allocation.pk %}" onsubmit="return confirm('Post this allocation? Cost rows will be created.');">{% csrf_token %}<button class="btn btn-danger" {% if not balanced %}disabled{% endif %}>Post Allocation</button></form>
+        <form method="post" action="{% url 'month_end_allocation_post' allocation.pk %}" onsubmit="return confirm('Post this Month-End Allocation? Cost rows will be created.');">{% csrf_token %}<button class="btn btn-danger" {% if not balanced %}disabled{% endif %}>Post Month-End Allocation</button></form>
         {% endif %}
         {% if can_reject %}
-        <form method="post" action="{% url 'maintenance_allocation_reject' allocation.pk %}" class="d-flex gap-1">{% csrf_token %}
+        <form method="post" action="{% url 'month_end_allocation_reject' allocation.pk %}" class="d-flex gap-1">{% csrf_token %}
             <input name="reason" class="form-control form-control-sm" placeholder="Rejection reason" required>
             <button class="btn btn-outline-danger btn-sm">Reject</button></form>
         {% endif %}
         {% if can_reverse %}
-        <form method="post" action="{% url 'maintenance_allocation_reverse' allocation.pk %}" class="d-flex gap-1" onsubmit="return confirm('Reverse this posted allocation?');">{% csrf_token %}
+        <form method="post" action="{% url 'month_end_allocation_reverse' allocation.pk %}" class="d-flex gap-1" onsubmit="return confirm('Reverse this posted Month-End Allocation?');">{% csrf_token %}
             <input name="reason" class="form-control form-control-sm" placeholder="Reversal reason" required>
             <button class="btn btn-outline-danger btn-sm">Reverse</button></form>
         {% endif %}

@@ -2431,6 +2431,30 @@ class MaintenanceAllocationTests(TestCase):
         return d
 
     # tests
+    def test_month_end_allocation_routes_and_pages_use_new_name(self):
+        self.client.force_login(self.owner)
+        self.assertEqual(reverse("month_end_allocation_list"), "/month-end-allocations/")
+        self.assertEqual(reverse("maintenance_allocation_list"), "/maintenance-allocations/")
+
+        response = self.client.get(reverse("month_end_allocation_list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Month-End Allocation")
+        self.assertContains(response, "Main/P&amp;I Source Project")
+        self.assertNotContains(response, "Maintenance Cost Allocation")
+
+        for name in ("month_end_allocation_create", "month_end_allocation_report"):
+            response = self.client.get(reverse(name))
+            self.assertEqual(response.status_code, 200, name)
+            self.assertContains(response, "Month-End Allocation")
+
+    def test_available_cost_includes_other_expense_types(self):
+        from .maintenance_allocation_views import available_cost
+        ProjectExpense.objects.create(
+            expense_no="910020", project=self.m, expense_type="service", description="P&I service",
+            qty=1, unit_price=250, amount=250, expense_date=date(2026, 6, 15),
+        )
+        self.assertEqual(available_cost(self.m, self.MONTH), Decimal("10250.00"))
+
     def test_available_cost_month_only(self):
         from .maintenance_allocation_views import available_cost
         self.assertEqual(available_cost(self.m, self.MONTH), Decimal("10000.00"))
@@ -2752,5 +2776,4 @@ class MaintenanceAllocationTests(TestCase):
 
     def test_anonymous_redirected(self):
         self.assertEqual(self.client.get(reverse("maintenance_allocation_list")).status_code, 302)
-
 

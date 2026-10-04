@@ -1,11 +1,10 @@
 """
-Month-End Maintenance Cost Allocation.
+Month-End Allocation of eligible Main/P&I common costs to destination projects.
 
-A Maintenance Main Project accumulates cost during a month. At month end the
-whole balance must be allocated to eligible operational projects so that the
-Maintenance Main Project closes at exactly Rs. 0.00. Posting uses the same
-reversal + repost pattern as Project Transfer, but is a separate process with
-its own audit records (MaintenanceAllocation / MaintenanceAllocationLine).
+The selected source project's eligible monthly costs must be fully allocated
+before finalization. Posting uses the same reversal + repost pattern as Project
+Transfer, with its own audit records (MaintenanceAllocation /
+MaintenanceAllocationLine).
 """
 import calendar
 from datetime import date
@@ -123,11 +122,11 @@ def check_zero_balance(available, allocated):
     remaining = q2(available) - q2(allocated)
     if remaining > ZERO:
         raise AllocationError(
-            f"Cannot finalize. Maintenance Main Project has an unallocated balance of Rs. {remaining:,.2f}."
+            f"Cannot finalize Month-End Allocation. The source project has an unallocated balance of Rs. {remaining:,.2f}."
         )
     if remaining < ZERO:
         raise AllocationError(
-            f"Cannot finalize. Allocation exceeds the available Maintenance Main Project cost by Rs. {abs(remaining):,.2f}."
+            f"Cannot finalize Month-End Allocation. Allocated amounts exceed the available source project cost by Rs. {abs(remaining):,.2f}."
         )
 
 
@@ -138,14 +137,14 @@ def ensure_month_not_posted(source_project, month, exclude_pk=None):
     existing = qs.first()
     if existing:
         raise AllocationError(
-            f"{existing.reference} is already posted for {month:%b %Y}. "
+            f"Month-End Allocation {existing.reference} is already posted for {month:%b %Y}. "
             "Reverse it before creating another allocation for this month."
         )
 
 
 def _validate_destination(allocation, project):
     if project.id == allocation.source_project_id:
-        raise AllocationError("The Maintenance Main Project cannot be a destination project.")
+        raise AllocationError("The source project cannot also be a destination project.")
     if not _is_transfer_eligible_project(project):
         raise AllocationError(f"Project {project.project_id} is closed, cancelled or inactive.")
 
@@ -172,7 +171,7 @@ def build_lines(method, available, source_project, rows):
             raise AllocationError(f"Duplicate destination project {project.project_id}.")
         seen.add(project.id)
         if project.id == source_project.id:
-            raise AllocationError("The Maintenance Main Project cannot be a destination project.")
+            raise AllocationError("The source project cannot also be a destination project.")
         if not _is_transfer_eligible_project(project):
             raise AllocationError(f"Project {project.project_id} is closed, cancelled or inactive.")
         try:
@@ -205,7 +204,7 @@ def build_lines(method, available, source_project, rows):
     total = sum((l["amount"] for l in lines), ZERO)
     if total > available:
         raise AllocationError(
-            f"Allocation exceeds the available Maintenance Main Project cost by Rs. {total - available:,.2f}."
+            f"Allocation exceeds the available source project cost by Rs. {total - available:,.2f}."
         )
     if any(l["amount"] <= 0 for l in lines):
         raise AllocationError("Every allocation amount must be greater than zero.")
@@ -223,9 +222,9 @@ def _locked(pk):
 def submit_allocation(user, pk):
     alloc = _locked(pk)
     if alloc.status not in EDITABLE_STATUSES:
-        raise AllocationError("Only draft or rejected allocations can be submitted.")
+        raise AllocationError("Only draft or rejected Month-End Allocations can be submitted.")
     if not alloc.lines.exists():
-        raise AllocationError("Add at least one allocation line before submitting.")
+        raise AllocationError("Add at least one line to the Month-End Allocation before submitting.")
     ensure_month_not_posted(alloc.source_project, alloc.month, alloc.pk)
     alloc.status = "pending"
     alloc.submitted_by, alloc.submitted_at = user, timezone.now()
@@ -236,14 +235,14 @@ def _final_checks(alloc):
     """Shared by approve and post: recompute cost live and require an exact zero balance."""
     lines = list(alloc.lines.select_related("project"))
     if not lines:
-        raise AllocationError("The allocation has no lines.")
+        raise AllocationError("The Month-End Allocation has no lines.")
     for line in lines:
         _validate_destination(alloc, line.project)
         if line.amount <= 0:
             raise AllocationError("Every allocation amount must be greater than zero.")
     available = available_cost(alloc.source_project, alloc.month)
     if available <= 0:
-        raise AllocationError("The Maintenance Main Project has no cost to allocate for this month.")
+        raise AllocationError("The source project has no eligible costs to allocate for this month.")
     check_zero_balance(available, allocated_total(alloc))
     return lines, available
 
@@ -252,7 +251,7 @@ def _final_checks(alloc):
 def approve_allocation(user, pk):
     alloc = _locked(pk)
     if alloc.status != "pending":
-        raise AllocationError("Only allocations pending approval can be approved.")
+        raise AllocationError("Only Month-End Allocations pending approval can be approved.")
     ensure_month_not_posted(alloc.source_project, alloc.month, alloc.pk)
     _, available = _final_checks(alloc)
     alloc.available_amount = available
@@ -265,7 +264,7 @@ def approve_allocation(user, pk):
 def reject_allocation(user, pk, reason):
     alloc = _locked(pk)
     if alloc.status not in ("pending", "approved"):
-        raise AllocationError("Only pending or approved allocations can be rejected.")
+        raise AllocationError("Only pending or approved Month-End Allocations can be rejected.")
     alloc.status = "rejected"
     alloc.rejected_by, alloc.rejected_at = user, timezone.now()
     alloc.rejection_reason = reason
@@ -276,13 +275,13 @@ def reject_allocation(user, pk, reason):
 def post_allocation(user, pk):
     alloc = _locked(pk)
     if alloc.status == "posted":
-        raise AllocationError("This allocation is already posted.")
+        raise AllocationError("This Month-End Allocation is already posted.")
     if alloc.status != "approved":
-        raise AllocationError("Only approved allocations can be posted.")
+        raise AllocationError("Only approved Month-End Allocations can be posted.")
     if MaintenanceAllocation.objects.filter(
         source_project=alloc.source_project, month=alloc.month, status="posted"
     ).exclude(pk=alloc.pk).exists():
-        raise AllocationError("This project/month already has a posted allocation. Reverse it first.")
+        raise AllocationError("This project/month already has a posted Month-End Allocation. Reverse it first.")
 
     lines, available = _final_checks(alloc)
     source = alloc.source_project
@@ -297,7 +296,7 @@ def post_allocation(user, pk):
                 expense_type="direct",
                 expense_date=posting_date,
                 description=_limit_text(
-                    f"{prefix} - maintenance cost allocation {alloc.reference} ({label}) "
+                    f"{prefix} - Month-End Allocation {alloc.reference} ({label}) "
                     f"{source.project_id} -> {line.project.project_id}"
                 ),
                 qty=0,
@@ -319,15 +318,15 @@ def post_allocation(user, pk):
 def reverse_allocation(user, pk, reason):
     alloc = _locked(pk)
     if alloc.status != "posted":
-        raise AllocationError("Only posted allocations can be reversed.")
+        raise AllocationError("Only posted Month-End Allocations can be reversed.")
     if not reason:
-        raise AllocationError("A reason is required to reverse a posted allocation.")
+        raise AllocationError("A reason is required to reverse a posted Month-End Allocation.")
 
     originals = list(ProjectExpense.objects.select_for_update().filter(
         maintenance_allocation=alloc, original_expense__isnull=True,
     ))
     if not originals:
-        raise AllocationError("No posted rows were found for this allocation.")
+        raise AllocationError("No posted cost rows were found for this Month-End Allocation.")
     for row in originals:
         ProjectExpense.objects.create(
             expense_no=generate_project_expense_no(),
@@ -391,9 +390,9 @@ def _save_draft(request, allocation):
         raise AllocationError("Select a valid accounting month.")
     source = Project.objects.filter(id=post.get("source_project") or 0).first()
     if not source:
-        raise AllocationError("Select the Maintenance Main Project.")
+        raise AllocationError("Select the Main/P&I source project.")
     if not _is_transfer_eligible_project(source):
-        raise AllocationError("The Maintenance Main Project is closed or inactive.")
+        raise AllocationError("The Main/P&I source project is closed or inactive.")
     method = post.get("method") if post.get("method") in ("amount", "percent") else "amount"
     ensure_month_not_posted(source, month, allocation.pk if allocation else None)
     available = available_cost(source, month)
@@ -403,7 +402,7 @@ def _save_draft(request, allocation):
         if allocation is None:
             allocation = MaintenanceAllocation(created_by=request.user)
         elif allocation.status not in EDITABLE_STATUSES:
-            raise AllocationError("Posted or submitted allocations cannot be edited.")
+            raise AllocationError("Posted or submitted Month-End Allocations cannot be edited.")
         allocation.month, allocation.source_project, allocation.method = month, source, method
         allocation.available_amount = available
         allocation.remarks = (post.get("remarks") or "").strip()
@@ -421,8 +420,8 @@ def _save_draft(request, allocation):
 
 def _form_view(request, allocation=None):
     if allocation is not None and allocation.status not in EDITABLE_STATUSES:
-        messages.error(request, "Only draft or rejected allocations can be edited.")
-        return redirect("maintenance_allocation_detail", pk=allocation.pk)
+        messages.error(request, "Only draft or rejected Month-End Allocations can be edited.")
+        return redirect("month_end_allocation_detail", pk=allocation.pk)
     if request.method == "POST":
         try:
             allocation = _save_draft(request, allocation)
@@ -433,12 +432,12 @@ def _form_view(request, allocation=None):
         if request.POST.get("action") == "submit":
             try:
                 submit_allocation(request.user, allocation.pk)
-                messages.success(request, f"{allocation.reference} submitted for approval.")
+                messages.success(request, f"Month-End Allocation {allocation.reference} submitted for approval.")
             except AllocationError as exc:
                 messages.error(request, str(exc))
         else:
-            messages.success(request, f"{allocation.reference} saved as draft.")
-        return redirect("maintenance_allocation_detail", pk=allocation.pk)
+            messages.success(request, f"Month-End Allocation {allocation.reference} saved as draft.")
+        return redirect("month_end_allocation_detail", pk=allocation.pk)
     return render(request, "pos/maintenance_allocation_form.html", _form_context(allocation))
 
 
@@ -514,38 +513,38 @@ def _run_action(request, pk, func, success, *extra):
         messages.success(request, success)
     except AllocationError as exc:
         messages.error(request, str(exc))
-    return redirect("maintenance_allocation_detail", pk=pk)
+    return redirect("month_end_allocation_detail", pk=pk)
 
 
 @require_POST
 @user_passes_test(can_use_project)
 def maintenance_allocation_submit(request, pk):
-    return _run_action(request, pk, submit_allocation, "Submitted for approval.")
+    return _run_action(request, pk, submit_allocation, "Month-End Allocation submitted for approval.")
 
 
 @owner_required
 @require_POST
 def maintenance_allocation_approve(request, pk):
-    return _run_action(request, pk, approve_allocation, "Allocation approved.")
+    return _run_action(request, pk, approve_allocation, "Month-End Allocation approved.")
 
 
 @owner_required
 @require_POST
 def maintenance_allocation_reject(request, pk):
-    return _run_action(request, pk, reject_allocation, "Allocation rejected.",
+    return _run_action(request, pk, reject_allocation, "Month-End Allocation rejected.",
                        (request.POST.get("reason") or "").strip())
 
 
 @owner_required
 @require_POST
 def maintenance_allocation_post(request, pk):
-    return _run_action(request, pk, post_allocation, "Allocation posted.")
+    return _run_action(request, pk, post_allocation, "Month-End Allocation posted.")
 
 
 @owner_required
 @require_POST
 def maintenance_allocation_reverse(request, pk):
-    return _run_action(request, pk, reverse_allocation, "Allocation reversed.",
+    return _run_action(request, pk, reverse_allocation, "Month-End Allocation reversed.",
                        (request.POST.get("reason") or "").strip())
 
 
