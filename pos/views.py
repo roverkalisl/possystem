@@ -1164,6 +1164,7 @@ def save_sale(request):
 
             items = data.get("items", [])
             if not items:
+                transaction.set_rollback(True)
                 return JsonResponse({"status": "error", "message": "Cart empty"}, status=400)
 
             extra_discount = to_decimal(data.get("discount"))
@@ -1183,18 +1184,21 @@ def save_sale(request):
                 sale_type = "retail"
 
             if sale_type == "project_issue" and not project_id:
+                transaction.set_rollback(True)
                 return JsonResponse({"status": "error", "message": "Project is required for project issue sales."}, status=400)
 
             project = None
             if project_id:
                 project = Project.objects.filter(id=project_id, is_active=True).first()
                 if not project and sale_type == "project_issue":
+                    transaction.set_rollback(True)
                     return JsonResponse({"status": "error", "message": "Selected project not found."}, status=400)
 
             customer = None
             if customer_id:
                 customer = Customer.objects.filter(id=customer_id, is_active=True).first()
                 if not customer:
+                    transaction.set_rollback(True)
                     return JsonResponse({"status": "error", "message": "Selected customer not found."}, status=400)
 
                 if not customer_name:
@@ -1212,28 +1216,36 @@ def save_sale(request):
                 ).first()
 
             if payment_method not in ["cash", "card", "credit", "bank_transfer", "cheque"]:
+                transaction.set_rollback(True)
                 return JsonResponse({"status": "error", "message": "Invalid payment method."}, status=400)
 
             if payment_method == "card" and not card_last4:
+                transaction.set_rollback(True)
                 return JsonResponse({"status": "error", "message": "Card last 4 digits required for card payment."}, status=400)
 
             if payment_method == "credit" and not cheque_number:
+                transaction.set_rollback(True)
                 return JsonResponse({"status": "error", "message": "Reference No is required for credit sale."}, status=400)
 
             if payment_method == "cheque" and not cheque_number:
+                transaction.set_rollback(True)
                 return JsonResponse({"status": "error", "message": "Cheque Number is required for cheque payments."}, status=400)
 
             if payment_method == "bank_transfer":
                 if not bank_account:
+                    transaction.set_rollback(True)
                     return JsonResponse({"status": "error", "message": "Bank account is required for bank transfer."}, status=400)
                 if not bank_transfer_reference:
+                    transaction.set_rollback(True)
                     return JsonResponse({"status": "error", "message": "Transfer reference is required for bank transfer."}, status=400)
 
             if payment_method == "credit":
                 if not customer:
+                    transaction.set_rollback(True)
                     return JsonResponse({"status": "error", "message": "Please select an approved customer for credit sale."}, status=400)
 
                 if not customer.registration_no or not customer.credit_limit or customer.credit_limit <= 0:
+                    transaction.set_rollback(True)
                     return JsonResponse({
                         "status": "error",
                         "message": "Selected customer is not authorized for credit sales. Please choose an approved customer."
@@ -1282,19 +1294,24 @@ def save_sale(request):
                 discount = to_decimal(i.get("discount") or 0)
 
                 if qty <= 0:
+                    transaction.set_rollback(True)
                     return JsonResponse({"status": "error", "message": f"Invalid qty for item: {item.name}"}, status=400)
 
                 if price < 0:
+                    transaction.set_rollback(True)
                     return JsonResponse({"status": "error", "message": f"Invalid price for item: {item.name}"}, status=400)
 
                 if discount < 0:
+                    transaction.set_rollback(True)
                     return JsonResponse({"status": "error", "message": f"Invalid discount for item: {item.name}"}, status=400)
 
                 if not item.allow_discount and discount > 0:
+                    transaction.set_rollback(True)
                     return JsonResponse({"status": "error", "message": f"Discount not allowed for item: {item.name}"}, status=400)
 
                 allowed_discount = Decimal(str(item.max_discount_value or 0)) * qty
                 if discount > allowed_discount:
+                    transaction.set_rollback(True)
                     return JsonResponse({
                         "status": "error",
                         "message": f"Discount exceeded for item: {item.name}. Max allowed for {qty} qty is Rs. {allowed_discount}"
@@ -1304,14 +1321,17 @@ def save_sale(request):
                 net_amount = gross_amount - discount
 
                 if net_amount < 0:
+                    transaction.set_rollback(True)
                     return JsonResponse({"status": "error", "message": f"Net amount cannot be negative for item: {item.name}"}, status=400)
 
                 if not item.is_service:
                     current_stock = Decimal(str(item.stock or 0))
                     if current_stock <= 0:
+                        transaction.set_rollback(True)
                         return JsonResponse({"status": "error", "message": f"{item.name} is out of stock."}, status=400)
 
                     if qty > current_stock:
+                        transaction.set_rollback(True)
                         return JsonResponse({
                             "status": "error",
                             "message": f"Not enough stock for {item.name}. Available stock: {current_stock}"
@@ -2013,6 +2033,93 @@ def receive_stock(request, item_id):
         return redirect(f"{reverse('item_list')}?selected_item={item.id}")
     
     return render(request, "pos/receive_stock.html", {"item": item})
+
+def _reversal_token(txn_id):
+    return f"[REV-OF-TXN:{txn_id}]"
+
+
+def _incomplete_sale_reversal_plan(sale):
+    """Return (original sale StockTransactions, error). Only incomplete sales are eligible."""
+    if Decimal(str(sale.total or 0)) != 0 or Decimal(str(sale.grand_total or 0)) != 0:
+        return [], "Sale totals are not zero; this is not an incomplete sale. Use Sales Return instead."
+    line_total = sum((Decimal(str(i.net_amount or 0)) for i in sale.sale_items.all()), Decimal("0"))
+    if line_total <= 0:
+        return [], "Sale has no priced item lines."
+    if SalesReturn.objects.filter(sale=sale).exists():
+        return [], "Sale already has sales return records."
+    originals = list(
+        StockTransaction.objects.filter(
+            reference_no=sale.invoice_no, reference_type="sale", transaction_type="sale"
+        ).order_by("id")
+    )
+    if not originals:
+        return [], "No sale stock transactions exist for this invoice."
+    return originals, None
+
+
+@user_passes_test(is_owner)
+def reverse_sale_stock(request, invoice_no):
+    sale = get_object_or_404(Sale, invoice_no=invoice_no)
+    originals, error = _incomplete_sale_reversal_plan(sale)
+
+    done_ids = set()
+    for rev in StockTransaction.objects.filter(
+        reference_no=sale.invoice_no, reference_type="sale", transaction_type="adjustment_in"
+    ):
+        done_ids.update(int(x) for x in re.findall(r"\[REV-OF-TXN:(\d+)\]", rev.notes or ""))
+    pending = [o for o in originals if o.id not in done_ids]
+
+    if request.method == "POST":
+        if error:
+            messages.error(request, error)
+            return redirect("reverse_sale_stock", invoice_no=sale.invoice_no)
+        if not pending:
+            messages.error(request, "Stock for this invoice has already been reversed.")
+            return redirect("reverse_sale_stock", invoice_no=sale.invoice_no)
+
+        with transaction.atomic():
+            locked_items = {
+                i.id: i
+                for i in Item.objects.select_for_update().filter(id__in=[o.item_id for o in pending])
+            }
+            # Re-check under lock so concurrent requests cannot both reverse.
+            already = set()
+            for rev in StockTransaction.objects.filter(
+                reference_no=sale.invoice_no, reference_type="sale", transaction_type="adjustment_in"
+            ):
+                already.update(int(x) for x in re.findall(r"\[REV-OF-TXN:(\d+)\]", rev.notes or ""))
+            todo = [o for o in pending if o.id not in already]
+            if not todo:
+                messages.error(request, "Stock for this invoice has already been reversed.")
+                return redirect("reverse_sale_stock", invoice_no=sale.invoice_no)
+
+            for orig in todo:
+                item = locked_items[orig.item_id]
+                item.stock = Decimal(str(item.stock or 0)) + Decimal(str(orig.qty))
+                item.updated_by = request.user
+                item.save()
+                StockTransaction.objects.create(
+                    item=item,
+                    transaction_type="adjustment_in",
+                    qty=orig.qty,
+                    reference_type="sale",
+                    reference_no=sale.invoice_no,
+                    notes=(
+                        f"Reversal of stock deducted by incomplete {sale.invoice_no} "
+                        f"(original StockTransaction ID {orig.id}) {_reversal_token(orig.id)}"
+                    ),
+                    created_by=request.user,
+                )
+        messages.success(request, f"Stock reversed for {sale.invoice_no}.")
+        return redirect("reverse_sale_stock", invoice_no=sale.invoice_no)
+
+    return render(request, "pos/reverse_sale_stock.html", {
+        "sale": sale,
+        "originals": originals,
+        "pending_ids": [o.id for o in pending],
+        "error": error,
+        "already_reversed": bool(originals) and not pending,
+    })
 
 @user_passes_test(can_manage_items)
 def get_item_details(request, item_id):

@@ -2777,3 +2777,290 @@ class MaintenanceAllocationTests(TestCase):
     def test_anonymous_redirected(self):
         self.assertEqual(self.client.get(reverse("maintenance_allocation_list")).status_code, 302)
 
+
+
+from .models import Sale, SaleItem  # noqa: E402
+
+
+class SaveSaleAtomicityTests(TestCase):
+    """save_sale must be all-or-nothing and must not disturb earlier records."""
+
+    def setUp(self):
+        from .models import Item, StockTransaction
+
+        self.Item, self.StockTransaction = Item, StockTransaction
+        self.user = User.objects.create_superuser("atomic_u", "a@x.com", "pw12345!")
+        self.client.force_login(self.user)
+        rev = GLMaster.objects.create(gl_code="AT1", gl_name="Rev", gl_type="income")
+        cost = GLMaster.objects.create(gl_code="AT2", gl_name="Cost", gl_type="expense")
+
+        def mk(code, cost_price, price, stock):
+            return Item.objects.create(
+                item_code=code, name=code, cost_price=Decimal(cost_price),
+                selling_price=Decimal(price), stock=Decimal(stock),
+                retail_gl_account=rev, cost_gl_account=cost,
+            )
+
+        self.a = mk("ATA", "672", "1000", "10")
+        self.b = mk("ATB", "2300", "3500", "10")
+        self.c = mk("ATC", "10", "20", "0")
+
+    def _post(self, items, **extra):
+        payload = {
+            "items": [
+                {"id": i.id, "qty": 1, "price": str(i.selling_price), "discount": 0}
+                for i in items
+            ],
+            "discount": 0,
+            "payment_method": "cash",
+            "received": "4500",
+        }
+        payload.update(extra)
+        return self.client.post(
+            reverse("save_sale"), data=json.dumps(payload), content_type="application/json"
+        )
+
+    def _stock(self, item):
+        return self.Item.objects.get(pk=item.pk).stock
+
+    def _assert_nothing_persisted(self):
+        self.assertEqual(Sale.objects.count(), 0)
+        self.assertEqual(SaleItem.objects.count(), 0)
+        self.assertEqual(self.StockTransaction.objects.count(), 0)
+        self.assertEqual(self._stock(self.a), Decimal("10"))
+        self.assertEqual(self._stock(self.b), Decimal("10"))
+
+    def test_successful_sale_totals_stock_and_payment(self):
+        r = self._post([self.a, self.b])
+        self.assertEqual(r.status_code, 200)
+        sale = Sale.objects.get()
+        self.assertEqual(sale.total, Decimal("4500"))
+        self.assertEqual(sale.grand_total, Decimal("4500"))
+        self.assertEqual(sale.payment_method, "cash")
+        self.assertEqual(sale.received_amount, Decimal("4500"))
+        self.assertEqual(sale.balance, Decimal("0"))
+        self.assertEqual(sale.sale_items.count(), 2)
+        self.assertEqual(self._stock(self.a), Decimal("9"))
+        self.assertEqual(self._stock(self.b), Decimal("9"))
+        self.assertEqual(self.StockTransaction.objects.count(), 2)
+
+    def test_mid_cart_out_of_stock_rolls_back_everything(self):
+        r = self._post([self.a, self.b, self.c])
+        self.assertEqual(r.status_code, 400)
+        self._assert_nothing_persisted()
+
+    def test_mid_cart_invalid_discount_rolls_back_everything(self):
+        payload_items = [
+            {"id": self.a.id, "qty": 1, "price": "1000", "discount": 0},
+            {"id": self.b.id, "qty": 1, "price": "3500", "discount": -5},
+        ]
+        r = self.client.post(
+            reverse("save_sale"),
+            data=json.dumps({"items": payload_items, "discount": 0,
+                             "payment_method": "cash", "received": "4500"}),
+            content_type="application/json",
+        )
+        self.assertEqual(r.status_code, 400)
+        self._assert_nothing_persisted()
+
+    def test_exception_after_item_creation_rolls_back_everything(self):
+        from unittest import mock
+
+        with mock.patch.object(Sale, "save", side_effect=RuntimeError("boom")):
+            r = self._post([self.a, self.b])
+        self.assertEqual(r.status_code, 500)
+        self._assert_nothing_persisted()
+
+    def test_exception_during_stock_transaction_rolls_back_everything(self):
+        from unittest import mock
+
+        real = self.StockTransaction.objects.create
+        calls = {"n": 0}
+
+        def flaky(*args, **kwargs):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise RuntimeError("boom")
+            return real(*args, **kwargs)
+
+        with mock.patch("pos.views.StockTransaction.objects.create", side_effect=flaky):
+            r = self._post([self.a, self.b])
+        self.assertEqual(r.status_code, 500)
+        self._assert_nothing_persisted()
+
+    def test_new_invoice_after_incomplete_legacy_invoice(self):
+        legacy = Sale.objects.create(
+            invoice_no="INV00199", sale_type="retail", payment_method="cash",
+            total=Decimal("0"), discount=Decimal("0"), grand_total=Decimal("0"),
+            received_amount=Decimal("0"), balance=Decimal("0"), created_by=self.user,
+        )
+        SaleItem.objects.create(
+            sale=legacy, item=self.a, qty=Decimal("1"), price=Decimal("1000"),
+            discount=Decimal("0"), amount=Decimal("1000"), net_amount=Decimal("1000"),
+        )
+        SaleItem.objects.create(
+            sale=legacy, item=self.b, qty=Decimal("1"), price=Decimal("3500"),
+            discount=Decimal("0"), amount=Decimal("3500"), net_amount=Decimal("3500"),
+        )
+        stock_a, stock_b = self._stock(self.a), self._stock(self.b)
+
+        r = self._post([self.a, self.b])
+        self.assertEqual(r.status_code, 200)
+        new = Sale.objects.exclude(pk=legacy.pk).get()
+        self.assertNotEqual(new.invoice_no, "INV00199")
+        self.assertEqual(new.invoice_no, "INV00002")
+        self.assertEqual(new.total, Decimal("4500"))
+        self.assertEqual(new.grand_total, Decimal("4500"))
+        # exactly one new deduction, and none attributable to the legacy invoice
+        self.assertEqual(self._stock(self.a), stock_a - 1)
+        self.assertEqual(self._stock(self.b), stock_b - 1)
+        self.assertEqual(
+            self.StockTransaction.objects.filter(reference_no="INV00199").count(), 0
+        )
+        self.assertEqual(
+            self.StockTransaction.objects.filter(reference_no=new.invoice_no).count(), 2
+        )
+
+        legacy.refresh_from_db()
+        self.assertEqual(legacy.invoice_no, "INV00199")
+        self.assertEqual(legacy.total, Decimal("0"))
+        self.assertEqual(legacy.grand_total, Decimal("0"))
+        self.assertEqual(legacy.sale_items.count(), 2)
+
+        resp = self.client.get(reverse("daily_report"))
+        self.assertEqual(resp.status_code, 200)
+        ctx = resp.context
+        self.assertEqual(ctx["total_gross_sales"], Decimal("4500"))
+        self.assertEqual(ctx["total_net_sales"], Decimal("4500"))
+        # legacy INV00199 still contributes its COGS (672 + 2300) plus the new sale's
+        self.assertEqual(ctx["total_cogs"], Decimal("5944"))
+
+
+class ReverseSaleStockTests(TestCase):
+    def setUp(self):
+        from .models import Item, StockTransaction
+
+        self.Item, self.ST = Item, StockTransaction
+        self.owner = User.objects.create_superuser("rev_owner", "o@x.com", "pw12345!")
+        self.clerk = User.objects.create_user("rev_clerk", password="pw12345!")
+        rev = GLMaster.objects.create(gl_code="RV1", gl_name="Rev", gl_type="income")
+        cost = GLMaster.objects.create(gl_code="RV2", gl_name="Cost", gl_type="expense")
+        mk = lambda code, c, p: Item.objects.create(
+            item_code=code, name=code, cost_price=Decimal(c), selling_price=Decimal(p),
+            stock=Decimal("10"), retail_gl_account=rev, cost_gl_account=cost,
+        )
+        self.a, self.b = mk("RVA", "672", "1000"), mk("RVB", "2300", "3500")
+        # Legacy incomplete sale: items exist, totals zero, stock already deducted.
+        self.legacy = Sale.objects.create(
+            invoice_no="INV00199", sale_type="retail", payment_method="cash",
+            total=Decimal("0"), discount=Decimal("0"), grand_total=Decimal("0"),
+            received_amount=Decimal("0"), balance=Decimal("0"), created_by=self.owner,
+        )
+        self.orig = []
+        for it, price in ((self.a, "1000"), (self.b, "3500")):
+            SaleItem.objects.create(
+                sale=self.legacy, item=it, qty=Decimal("1"), price=Decimal(price),
+                discount=Decimal("0"), amount=Decimal(price), net_amount=Decimal(price),
+            )
+            it.stock = Decimal("9")
+            it.save()
+            self.orig.append(self.ST.objects.create(
+                item=it, transaction_type="sale", qty=Decimal("1"),
+                reference_type="sale", reference_no="INV00199", created_by=self.owner,
+            ))
+        self.url = reverse("reverse_sale_stock", kwargs={"invoice_no": "INV00199"})
+
+    def _stock(self, it):
+        return self.Item.objects.get(pk=it.pk).stock
+
+    def _reversals(self):
+        return self.ST.objects.filter(
+            reference_no="INV00199", reference_type="sale", transaction_type="adjustment_in"
+        )
+
+    def test_reversal_restores_stock_and_keeps_originals(self):
+        self.client.force_login(self.owner)
+        self.assertEqual(self.client.post(self.url).status_code, 302)
+        self.assertEqual(self._stock(self.a), Decimal("10"))
+        self.assertEqual(self._stock(self.b), Decimal("10"))
+        self.assertEqual(self._reversals().count(), 2)
+        for rev, orig in zip(self._reversals().order_by("id"), self.orig):
+            self.assertEqual(rev.qty, Decimal("1"))
+            self.assertEqual(rev.created_by, self.owner)
+            self.assertIn("Reversal of stock deducted by incomplete INV00199", rev.notes)
+            self.assertIn(f"original StockTransaction ID {orig.id}", rev.notes)
+        for orig in self.orig:
+            fresh = self.ST.objects.get(pk=orig.pk)
+            self.assertEqual((fresh.transaction_type, fresh.qty, fresh.reference_no),
+                             ("sale", Decimal("1"), "INV00199"))
+        self.legacy.refresh_from_db()
+        self.assertEqual((self.legacy.total, self.legacy.grand_total), (Decimal("0"), Decimal("0")))
+        self.assertEqual(self.legacy.sale_items.count(), 2)
+
+    def test_duplicate_reversal_blocked(self):
+        self.client.force_login(self.owner)
+        self.client.post(self.url)
+        self.client.post(self.url)
+        self.assertEqual(self._reversals().count(), 2)
+        self.assertEqual(self._stock(self.a), Decimal("10"))
+        self.assertEqual(self._stock(self.b), Decimal("10"))
+
+    def test_unauthorized_user_cannot_reverse(self):
+        self.client.force_login(self.clerk)
+        self.client.post(self.url)
+        self.assertEqual(self._reversals().count(), 0)
+        self.assertEqual(self._stock(self.a), Decimal("9"))
+
+    def test_normal_completed_sale_is_rejected(self):
+        self.legacy.total = Decimal("4500")
+        self.legacy.grand_total = Decimal("4500")
+        self.legacy.save()
+        self.client.force_login(self.owner)
+        self.client.post(self.url)
+        self.assertEqual(self._reversals().count(), 0)
+        self.assertEqual(self._stock(self.a), Decimal("9"))
+
+    def test_rollback_if_reversal_fails_midway(self):
+        from unittest import mock
+
+        real = self.ST.objects.create
+        calls = {"n": 0}
+
+        def flaky(*a, **k):
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise RuntimeError("boom")
+            return real(*a, **k)
+
+        self.client.force_login(self.owner)
+        self.client.raise_request_exception = False
+        with mock.patch("pos.views.StockTransaction.objects.create", side_effect=flaky):
+            self.client.post(self.url)
+        self.assertEqual(self._reversals().count(), 0)
+        self.assertEqual(self._stock(self.a), Decimal("9"))
+        self.assertEqual(self._stock(self.b), Decimal("9"))
+
+    def test_reverse_then_new_invoice_nets_one_sale(self):
+        self.client.force_login(self.owner)
+        self.client.post(self.url)
+        payload = {
+            "items": [
+                {"id": self.a.id, "qty": 1, "price": "1000", "discount": 0},
+                {"id": self.b.id, "qty": 1, "price": "3500", "discount": 0},
+            ],
+            "discount": 0, "payment_method": "cash", "received": "4500",
+        }
+        r = self.client.post(reverse("save_sale"), data=json.dumps(payload),
+                             content_type="application/json")
+        self.assertEqual(r.status_code, 200)
+        new = Sale.objects.exclude(pk=self.legacy.pk).get()
+        self.assertNotEqual(new.invoice_no, "INV00199")
+        self.assertEqual(self._stock(self.a), Decimal("9"))
+        self.assertEqual(self._stock(self.b), Decimal("9"))
+        self.assertEqual(
+            self.ST.objects.filter(reference_no=new.invoice_no, transaction_type="sale").count(), 2
+        )
+        self.assertEqual(
+            self.ST.objects.filter(reference_no="INV00199", transaction_type="sale").count(), 2
+        )
+        self.assertEqual(new.grand_total, Decimal("4500"))

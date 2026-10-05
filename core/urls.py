@@ -86,6 +86,7 @@ urlpatterns = [
     path('receive-stock/<int:item_id>/', views.receive_stock, name='receive_stock'),
    # path('items/<int:item_id>/details/', views.get_item_details, name='get_item_details'),
     path('stock-history/', views.stock_history, name='stock_history'),
+    path('inventory/reverse-sale-stock/<str:invoice_no>/', views.reverse_sale_stock, name='reverse_sale_stock'),
 
     # =========================
     # REPORTS
