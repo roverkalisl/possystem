@@ -687,6 +687,7 @@ class Sale(models.Model):
         ("pending", "Pending"),
         ("approved", "Approved"),
         ("rejected", "Rejected"),
+        ("void", "Void / Incomplete Sale"),
     ]
 
     invoice_no = models.CharField(max_length=50, unique=True)

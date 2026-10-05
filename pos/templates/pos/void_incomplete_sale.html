@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Void Incomplete Sale - {{ sale.invoice_no }}{% endblock %}
+
+{% block content %}
+<div class="card p-3 p-md-4">
+    <div class="app-card-header">
+        <h4 class="app-page-title">Void Incomplete Sale - {{ sale.invoice_no }}</h4>
+        <a href="{% url 'daily_report' %}" class="btn btn-secondary btn-sm">Back to Daily Report</a>
+    </div>
+
+    {% if messages %}{% for m in messages %}<div class="alert alert-info">{{ m }}</div>{% endfor %}{% endif %}
+
+    <p>Status: <strong>{{ sale.get_approval_status_display }}</strong></p>
+    <p>Total: {{ sale.total }} | Grand Total: {{ sale.grand_total }} | Item lines total: {{ line_total }}</p>
+    {% if sale.approval_status == "void" %}
+        <p>Voided by: {{ sale.approved_by|default:"-" }} at {{ sale.approved_at|default:"-" }}</p>
+        <p>Reason: {{ sale.approval_note }}</p>
+    {% endif %}
+
+    {% if error %}
+        <div class="alert alert-danger">{{ error }}</div>
+    {% else %}
+        <p>Reason recorded: {{ reason }}</p>
+        <p>The invoice, its items and all stock transactions are kept. It is only excluded from reports.</p>
+        <form method="post" onsubmit="return confirm('Mark {{ sale.invoice_no }} as void?');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-danger">Mark as Void</button>
+        </form>
+    {% endif %}
+</div>
+{% endblock %}

@@ -3064,3 +3064,116 @@ class ReverseSaleStockTests(TestCase):
             self.ST.objects.filter(reference_no="INV00199", transaction_type="sale").count(), 2
         )
         self.assertEqual(new.grand_total, Decimal("4500"))
+
+class VoidIncompleteSaleTests(TestCase):
+    def setUp(self):
+        from .models import Item, StockTransaction
+
+        self.Item, self.ST = Item, StockTransaction
+        self.owner = User.objects.create_superuser("void_owner", "o@x.com", "pw12345!")
+        self.clerk = User.objects.create_user("void_clerk", "c@x.com", "pw12345!")
+        rev = GLMaster.objects.create(gl_code="VD1", gl_name="Rev", gl_type="income")
+        cost = GLMaster.objects.create(gl_code="VD2", gl_name="Cost", gl_type="expense")
+        mk = lambda code, c, p: Item.objects.create(
+            item_code=code, name=code, cost_price=Decimal(c), selling_price=Decimal(p),
+            stock=Decimal("10"), retail_gl_account=rev, cost_gl_account=cost,
+        )
+        self.a, self.b = mk("VDA", "672", "1000"), mk("VDB", "2300", "3500")
+        self.legacy = self._sale("INV00199", "0")
+        self.good = self._sale("INV00200", "4500")
+        self.orig = [
+            self.ST.objects.create(item=it, transaction_type="sale", qty=Decimal("1"),
+                                   reference_type="sale", reference_no="INV00199", created_by=self.owner)
+            for it in (self.a, self.b)
+        ]
+        self.void_url = reverse("void_incomplete_sale", kwargs={"invoice_no": "INV00199"})
+        self.rev_url = reverse("reverse_sale_stock", kwargs={"invoice_no": "INV00199"})
+
+    def _sale(self, invoice_no, total):
+        sale = Sale.objects.create(
+            invoice_no=invoice_no, sale_type="retail", payment_method="cash",
+            total=Decimal(total), discount=Decimal("0"), grand_total=Decimal(total),
+            received_amount=Decimal(total), balance=Decimal("0"), created_by=self.owner,
+        )
+        for it, price in ((self.a, "1000"), (self.b, "3500")):
+            SaleItem.objects.create(
+                sale=sale, item=it, qty=Decimal("1"), price=Decimal(price),
+                discount=Decimal("0"), amount=Decimal(price), net_amount=Decimal(price),
+            )
+        return sale
+
+    def _report(self):
+        self.client.force_login(self.owner)
+        return self.client.get(reverse("daily_report")).context
+
+    def _reverse_then_void(self):
+        self.client.force_login(self.owner)
+        self.client.post(self.rev_url)
+        return self.client.post(self.void_url)
+
+    def test_before_void_report_shows_negative_profit(self):
+        ctx = self._report()
+        self.assertEqual(ctx["total_cogs"], Decimal("5944"))
+        self.assertEqual(ctx["total_profit"], Decimal("-1444"))
+
+    def test_void_excluded_from_daily_report(self):
+        self._reverse_then_void()
+        self.legacy.refresh_from_db()
+        self.assertEqual(self.legacy.approval_status, "void")
+        ctx = self._report()
+        self.assertEqual([s.invoice_no for s in ctx["sales"]], ["INV00200"])
+        self.assertEqual(ctx["total_gross_sales"], Decimal("4500"))
+        self.assertEqual(ctx["total_net_sales"], Decimal("4500"))
+        self.assertEqual(ctx["total_cogs"], Decimal("2972"))
+        self.assertEqual(ctx["total_profit"], Decimal("1528"))
+
+    def test_audit_fields_recorded_and_data_preserved(self):
+        self._reverse_then_void()
+        self.legacy.refresh_from_db()
+        self.assertEqual(self.legacy.approved_by, self.owner)
+        self.assertIsNotNone(self.legacy.approved_at)
+        self.assertIn("Incomplete sale", self.legacy.approval_note)
+        self.assertEqual((self.legacy.total, self.legacy.grand_total), (Decimal("0"), Decimal("0")))
+        self.assertEqual(self.legacy.sale_items.count(), 2)
+        for o in self.orig:
+            self.assertTrue(self.ST.objects.filter(pk=o.pk, transaction_type="sale").exists())
+        self.assertEqual(
+            self.ST.objects.filter(reference_no="INV00199", transaction_type="adjustment_in").count(), 2
+        )
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.approval_status, "na")
+
+    def test_void_requires_stock_reversal_first(self):
+        self.client.force_login(self.owner)
+        self.client.post(self.void_url)
+        self.legacy.refresh_from_db()
+        self.assertEqual(self.legacy.approval_status, "na")
+
+    def test_void_creates_no_stock_transactions(self):
+        self.client.force_login(self.owner)
+        self.client.post(self.rev_url)
+        before = self.ST.objects.count()
+        self.client.post(self.void_url)
+        self.assertEqual(self.ST.objects.count(), before)
+
+    def test_completed_sale_cannot_be_voided(self):
+        self.client.force_login(self.owner)
+        url = reverse("void_incomplete_sale", kwargs={"invoice_no": "INV00200"})
+        self.client.post(url)
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.approval_status, "na")
+        self.assertEqual(len(self._report()["sales"]), 2)
+
+    def test_non_owner_cannot_void(self):
+        self.client.force_login(self.owner)
+        self.client.post(self.rev_url)
+        self.client.force_login(self.clerk)
+        self.client.post(self.void_url)
+        self.legacy.refresh_from_db()
+        self.assertEqual(self.legacy.approval_status, "na")
+
+    def test_void_twice_is_rejected(self):
+        self._reverse_then_void()
+        self.client.post(self.void_url)
+        self.legacy.refresh_from_db()
+        self.assertEqual(self.legacy.approval_status, "void")

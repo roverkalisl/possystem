@@ -2121,6 +2121,51 @@ def reverse_sale_stock(request, invoice_no):
         "already_reversed": bool(originals) and not pending,
     })
 
+@user_passes_test(is_owner)
+def void_incomplete_sale(request, invoice_no):
+    sale = get_object_or_404(Sale, invoice_no=invoice_no)
+    reason = "Incomplete sale - original POS transaction failed validation"
+
+    error = None
+    originals, plan_error = _incomplete_sale_reversal_plan(sale)
+    if sale.approval_status == "void":
+        error = "This sale is already void."
+    elif plan_error:
+        error = plan_error
+    else:
+        reversed_ids = set()
+        for rev in StockTransaction.objects.filter(
+            reference_no=sale.invoice_no, reference_type="sale", transaction_type="adjustment_in"
+        ):
+            reversed_ids.update(int(x) for x in re.findall(r"\[REV-OF-TXN:(\d+)\]", rev.notes or ""))
+        if any(o.id not in reversed_ids for o in originals):
+            error = "Stock for this sale has not been fully reversed yet. Reverse stock first."
+
+    if request.method == "POST":
+        if error:
+            messages.error(request, error)
+            return redirect("void_incomplete_sale", invoice_no=sale.invoice_no)
+        with transaction.atomic():
+            locked = Sale.objects.select_for_update().get(pk=sale.pk)
+            if locked.approval_status == "void":
+                messages.error(request, "This sale is already void.")
+                return redirect("void_incomplete_sale", invoice_no=sale.invoice_no)
+            locked.approval_status = "void"
+            locked.approved_by = request.user
+            locked.approved_at = timezone.now()
+            locked.approval_note = reason
+            locked.save(update_fields=["approval_status", "approved_by", "approved_at", "approval_note"])
+        messages.success(request, f"{sale.invoice_no} marked as void / incomplete sale.")
+        return redirect("void_incomplete_sale", invoice_no=sale.invoice_no)
+
+    return render(request, "pos/void_incomplete_sale.html", {
+        "sale": sale,
+        "error": error,
+        "reason": reason,
+        "line_total": sum((Decimal(str(i.net_amount or 0)) for i in sale.sale_items.all()), Decimal("0")),
+    })
+
+
 @user_passes_test(can_manage_items)
 def get_item_details(request, item_id):
     item = get_object_or_404(Item, id=item_id, is_active=True)
@@ -2204,7 +2249,7 @@ def stock_history(request):
 @login_required
 def daily_report(request):
     today = timezone.localdate()
-    sales = Sale.objects.filter(created_at__date=today).prefetch_related("sale_items__item", "sale_items__returns")
+    sales = Sale.objects.filter(created_at__date=today).exclude(approval_status="void").prefetch_related("sale_items__item", "sale_items__returns")
 
     total_gross_sales = Decimal("0")
     total_returns = Decimal("0")
@@ -2321,7 +2366,7 @@ def monthly_report(request):
     sales = Sale.objects.filter(
         created_at__year=year,
         created_at__month=month
-    ).prefetch_related("sale_items__item", "sale_items__returns").order_by("-created_at")
+    ).exclude(approval_status="void").prefetch_related("sale_items__item", "sale_items__returns").order_by("-created_at")
 
     total_gross_sales = Decimal("0")
     total_returns = Decimal("0")
