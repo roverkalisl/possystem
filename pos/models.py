@@ -873,7 +873,7 @@ class Quotation(models.Model):
 
     @property
     def grand_total(self):
-        return max(Decimal("0"), self.sub_total - self.discount_total)
+        return max(Decimal("0"), self.sub_total)
 
 
 class QuotationItem(models.Model):

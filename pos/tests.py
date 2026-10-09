@@ -26,6 +26,8 @@ from .models import (
     ProjectInvoice,
     ProjectInvoicePayment,
     PurchaseOrder,
+    Quotation,
+    QuotationItem,
     Supplier,
     SupplierAdvance,
     SupplierSettlement,
@@ -39,6 +41,78 @@ from .models import (
     Item,
 )
 from .barcode_services import generate_barcode_for_item
+
+
+class QuotationTotalsTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="quotation_totals",
+            password="test-password",
+        )
+        self.client.force_login(self.user)
+
+    def create_quotation(self, items):
+        quotation = Quotation.objects.create(customer_name="Quotation Test")
+        for index, (qty, unit_price, discount) in enumerate(items, start=1):
+            item = Item.objects.create(
+                item_code=f"QUOTE-{index}",
+                name=f"Quotation Item {index}",
+                selling_price=unit_price,
+            )
+            QuotationItem.objects.create(
+                quotation=quotation,
+                item=item,
+                qty=qty,
+                unit_price=unit_price,
+                discount=discount,
+            )
+        return quotation
+
+    def assert_detail_and_print_totals(self, quotation, expected_total):
+        quotation.refresh_from_db()
+        expected_total = Decimal(expected_total)
+        persisted_line_total = sum(
+            quotation.items.values_list("line_total", flat=True),
+            Decimal("0"),
+        )
+        self.assertEqual(persisted_line_total, expected_total)
+        self.assertEqual(quotation.grand_total, expected_total)
+        display_total = format(expected_total.normalize(), "f")
+
+        detail = self.client.get(reverse("quotation_detail", args=[quotation.id]))
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.context["quotation"].grand_total, expected_total)
+        self.assertContains(detail, f"Grand Total:</strong> {display_total}")
+
+        printed = self.client.get(reverse("print_quotation", args=[quotation.id]))
+        self.assertEqual(printed.status_code, 200)
+        self.assertEqual(printed.context["quotation"].grand_total, expected_total)
+        self.assertContains(printed, f"<strong>{display_total}</strong>")
+
+    def test_quotation_without_discounts(self):
+        quotation = self.create_quotation([
+            (Decimal("2"), Decimal("100.00"), Decimal("0.00")),
+        ])
+
+        self.assert_detail_and_print_totals(quotation, "200.00")
+
+    def test_quotation_with_line_item_discount(self):
+        quotation = self.create_quotation([
+            (Decimal("2"), Decimal("100.00"), Decimal("25.00")),
+        ])
+        quotation_item = quotation.items.get()
+        quotation_item.refresh_from_db()
+        self.assertEqual(quotation_item.line_total, Decimal("175.00"))
+
+        self.assert_detail_and_print_totals(quotation, "175.00")
+
+    def test_quotation_with_multiple_discounted_items(self):
+        quotation = self.create_quotation([
+            (Decimal("2"), Decimal("100.00"), Decimal("10.00")),
+            (Decimal("3"), Decimal("50.00"), Decimal("20.00")),
+        ])
+
+        self.assert_detail_and_print_totals(quotation, "320.00")
 
 
 class BarcodeWorkflowTests(TestCase):
